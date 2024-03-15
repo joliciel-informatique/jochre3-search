@@ -1,0 +1,8 @@
+version: '3.7'
+services:
+  postgres:
+    ports:
+      - 5432:5432
+  keycloak:
+    ports:
+      - 8080:8080

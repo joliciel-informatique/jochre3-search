@@ -1,0 +1,27 @@
+[
+  {
+    "realm": "safetydata",
+    "users": [
+      {
+        "username": "usertest",
+        "enabled": true,
+        "email": "test@safety-data.com",
+        "credentials": [
+          {
+            "type": "password",
+            "secretData": "{\"value\":\"ixyN1Q4mj2JYh9AmpCMME8N2KcITJS7izSGejy2UVqJ4wanxaVAHCEWrKVWSdJ6ibhrYLLu5ZFQL+5WABHqeLA==\",\"salt\":\"89Pp5R/GxWWNKLwULT8OjQ==\"}",
+            "credentialData": "{\"hashIterations\":100000,\"algorithm\":\"pbkdf2-sha256\"}"
+          }
+        ],
+        "clientRoles": {
+          "realm-management": [
+            "realm-admin"
+          ],
+          "cloakroom": [
+            "composite"
+          ]
+        }
+      }
+    ]
+  }
+]

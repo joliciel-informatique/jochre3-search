@@ -1,0 +1,7 @@
+.idea
+.bsp
+target/
+/docker-compose/jochre.conf
+/temp
+/data
+/modules/yiddish/resources/*.zip

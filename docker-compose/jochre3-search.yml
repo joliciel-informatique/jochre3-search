@@ -1,0 +1,47 @@
+version: '3.7'
+volumes:
+  pgdata:
+    name: pgdata_jochre
+services:
+  jochre-database:
+    image: postgres:15.3-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: jochre
+      POSTGRES_PASSWORD: ${JOCHRE3_DATABASE_PASSWORD:-password}
+      POSTGRES_DB: jochre-search
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "10"
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+  jochre3-search:
+    image: registry.gitlab.com/jochre/jochre3-search:${JOCHRE3_SEARCH_VERSION:-0.0.1-SNAPSHOT}
+    command: -Dconfig.file=/opt/docker/etc/jochre.conf
+    ports:
+      - 4242:4242
+    volumes:
+      - ./jochre.conf:/opt/docker/etc/jochre.conf
+    environment:
+      POSTGRES_URL: jdbc:postgresql://jochre-search:5432/jochre3
+      POSTGRES_USER: jochre
+      POSTGRES_PASSWORD: ${JOCHRE3_DATABASE_PASSWORD:-password}
+      JOCHRE3_SEARCH_VERSION: ${JOCHRE3_SEARCH_VERSION:-0.0.1-SNAPSHOT}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "10"
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s

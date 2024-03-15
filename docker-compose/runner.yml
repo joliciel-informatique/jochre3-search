@@ -1,0 +1,33 @@
+version: '3.7'
+services:
+  test:
+    command: test
+    build:
+      context: ../
+      dockerfile: docker-compose/sbt.dockerfile
+    volumes:
+      - ivy_cache:/root/.ivy2
+      - sbt_cache:/root/.sbt
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/jochre-search
+      KEYCLOAK_AUTH_SERVER_URL: http://keycloak:8080/auth/
+  publisher:
+    command: docker:publish
+    build:
+      context: ../
+      dockerfile: docker-compose/sbt.dockerfile
+    volumes:
+      - ivy_cache:/root/.ivy2
+      - sbt_cache:/root/.sbt/boot/
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - JOCHRE3_SEARCH_VERSION
+      - JOCHRE3_DOCKER_REGISTRY
+      - JOCHRE3_DOCKER_USERNAME
+      - JOCHRE3_DOCKER_PASSWORD
+volumes:
+  ivy_cache:
+    name: ivy_cache
+  sbt_cache:
+    name: sbt_cache
+

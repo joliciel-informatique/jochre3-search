@@ -1,0 +1,27 @@
+variables:
+  COMPOSE_PROJECT: "jochre3-test-${CI_JOB_ID}"
+  JOCHRE3_DOCKER_REGISTRY: "registry.gitlab.com"
+  LOGLEVEL: warn
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+services:
+  - docker:dind
+default:
+  image: docker:24
+before_script:
+  - docker-compose version
+  - docker info
+  - apk update
+  - apk add --no-cache make bash git
+test:
+  stage: test
+  script:
+    - make test-ci
+  after_script:
+    - make clean-docker-compose
+publish-image:
+  stage: deploy
+  script:
+    - make publish-image
+  only:
+    - tags
