@@ -1,0 +1,15 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%date{"yyyy-MM-dd'T'HH:mm:ss,SSSXXX", UTC} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="org.flywaydb.core" level="WARN" />
+    <logger name="com.zaxxer.hikari" level="WARN" />
+    <logger name="com.joliciel" level="INFO" />
+
+    <root level="${LOGLEVEL:-info}">
+        <appender-ref ref="STDOUT" />
+    </root>
+</configuration>

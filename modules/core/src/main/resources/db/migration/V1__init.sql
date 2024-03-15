@@ -1,0 +1,43 @@
+CREATE TABLE document(
+  id BIGSERIAL PRIMARY KEY,
+  ref TEXT NOT NULL,
+  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  CONSTRAINT uk_document UNIQUE (ref)
+);
+
+CREATE TABLE page(
+  id BIGSERIAL PRIMARY KEY,
+  doc_id BIGINT NOT NULL,
+  index SMALLINT NOT NULL,
+  width SMALLINT NOT NULL,
+  height SMALLINT NOT NULL,
+  FOREIGN KEY(doc_id) REFERENCES document(id),
+  CONSTRAINT uk_page UNIQUE (doc_id, index)
+);
+
+CREATE TABLE row(
+  id BIGSERIAL PRIMARY KEY,
+  page_id BIGINT NOT NULL,
+  index SMALLINT NOT NULL,
+  lft SMALLINT NOT NULL,
+  top SMALLINT NOT NULL,
+  width SMALLINT NOT NULL,
+  height SMALLINT NOT NULL,
+  FOREIGN KEY(page_id) REFERENCES page(id),
+  CONSTRAINT uk_row UNIQUE (page_id, index)
+);
+
+CREATE TABLE word(
+  id BIGSERIAL PRIMARY KEY,
+  doc_id BIGINT NOT NULL,
+  row_id BIGINT NOT NULL,
+  start_offset INT NOT NULL,
+  lft SMALLINT NOT NULL,
+  top SMALLINT NOT NULL,
+  width SMALLINT NOT NULL,
+  height SMALLINT NOT NULL,
+  hyphenated_offset INT NULL,
+  FOREIGN KEY(doc_id) REFERENCES document(id),
+  FOREIGN KEY(row_id) REFERENCES row(id),
+  CONSTRAINT uk_word UNIQUE (doc_id, start_offset)
+);

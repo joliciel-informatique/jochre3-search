@@ -1,6 +1,7 @@
 import BuildHelper._
 import Libraries._
 import com.typesafe.sbt.packager.docker.Cmd
+import sbt.Keys.libraryDependencies
 
 ThisBuild / scalaVersion := "2.13.13"
 ThisBuild / organization := "com.joli-ciel"
@@ -8,7 +9,8 @@ ThisBuild / homepage := Some(url("https://www.joli-ciel.com/"))
 ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl-3.0.en.html"))
 
 val cloakroomVersion = "0.5.15"
-val scalaXmlVersion = "2.2.0"
+val luceneVersion = "9.10.0"
+val jochre3OcrVersion = "0.3.6"
 
 lazy val jochre3SearchVersion = sys.env
   .get("JOCHRE3_SEARCH_VERSION")
@@ -34,7 +36,16 @@ lazy val core = project
   .settings(projectSettings: _*)
   .settings(
     libraryDependencies ++= commonDeps ++ databaseDeps ++ httpClientDeps ++ Seq(
-      "org.scala-lang.modules" %% "scala-xml" % scalaXmlVersion
+      "org.apache.lucene" % "lucene-core" % luceneVersion,
+      "org.apache.lucene" % "lucene-sandbox" % luceneVersion,
+      "org.apache.lucene" % "lucene-join" % luceneVersion,
+      "org.apache.lucene" % "lucene-facet" % luceneVersion,
+      "org.apache.lucene" % "lucene-queryparser" % luceneVersion,
+      "org.apache.lucene" % "lucene-analysis-common" % luceneVersion,
+      "org.apache.lucene" % "lucene-highlighter" % luceneVersion,
+      "org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
+      "org.apache.lucene" % "lucene-test-framework" % luceneVersion % "test",
+      "com.joliciel" %% "jochre3-ocr-core" % jochre3OcrVersion
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
