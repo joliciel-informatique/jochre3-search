@@ -4,6 +4,7 @@ import cats.syntax.all._
 import com.comcast.ip4s.{Host, Port}
 import com.joliciel.jochre.search.api.Types.AppTask
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, AuthenticationProviderConfig}
+import com.joliciel.jochre.search.api.index.IndexApp
 import com.joliciel.jochre.search.api.search.SearchApp
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
@@ -40,10 +41,16 @@ object MainApp extends ZIOAppDefault {
   private def runServer(authenticationProvider: AuthenticationProvider, executor: Executor): Task[Unit] = {
     val searchDirectives: SearchApp = SearchApp(authenticationProvider, executor.asExecutionContext)
     val searchRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(searchDirectives.http).toRoutes
+    val indexDirectives: IndexApp = IndexApp(authenticationProvider, executor.asExecutionContext)
+    val indexRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(indexDirectives.http).toRoutes
 
     val version = sys.env.get("JOCHRE3_SEARCH_VERSION").getOrElse("0.1.0-SNAPSHOT")
     val swaggerDirectives =
-      SwaggerInterpreter().fromEndpoints[AppTask](searchDirectives.endpoints, "Jochre Search Server", version)
+      SwaggerInterpreter().fromEndpoints[AppTask](
+        searchDirectives.endpoints ++ indexDirectives.endpoints,
+        "Jochre Search Server",
+        version
+      )
     val swaggerRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(swaggerDirectives).toRoutes
 
     val routes = searchRoutes <+> swaggerRoutes

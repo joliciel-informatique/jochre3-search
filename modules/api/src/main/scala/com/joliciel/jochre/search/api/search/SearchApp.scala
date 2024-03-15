@@ -1,25 +1,23 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
+import com.joliciel.jochre.search.api.HttpError.BadRequest
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
-import sttp.model.{Header, HeaderNames, MediaType, StatusCode}
-import sttp.tapir.generic.auto._
-import sttp.tapir.json.circe._
+import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
 import io.circe.generic.auto._
-import sttp.tapir.ztapir._
-import sttp.tapir.json.circe.jsonBody
-import sttp.tapir.ztapir.{ZPartialServerEndpoint, ZServerEndpoint, oneOfVariant, path}
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
-import sttp.tapir.{AnyEndpoint, CodecFormat}
+import sttp.model.{Header, MediaType, StatusCode}
+import sttp.tapir.AnyEndpoint
+import sttp.tapir.generic.auto._
+import sttp.tapir.json.circe.jsonBody
+import sttp.tapir.ztapir._
 import zio.stream.ZStream
 
 import scala.concurrent.ExecutionContext
 
 case class SearchApp(override val authenticationProvider: AuthenticationProvider, executionContext: ExecutionContext)
-    extends TokenAuthentication
+  extends TokenAuthentication
     with SearchLogic
     with SearchProtocol
     with SearchSchemaSupport {
@@ -91,7 +89,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   val endpoints: List[AnyEndpoint] = List(
     getSearchEndpoint,
     getImageSnippetEndpoint
-  ).map(_.endpoint)
+  ).map(_.endpoint.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     getSearchHttp,

@@ -1,4 +1,4 @@
-# Jochre Server
+# Jochre Search Server
 
 The Jochre Search server provides OCR search functionality.
 
