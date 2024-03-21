@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
 
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
-  private val config = ConfigFactory.load().getConfig("jochre.server")
+  private val config = ConfigFactory.load().getConfig("jochre.search")
 
   override val bootstrap: ZLayer[ZIOAppArgs, Throwable, Any] =
     Runtime.setConfigProvider(TypesafeConfigProvider.fromTypesafeConfig(config))

@@ -1,12 +1,12 @@
 package com.joliciel.jochre.search.api
 
-package object search {
-  case class DocId(id: String)
+import com.joliciel.jochre.search.core.DocReference
 
+package object search {
   case class SearchResponse(results: Seq[SearchResult], totalCount: Int)
 
   case class SearchResult(
-      docId: DocId,
+      docId: DocReference,
       score: Double,
       snippets: Seq[Snippet]
   )
@@ -27,7 +27,7 @@ package object search {
     val searchResponseExample: SearchResponse = SearchResponse(
       results = Seq(
         SearchResult(
-          docId = DocId("nybc200089"),
+          docId = DocReference("nybc200089"),
           score = 0.90,
           snippets = Seq(
             Snippet(

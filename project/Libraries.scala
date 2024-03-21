@@ -26,7 +26,7 @@ object Libraries {
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "org.slf4j" % "jul-to-slf4j" % slf4jVersion,
     "org.slf4j" % "log4j-over-slf4j" % slf4jVersion,
-    "org.slf4j" % "jcl-over-slf4j" % slf4jVersion,
+    "org.slf4j" % "jcl-over-slf4j" % slf4jVersion
   )
 
   val effectDeps = Seq(
@@ -35,7 +35,7 @@ object Libraries {
     "dev.zio" %% "zio-streams" % zioVersion,
     "dev.zio" %% "zio-nio" % zioNioVersion,
     "dev.zio" %% "zio-interop-cats" % zioInteropCatsVersion,
-    "org.typelevel" %% "cats-core" % catsVersion,
+    "org.typelevel" %% "cats-core" % catsVersion
   )
 
   val configDeps = Seq(
@@ -52,13 +52,13 @@ object Libraries {
     "org.tpolecat" %% "doobie-scalatest" % doobieVersion % "test", // ScalaTest support for typechecking statements.
     "com.beachape" %% "enumeratum-doobie" % enumeratumDoobieVersion,
     "org.flywaydb" % "flyway-core" % flywayVersion,
-    "org.flywaydb" % "flyway-database-postgresql" % flywayVersion,
+    "org.flywaydb" % "flyway-database-postgresql" % flywayVersion
   )
 
   val httpClientDeps = Seq(
     "com.softwaremill.sttp.client3" %% "core" % sttpVersion,
     "com.softwaremill.sttp.client3" %% "zio" % sttpVersion,
-    "com.softwaremill.sttp.client3" %% "circe" % sttpVersion,
+    "com.softwaremill.sttp.client3" %% "circe" % sttpVersion
   )
 
   val apiDeps = Seq(
@@ -73,7 +73,7 @@ object Libraries {
     "com.softwaremill.sttp.tapir" %% "tapir-swagger-ui-bundle" % tapirVersion,
     "com.softwaremill.sttp.tapir" %% "tapir-http4s-server-zio" % tapirVersion,
     "com.softwaremill.sttp.tapir" %% "tapir-json-zio" % tapirVersion,
-    "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapirVersion,
+    "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % tapirVersion
   )
 
   val testDeps = Seq(
@@ -82,7 +82,7 @@ object Libraries {
     "dev.zio" %% "zio-test" % zioVersion % Test,
     "dev.zio" %% "zio-test-sbt" % zioVersion % Test,
     "dev.zio" %% "zio-test-magnolia" % zioVersion % Test,
-    "dev.zio" %% "zio-test-junit" % zioVersion % Test,
+    "dev.zio" %% "zio-test-junit" % zioVersion % Test
   )
 
   val commonDeps = typeDeps ++ loggingDeps ++ effectDeps ++ configDeps ++ testDeps

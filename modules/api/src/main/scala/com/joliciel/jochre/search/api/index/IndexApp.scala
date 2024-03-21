@@ -2,25 +2,17 @@ package com.joliciel.jochre.search.api.index
 
 import com.joliciel.jochre.search.api.HttpError.BadRequest
 import com.joliciel.jochre.search.api.Types.Requirements
-import com.joliciel.jochre.search.api.{HttpError, Roles}
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
-import com.joliciel.jochre.search.api.search.SearchResponse
+import com.joliciel.jochre.search.api.{HttpError, Roles}
+import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
-import sttp.tapir.{CodecFormat, PublicEndpoint}
-import zio.stream.ZStream
-
-import java.nio.charset.StandardCharsets
-import scala.concurrent.ExecutionContext
-import io.circe.generic.auto._
-import shapeless.syntax.std.tuple._
-import sttp.capabilities.zio.ZioStreams
-import sttp.model.{Header, MediaType, StatusCode}
 import sttp.tapir.AnyEndpoint
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
-import zio.stream.ZStream
+
+import scala.concurrent.ExecutionContext
 
 case class IndexApp(override val authenticationProvider: AuthenticationProvider, executionContext: ExecutionContext)
     extends TokenAuthentication

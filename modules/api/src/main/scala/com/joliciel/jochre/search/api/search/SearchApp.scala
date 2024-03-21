@@ -4,6 +4,7 @@ import com.joliciel.jochre.search.api.HttpError.BadRequest
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
+import com.joliciel.jochre.search.core.DocReference
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
@@ -17,7 +18,7 @@ import zio.stream.ZStream
 import scala.concurrent.ExecutionContext
 
 case class SearchApp(override val authenticationProvider: AuthenticationProvider, executionContext: ExecutionContext)
-  extends TokenAuthentication
+    extends TokenAuthentication
     with SearchLogic
     with SearchProtocol
     with SearchSchemaSupport {
@@ -57,7 +58,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Requirements,
     String,
     ValidToken,
-    (DocId, Int, Int, Int, List[Highlight]),
+    (DocReference, Int, Int, Int, List[Highlight]),
     HttpError,
     ZStream[Any, Throwable, Byte],
     Any with ZioStreams
@@ -68,7 +69,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("image-snippet")
-      .in(query[DocId]("doc-id").description("The document containing the image").example(DocId("nybc200089")))
+      .in(query[DocReference]("doc-id").description("The document containing the image").example(DocReference("nybc200089")))
       .in(query[Int]("page").description("The page number in the document").example(20))
       .in(query[Int]("start-line").description("The start line in the page (inclusive)").example(11))
       .in(query[Int]("end-line").description("The end line in the page (exclusive)").example(17))

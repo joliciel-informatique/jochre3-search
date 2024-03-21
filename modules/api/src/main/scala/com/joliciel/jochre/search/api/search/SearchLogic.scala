@@ -3,6 +3,7 @@ package com.joliciel.jochre.search.api.search
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
+import com.joliciel.jochre.search.core.DocReference
 import zio.ZIO
 import zio.stream.ZStream
 
@@ -19,7 +20,7 @@ trait SearchLogic extends HttpErrorMapper {
 
   def getImageSnippetLogic(
       token: ValidToken,
-      docId: DocId,
+      docId: DocReference,
       page: Int,
       startLine: Int,
       endLine: Int,
