@@ -1,31 +1,28 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.ocr.core.model.SpellingAlternative
-import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.lucene.tokenizer.{AddAlternativesFilter, RegexTokenizerFilter}
-import org.apache.lucene.analysis.{Analyzer, TokenStream}
-import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
-import org.apache.lucene.analysis.core.WhitespaceTokenizer
+import com.joliciel.jochre.search.core.lucene.tokenizer.{AddAlternativesFilter, AddDocumentReferenceFilter, AddNewlineMarkerFilter}
+import com.joliciel.jochre.search.core.util.AndThenIf.Implicits._
+import org.apache.lucene.analysis.TokenStream
+import org.slf4j.LoggerFactory
 
 import java.util.Locale
 
-case class JochreAnalyzerForIndex(locale: Locale) extends Analyzer {
-  private val alternativeHolder = AlternativeHolder()
+class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) {
+  private val log = LoggerFactory.getLogger(getClass)
 
-  def addAlternatives(ref: DocReference, alternatives: Map[Int, Seq[SpellingAlternative]]): Unit =
-    alternativeHolder.addAlternatives(ref, alternatives)
-  def removeAlternatives(ref: DocReference): Unit = alternativeHolder.removeAlternatives(ref)
+  val indexingHelper = IndexingHelper()
 
-  override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
-    val source = new WhitespaceTokenizer();
-
-    new TokenStreamComponents(source, finalFilter(source))
-  }
-
-  def finalFilter(tokens: TokenStream): TokenStream = (splitByRegexFilter(_))
+  override def finalFilter(tokens: TokenStream): TokenStream = (addDocumentReferenceFilter(_))
+    .andThen(regexTokenizerFilter)
     .andThen(addAlternativesFilter)
+    .andThen(addNewlineMarkerFilter)
+    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 
-  def splitByRegexFilter(tokens: TokenStream): TokenStream = RegexTokenizerFilter(tokens, locale)
-  def addAlternativesFilter(tokens: TokenStream): TokenStream = new AddAlternativesFilter(tokens, alternativeHolder)
+  def addDocumentReferenceFilter(tokens: TokenStream): TokenStream =
+    new AddDocumentReferenceFilter(tokens, indexingHelper)
+
+  def addAlternativesFilter(tokens: TokenStream): TokenStream = new AddAlternativesFilter(tokens, indexingHelper)
+  def addNewlineMarkerFilter(tokens: TokenStream): TokenStream = new AddNewlineMarkerFilter(tokens, indexingHelper)
+
 }

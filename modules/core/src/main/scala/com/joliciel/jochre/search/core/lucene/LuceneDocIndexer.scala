@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
 
 import java.time.Instant
 
-private[search] case class DocumentIndexer(private val indexWriter: IndexWriter) {
+private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter) {
   private val log = LoggerFactory.getLogger(getClass)
 
   private val facetConfigs = new FacetsConfig {

@@ -37,4 +37,6 @@ package object lucene {
       val name: String = "indexTime"
     }
   }
+
+  private[lucene] val NEWLINE_TOKEN = "⏎"
 }

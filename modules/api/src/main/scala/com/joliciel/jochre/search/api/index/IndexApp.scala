@@ -4,6 +4,7 @@ import com.joliciel.jochre.search.api.HttpError.BadRequest
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, Roles}
+import com.joliciel.jochre.search.core.CoreProtocol
 import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
@@ -16,7 +17,9 @@ import scala.concurrent.ExecutionContext
 
 case class IndexApp(override val authenticationProvider: AuthenticationProvider, executionContext: ExecutionContext)
     extends TokenAuthentication
-    with IndexLogic {
+    with IndexLogic
+    with IndexSchemaSupport
+    with CoreProtocol {
   implicit val ec: ExecutionContext = executionContext
 
   val postIndexPdfEndpoint: ZPartialServerEndpoint[

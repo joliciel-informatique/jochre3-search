@@ -5,6 +5,7 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
 import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.search.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams

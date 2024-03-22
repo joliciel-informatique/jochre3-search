@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.lucene.tokenizer
 
 import com.joliciel.jochre.ocr.core.model.SpellingAlternative
 import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.lucene.{AlternativeHolder, LuceneUtilities, Token}
+import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, IndexingHelper, LuceneUtilities, Token}
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
 import org.apache.lucene.analysis.{Analyzer, TokenStream}
 import org.apache.lucene.analysis.core.WhitespaceTokenizer
@@ -12,7 +12,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.util.matching.Regex
 
 class AddAlternativesFilterTest extends AnyFlatSpec with Matchers with LuceneUtilities {
-  class TestAnalyzer(alternativeHolder: AlternativeHolder) extends Analyzer {
+  class TestAnalyzer(indexingHelper: IndexingHelper) extends Analyzer {
     override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
       val source = new WhitespaceTokenizer();
 
@@ -20,26 +20,30 @@ class AddAlternativesFilterTest extends AnyFlatSpec with Matchers with LuceneUti
     }
 
     def finalFilter(tokens: TokenStream): TokenStream = {
-      new AddAlternativesFilter(tokens, alternativeHolder)
+      val addRefFilter = new AddDocumentReferenceFilter(tokens, indexingHelper)
+      new AddAlternativesFilter(addRefFilter, indexingHelper)
     }
   }
 
   "AddAlternativesFilter" should "add alternatives at the right offset" in {
-    val alternativeHolder = AlternativeHolder()
-    val analyzer = new TestAnalyzer(alternativeHolder)
+    val indexingHelper = IndexingHelper()
+    val analyzer = new TestAnalyzer(indexingHelper)
     val docRef = DocReference("docRef")
 
     val text =
       f"${docRef.ref}\ndog mouse cat"
 
-    alternativeHolder.addAlternatives(
+    indexingHelper.addDocumentInfo(
       docRef,
-      Map(
-        f"${docRef.ref}\n".length -> Seq(
-          SpellingAlternative("hyponym", "bulldog"),
-          SpellingAlternative("hyponym", "greyhound")
-        ),
-        f"${docRef.ref}\ndog mouse ".length -> Seq(SpellingAlternative("synonym", "kitty"))
+      DocumentIndexInfo(
+        newlineOffsets = Set.empty,
+        offsetToAlternativeMap = Map(
+          f"${docRef.ref}\n".length -> Seq(
+            SpellingAlternative("hyponym", "bulldog"),
+            SpellingAlternative("hyponym", "greyhound")
+          ),
+          f"${docRef.ref}\ndog mouse ".length -> Seq(SpellingAlternative("synonym", "kitty"))
+        )
       )
     )
 

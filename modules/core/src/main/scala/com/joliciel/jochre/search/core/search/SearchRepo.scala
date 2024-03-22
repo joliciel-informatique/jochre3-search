@@ -1,4 +1,4 @@
-package com.joliciel.jochre.search.core.service
+package com.joliciel.jochre.search.core.search
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
@@ -9,7 +9,7 @@ import doobie.postgres.implicits._
 import zio._
 import zio.interop.catz._
 
-private[service] case class SearchRepo(transactor: Transactor[Task]) {
+private[search] case class SearchRepo(transactor: Transactor[Task]) {
   def insertDocument(ref: DocReference): Task[DocId] =
     sql"""INSERT INTO document (ref)
          | VALUES (${ref.ref})
@@ -139,7 +139,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   private val deleteAllDocuments: Task[Int] =
     sql"""DELETE FROM document""".update.run.transact(transactor)
 
-  private[service] val deleteAll: Task[Int] =
+  private[search] val deleteAll: Task[Int] =
     for {
       _ <- deleteAllWords
       _ <- deleteAllRows

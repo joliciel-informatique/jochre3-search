@@ -1,21 +1,15 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.lucene.tokenizer.RegexTokenizerFilter
-import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
-import org.apache.lucene.analysis.core.WhitespaceTokenizer
-import org.apache.lucene.analysis.{Analyzer, TokenStream}
+import com.joliciel.jochre.search.core.util.AndThenIf.Implicits._
+import org.apache.lucene.analysis.TokenStream
+import org.slf4j.LoggerFactory
 
 import java.util.Locale
 
-case class JochreAnalyzerForSearch(locale: Locale) extends Analyzer {
-  override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
-    val source = new WhitespaceTokenizer();
+class JochreAnalyzerForSearch(locale: Locale) extends JochreAnalyzerBase(locale) {
+  private val log = LoggerFactory.getLogger(getClass)
 
-    new TokenStreamComponents(source, finalFilter(source))
-  }
-
-  def finalFilter(tokens: TokenStream): TokenStream = (splitByRegexFilter(_))
+  override def finalFilter(tokens: TokenStream): TokenStream = (regexTokenizerFilter(_))
+    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
-
-  def splitByRegexFilter(tokens: TokenStream): TokenStream = RegexTokenizerFilter(tokens, locale)
 }
