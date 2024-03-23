@@ -42,7 +42,7 @@ private[lucene] class JochreSearcher(
   def indexSize: Int = this.getIndexReader.numDocs
 
   def getByDocRef(docRef: DocReference): Option[LuceneDocument] = {
-    val topDocs = search(new TermQuery(new Term(LuceneField.Id.name, docRef.ref)), 1)
+    val topDocs = search(new TermQuery(new Term(LuceneField.Id.entryName, docRef.ref)), 1)
     topDocs.scoreDocs.headOption.map(luceneId => new LuceneDocument(this, luceneId.doc))
   }
 
@@ -78,7 +78,7 @@ private[lucene] class JochreSearcher(
       }
 
     val results = page.map { case (luceneDoc, score) =>
-      val snippets = luceneDoc.highlight(luceneQuery, maxSnippets)
+      val snippets = luceneDoc.highlight(luceneQuery, maxSnippets, rowPadding)
       SearchResult(luceneDoc.ref, score, snippets)
     }
     SearchResponse(results, topDocs.totalHits.value)

@@ -27,9 +27,8 @@ trait SearchLogic extends HttpErrorMapper {
   def getImageSnippetLogic(
       token: ValidToken,
       docId: DocReference,
-      page: Int,
-      startLine: Int,
-      endLine: Int,
+      startOffset: Int,
+      endOffset: Int,
       highlights: Seq[Highlight]
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
     ZIO

@@ -10,6 +10,7 @@ class JochreAnalyzerForSearch(locale: Locale) extends JochreAnalyzerBase(locale)
   private val log = LoggerFactory.getLogger(getClass)
 
   override def finalFilter(tokens: TokenStream): TokenStream = (regexTokenizerFilter(_))
+    .andThen(lowercaseFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 }

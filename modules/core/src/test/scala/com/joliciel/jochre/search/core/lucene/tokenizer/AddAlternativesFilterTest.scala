@@ -36,6 +36,7 @@ class AddAlternativesFilterTest extends AnyFlatSpec with Matchers with LuceneUti
     indexingHelper.addDocumentInfo(
       docRef,
       DocumentIndexInfo(
+        pageOffsets = Set.empty,
         newlineOffsets = Set.empty,
         offsetToAlternativeMap = Map(
           f"${docRef.ref}\n".length -> Seq(

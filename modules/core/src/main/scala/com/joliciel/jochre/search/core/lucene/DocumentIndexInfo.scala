@@ -2,7 +2,8 @@ package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.ocr.core.model.SpellingAlternative
 
-case class DocumentIndexInfo (
+case class DocumentIndexInfo(
+    pageOffsets: Set[Int],
     newlineOffsets: Set[Int],
     offsetToAlternativeMap: Map[Int, Seq[SpellingAlternative]]
 ) {

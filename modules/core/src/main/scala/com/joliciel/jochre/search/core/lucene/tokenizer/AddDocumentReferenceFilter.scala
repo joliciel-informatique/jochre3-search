@@ -28,7 +28,7 @@ class AddDocumentReferenceFilter(input: TokenStream, indexingHelper: IndexingHel
         false
       }
     } else if (input.incrementToken()) {
-      typeAttr.setType(f"$DOC_REF_TYPE_PREFIX${refOption.get.ref}")
+      typeAttr.setType(f"${TokenTypes.DOC_REF_TYPE_PREFIX}${refOption.get.ref}")
       true
     } else {
       refOption.foreach { ref =>

@@ -33,12 +33,12 @@ private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: 
       currentAlternatives = currentAlternatives.tail
       termAttr.copyBuffer(alternative.content.toCharArray, 0, alternative.content.size)
       posIncAttr.setPositionIncrement(0)
-      typeAttr.setType(ALTERNATIVE_TYPE)
+      typeAttr.setType(TokenTypes.ALTERNATIVE_TYPE)
       true
     } else if (input.incrementToken()) {
       val tokenType = typeAttr.`type`()
-      if (tokenType.startsWith(DOC_REF_TYPE_PREFIX)) {
-        val refValue = tokenType.substring(DOC_REF_TYPE_PREFIX.length)
+      if (tokenType.startsWith(TokenTypes.DOC_REF_TYPE_PREFIX)) {
+        val refValue = tokenType.substring(TokenTypes.DOC_REF_TYPE_PREFIX.length)
         val ref = DocReference(refValue)
         val offset = offsetAttr.startOffset()
         currentAlternatives = indexingHelper.getDocumentInfo(ref).getAlternatives(offset)

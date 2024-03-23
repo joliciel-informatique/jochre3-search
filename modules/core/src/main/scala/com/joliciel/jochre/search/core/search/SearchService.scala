@@ -2,19 +2,23 @@ package com.joliciel.jochre.search.core.search
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Alto, Page, SpellingAlternative, SubsType, TextLine, Word}
+import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
+import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.rendering.PDFRenderer
+import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
 import org.slf4j.LoggerFactory
 import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.io.{File, FileInputStream}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 import java.util.zip.ZipInputStream
+import javax.imageio.ImageIO
 import scala.io.Source
 import scala.util.Using
 import scala.xml.XML
@@ -38,13 +42,16 @@ private[search] case class SearchServiceImpl(
     jochreIndex: JochreIndex,
     searchRepo: SearchRepo,
     metadataReader: MetadataReader = MetadataReader.default
-) extends SearchService {
+) extends SearchService
+    with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
+  private val config = ConfigFactory.load().getConfig("jochre.search.index")
+  private val contentDir = Path.of(config.getString("content-directory"))
 
   override def indexPdf(ref: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[Int] = {
     for {
       alto <- getAlto(altoFile)
-      pdfInfo <- getPdfInfo(pdfFile)
+      pdfInfo <- getPdfInfo(ref, pdfFile)
       pdfMetadata = getMetadata(ref, pdfInfo)
       metadata <- ZIO.attempt {
         val providedMetadata = metadataFile.map { metadataFile =>
@@ -68,7 +75,8 @@ private[search] case class SearchServiceImpl(
       documentData <- persistDocument(ref, alto)
       pageCount <- ZIO.attempt {
         val document = AltoDocument(ref, documentData.text, metadata)
-        val docInfo = DocumentIndexInfo(documentData.newlineOffsets, documentData.alternativesAtOffset)
+        val docInfo =
+          DocumentIndexInfo(documentData.pageOffsets, documentData.newlineOffsets, documentData.alternativesAtOffset)
         jochreIndex.addDocumentInfo(ref, docInfo)
         jochreIndex.indexer.indexDocument(document)
         jochreIndex.refresh
@@ -79,6 +87,7 @@ private[search] case class SearchServiceImpl(
   private case class DocumentData(
       pageCount: Int,
       text: String,
+      pageOffsets: Set[Int],
       newlineOffsets: Set[Int],
       alternativesAtOffset: Map[Int, Seq[SpellingAlternative]]
   )
@@ -110,12 +119,15 @@ private[search] case class SearchServiceImpl(
           val alternativesAtOffset = pageDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
             case (map, pageData) => map ++ pageData.alternativesAtOffset
           }
+          val pageOffsets = pageDataSeq.foldLeft(Set(initialOffset)) { case (pageOffsets, pageData) =>
+            pageOffsets + pageData.endOffset
+          }
           val newlineOffsets = pageDataSeq.foldLeft(Set(initialOffset)) { case (newlineOffsets, pageData) =>
             newlineOffsets ++ pageData.newlineOffsets
           }
           // As explained above, we add the document reference at the start of the text.
           val text = f"${ref.ref}\n${pageDataSeq.map(_.text).mkString}"
-          DocumentData(pageDataSeq.size, text, newlineOffsets, alternativesAtOffset)
+          DocumentData(pageDataSeq.size, text, pageOffsets, newlineOffsets, alternativesAtOffset)
         }
     } yield documentData
   }
@@ -195,8 +207,12 @@ private[search] case class SearchServiceImpl(
           wordsAndSpaces match {
             case (word: Word) +: tail =>
               val hyphenatedOffset = word.subsType match {
-                case Some(SubsType.HypPart1) => Some(offset + word.content.length + 1) // 1 for the newline character
-                case _                       => None
+                case Some(SubsType.HypPart1) =>
+                  // TODO: hyphenated words should be handled differently depending on whether its a soft or hard hyphen
+                  // If soft hyphen, we want to index a single word
+                  // If hard hyphen, we want to index two separate words
+                  Some(offset + word.content.length + 1) // 1 for the newline character
+                case _ => None
               }
               for {
                 _ <- persistWord(docId, rowId, word, offset, hyphenatedOffset)
@@ -263,8 +279,7 @@ private[search] case class SearchServiceImpl(
       author: Option[String],
       subject: Option[String],
       keywords: Option[String],
-      creator: Option[String],
-      images: Seq[BufferedImage]
+      creator: Option[String]
   )
 
   private def getMetadata(docRef: DocReference, pdfInfo: PdfInfo): DocMetadata = {
@@ -273,7 +288,7 @@ private[search] case class SearchServiceImpl(
       author = pdfInfo.author
     )
   }
-  private def getPdfInfo(pdfFile: File): Task[PdfInfo] = {
+  private def getPdfInfo(docReference: DocReference, pdfFile: File): Task[PdfInfo] = {
     def acquire: Task[(FileInputStream, PDDocument)] = ZIO
       .attempt {
         val inputStream = new FileInputStream(pdfFile)
@@ -308,8 +323,19 @@ private[search] case class SearchServiceImpl(
           val docInfo = pdf.getDocumentInformation
           val pageCount = pdf.getNumberOfPages
 
-          val images = (1 to pageCount).map { i =>
-            pdfRenderer.renderImage(i)
+          val bookDir = contentDir.resolve(docReference.ref)
+          bookDir.toFile.mkdirs()
+
+          (1 to pageCount).foreach { i =>
+            log.info(f"Extracting PDF page $i")
+            val image = pdfRenderer.renderImageWithDPI(
+              i - 1,
+              300.toFloat,
+              ImageType.RGB
+            )
+            val imageFileName = f"${docReference.ref}_$i%04d.png"
+            val imageFile = bookDir.resolve(imageFileName)
+            ImageIO.write(image, "png", imageFile.toFile)
           }
           PdfInfo(
             pageCount,
@@ -317,8 +343,7 @@ private[search] case class SearchServiceImpl(
             Option(docInfo.getAuthor),
             Option(docInfo.getSubject),
             Option(docInfo.getKeywords),
-            Option(docInfo.getCreator),
-            images
+            Option(docInfo.getCreator)
           )
         }
         .foldZIO(

@@ -18,9 +18,6 @@ package object search {
       text: String,
       start: Int,
       end: Int,
-      page: Int,
-      startLine: Int,
-      endLine: Int,
       highlights: Seq[Highlight]
   )
 
@@ -37,9 +34,6 @@ package object search {
               text = "אין דער <b>אַלטער הײם</b>.",
               start = 100,
               end = 118,
-              page = 72,
-              startLine = 11,
-              endLine = 13,
               highlights = Seq(Highlight(108, 117))
             )
           )

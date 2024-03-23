@@ -24,7 +24,7 @@ You can then navigate to the Swagger documentation as follows: http://localhost:
 
 If the application is setup for raw authorization, click on `Authorize`, and enter the following string:
 ```json
-{"username": "Test", "email": "test@example.com", "roles": ["search"]}
+{"username": "Test", "email": "test@example.com", "roles": ["index"]}
 ```
 
 ## Running the server locally

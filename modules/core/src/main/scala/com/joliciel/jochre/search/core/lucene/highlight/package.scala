@@ -3,18 +3,22 @@ package com.joliciel.jochre.search.core.lucene
 import org.apache.lucene.search.highlight.{TextFragment, TextFragmentWrapper}
 
 package object highlight {
-  case class HighlightFragment(text: String, score: Float, index: Int, start: Int, end: Int)
-      extends Ordered[HighlightFragment] {
+  case class HighlightFragment(start: Int, end: Int, page: Int, tokens: Seq[Token]) {
+    val score = tokens.map(_.score).sum
+  }
+
+  case class PreformattedHighlightFragment(text: String, score: Float, index: Int, start: Int, end: Int)
+      extends Ordered[PreformattedHighlightFragment] {
     import scala.math.Ordered.orderingToOrdered
 
     // Note reverse natural ordering for score
-    def compare(that: HighlightFragment): Int = (that.score, this.index) compare (this.score, that.index)
+    def compare(that: PreformattedHighlightFragment): Int = (that.score, this.index) compare (this.score, that.index)
   }
 
-  object HighlightFragment {
-    def apply(textFragment: TextFragment): HighlightFragment = {
+  object PreformattedHighlightFragment {
+    def apply(textFragment: TextFragment): PreformattedHighlightFragment = {
       val wrapper = new TextFragmentWrapper(textFragment)
-      HighlightFragment(wrapper.text, wrapper.score, wrapper.index, wrapper.textStartPos, wrapper.textEndPos)
+      PreformattedHighlightFragment(wrapper.text, wrapper.score, wrapper.index, wrapper.textStartPos, wrapper.textEndPos)
     }
   }
 }
