@@ -6,6 +6,7 @@ import com.typesafe.config.ConfigFactory
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.store.{Directory, FSDirectory, SingleInstanceLockFactory}
+import zio.{Task, ZIO, ZLayer}
 
 import java.nio.file.Path
 
@@ -18,11 +19,13 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
 
   def refresh: Boolean = searcherManager.refreshIndex()
 
-  def indexer: DocumentIndexer = DocumentIndexer(indexWriter)
+  def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter)
 
-  def addAlternatives(ref: DocReference, alternatives: Map[Int, Seq[SpellingAlternative]]): Unit =
-    analyzerGroup.forIndexing.addAlternatives(ref, alternatives)
-  def removeAlternatives(ref: DocReference): Unit = analyzerGroup.forIndexing.removeAlternatives(ref)
+  def addDocumentInfo(ref: DocReference, docInfo: DocumentIndexInfo): Unit =
+    analyzerGroup.forIndexing.indexingHelper.addDocumentInfo(ref, docInfo)
+
+  def removeDocumentInfo(ref: DocReference): Unit =
+    analyzerGroup.forIndexing.indexingHelper.removeDocumentInfo(ref)
 
   def commit: Unit = indexer.commit()
 
@@ -39,4 +42,6 @@ object JochreIndex {
     val analyzerGroup = AnalyzerGroup.generic
     JochreIndex(indexDirectory, analyzerGroup)
   }
+
+  val live: ZLayer[Any, Throwable, JochreIndex] = ZLayer.fromZIO(ZIO.attempt { fromConfig })
 }

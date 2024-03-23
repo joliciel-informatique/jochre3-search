@@ -8,6 +8,7 @@ import org.apache.lucene.analysis.tokenattributes.{
   PositionIncrementAttribute
 }
 import org.apache.lucene.analysis.{TokenFilter, TokenStream}
+import org.apache.lucene.util.AttributeSource
 import org.slf4j.LoggerFactory
 
 import java.util.Locale
@@ -26,6 +27,8 @@ private[lucene] class RegexTokenizerFilter(input: TokenStream, regex: Regex) ext
   private var currentSplit: Int = 0
   private var currentStart: Int = _
 
+  private var attributeState: AttributeSource.State = _
+
   final override def incrementToken: Boolean = {
     if (currentSplit < splits.length) {
       handleNextSplit()
@@ -38,6 +41,7 @@ private[lucene] class RegexTokenizerFilter(input: TokenStream, regex: Regex) ext
     val hasToken = input.incrementToken()
 
     if (hasToken && !keywordAttr.isKeyword) {
+      attributeState = captureState()
       val term = termAttr.subSequence(0, termAttr.length)
       currentSplit = 0
       splits = split(term, Seq.empty)
@@ -57,9 +61,11 @@ private[lucene] class RegexTokenizerFilter(input: TokenStream, regex: Regex) ext
   private def handleNextSplit(): Boolean = {
     val currentPositionIncrement = posIncAttr.getPositionIncrement
     clearAttributes()
+    restoreState(attributeState)
     val subTerm = splits(currentSplit)
     val firstSplit = currentSplit == 0
     currentSplit += 1
+    termAttr.setEmpty()
     termAttr.append(subTerm)
     offsetAttr.setOffset(currentStart, currentStart + subTerm.length)
     currentStart = currentStart + subTerm.length

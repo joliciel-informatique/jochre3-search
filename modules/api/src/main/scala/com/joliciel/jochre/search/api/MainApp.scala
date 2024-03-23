@@ -8,6 +8,8 @@ import com.joliciel.jochre.search.api.index.IndexApp
 import com.joliciel.jochre.search.api.search.SearchApp
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
+import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.joliciel.jochre.search.core.search.{SearchRepo, SearchService}
 import com.typesafe.config.ConfigFactory
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder
@@ -53,7 +55,7 @@ object MainApp extends ZIOAppDefault {
       )
     val swaggerRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(swaggerDirectives).toRoutes
 
-    val routes = searchRoutes <+> swaggerRoutes
+    val routes = searchRoutes <+> indexRoutes <+> swaggerRoutes
 
     val httpApp = Router("/" -> routes).orNotFound
 
@@ -99,12 +101,21 @@ object MainApp extends ZIOAppDefault {
       .provide(
         Scope.default,
         AppConfig.live,
-        PostgresDatabase.transactorLive
+        PostgresDatabase.transactorLive,
+        SearchRepo.live,
+        JochreIndex.live,
+        SearchService.live
       )
-
   }
 
   private def app: Task[Unit] = {
+    Runtime.setReportFatal { t =>
+      t.printStackTrace()
+      try {
+        java.lang.System.exit(-1)
+        throw t
+      } catch { case _: Throwable => throw t }
+    }
     for {
       authenticationProvider <- authenticationProvider
       executor <- ZIO.executor

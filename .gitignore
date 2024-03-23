@@ -5,3 +5,5 @@ target/
 /temp
 /data
 /modules/yiddish/resources/*.zip
+/modules/api/content
+/modules/api/index

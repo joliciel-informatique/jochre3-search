@@ -11,6 +11,7 @@ package object core {
       authorEnglish: Option[String] = None,
       date: Option[String] = None,
       publisher: Option[String] = None,
-      volume: Option[String] = None
+      volume: Option[String] = None,
+      url: Option[String] = None
   )
 }

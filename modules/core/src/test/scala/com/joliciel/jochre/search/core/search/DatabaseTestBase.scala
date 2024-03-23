@@ -1,4 +1,4 @@
-package com.joliciel.jochre.search.core.service
+package com.joliciel.jochre.search.core.search
 
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase

@@ -8,7 +8,7 @@ private[lucene] class JochreMultiFieldQueryParser(
     fields: Seq[LuceneField],
     phraseAnalyzer: Analyzer,
     termAnalyzer: Analyzer
-) extends MultiFieldQueryParser(fields.map(_.name).toArray, phraseAnalyzer)
+) extends MultiFieldQueryParser(fields.map(_.entryName).toArray, phraseAnalyzer)
     with LuceneUtilities {
 
   override def newFieldQuery(analyzer: Analyzer, field: String, queryText: String, quoted: Boolean): Query = {

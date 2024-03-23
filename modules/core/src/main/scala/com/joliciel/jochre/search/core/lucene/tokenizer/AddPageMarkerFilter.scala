@@ -1,8 +1,7 @@
 package com.joliciel.jochre.search.core.lucene.tokenizer
 
-import com.joliciel.jochre.ocr.core.model.SpellingAlternative
 import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.lucene.IndexingHelper
+import com.joliciel.jochre.search.core.lucene.{IndexingHelper, PAGE_TOKEN}
 import org.apache.lucene.analysis.tokenattributes.{
   CharTermAttribute,
   OffsetAttribute,
@@ -13,7 +12,7 @@ import org.apache.lucene.analysis.{TokenFilter, TokenStream}
 import org.apache.lucene.util.AttributeSource
 import org.slf4j.LoggerFactory
 
-private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: IndexingHelper)
+private[lucene] class AddPageMarkerFilter(input: TokenStream, indexingHelper: IndexingHelper)
     extends TokenFilter(input) {
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -22,18 +21,15 @@ private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: 
   private val offsetAttr = addAttribute(classOf[OffsetAttribute])
   private val typeAttr = addAttribute(classOf[TypeAttribute])
 
-  private var currentAlternatives: Seq[SpellingAlternative] = Seq.empty
+  private var isNewPage: Boolean = false
   private var attributeState: AttributeSource.State = _
 
   final override def incrementToken: Boolean = {
-    if (currentAlternatives.nonEmpty) {
+    if (isNewPage) {
       clearAttributes()
       restoreState(attributeState)
-      val alternative = currentAlternatives.head
-      currentAlternatives = currentAlternatives.tail
-      termAttr.copyBuffer(alternative.content.toCharArray, 0, alternative.content.size)
       posIncAttr.setPositionIncrement(0)
-      typeAttr.setType(TokenTypes.ALTERNATIVE_TYPE)
+      isNewPage = false
       true
     } else if (input.incrementToken()) {
       val tokenType = typeAttr.`type`()
@@ -41,10 +37,12 @@ private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: 
         val refValue = tokenType.substring(TokenTypes.DOC_REF_TYPE_PREFIX.length)
         val ref = DocReference(refValue)
         val offset = offsetAttr.startOffset()
-        currentAlternatives = indexingHelper.getDocumentInfo(ref).getAlternatives(offset)
-        if (currentAlternatives.nonEmpty) {
-          log.debug(f"Found alternatives for doc ${ref.ref} at offset $offset: ${currentAlternatives.map(_.content).mkString(", ")}")
+        isNewPage = indexingHelper.getDocumentInfo(ref).pageOffsets.contains(offset)
+        if (isNewPage) {
+          log.debug(f"Found new page for doc ${ref.ref} at offset $offset")
           attributeState = captureState()
+          termAttr.copyBuffer(PAGE_TOKEN.toCharArray, 0, PAGE_TOKEN.size)
+          typeAttr.setType(TokenTypes.PAGE_TYPE)
         }
       }
       true

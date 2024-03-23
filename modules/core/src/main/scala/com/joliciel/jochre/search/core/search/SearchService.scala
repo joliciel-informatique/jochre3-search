@@ -1,55 +1,96 @@
-package com.joliciel.jochre.search.core.service
+package com.joliciel.jochre.search.core.search
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Alto, Page, SpellingAlternative, SubsType, TextLine, Word}
-import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.joliciel.jochre.ocr.core.utils.ImageUtils
+import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
+import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.rendering.PDFRenderer
+import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
 import org.slf4j.LoggerFactory
 import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.io.{File, FileInputStream}
+import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 import java.util.zip.ZipInputStream
+import javax.imageio.ImageIO
+import scala.io.Source
 import scala.util.Using
 import scala.xml.XML
 
 trait SearchService {
-  def indexPdf(id: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[String]
+  def indexPdf(id: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[Int]
 
-  def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[String]
+  def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int]
 
-  def search(query: String): Task[Unit]
+  def search(
+      query: String,
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      username: String
+  ): Task[SearchResponse]
 }
 
-private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRepo: SearchRepo) extends SearchService {
+private[search] case class SearchServiceImpl(
+    jochreIndex: JochreIndex,
+    searchRepo: SearchRepo,
+    metadataReader: MetadataReader = MetadataReader.default
+) extends SearchService
+    with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
+  private val config = ConfigFactory.load().getConfig("jochre.search.index")
+  private val contentDir = Path.of(config.getString("content-directory"))
 
-  override def indexPdf(ref: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[String] = {
+  override def indexPdf(ref: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[Int] = {
     for {
       alto <- getAlto(altoFile)
-      pdfInfo <- getPdfInfo(pdfFile)
-      metadata = getMetadata(ref, pdfInfo)
-      text <- indexAlto(ref, alto, metadata)
-    } yield text
+      pdfInfo <- getPdfInfo(ref, pdfFile)
+      pdfMetadata = getMetadata(ref, pdfInfo)
+      metadata <- ZIO.attempt {
+        val providedMetadata = metadataFile.map { metadataFile =>
+          try {
+            val contents = Source.fromFile(metadataFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
+            metadataReader.read(contents)
+          } catch {
+            case t: Throwable =>
+              log.error("Unable to read metadata file", t)
+              throw new BadMetadataFileFormat(t.getMessage)
+          }
+        }
+        providedMetadata.getOrElse(pdfMetadata)
+      }
+      pageCount <- indexAlto(ref, alto, metadata)
+    } yield pageCount
   }
 
-  override def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[String] = {
+  override def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int] = {
     for {
       documentData <- persistDocument(ref, alto)
-      text <- ZIO.attempt {
+      pageCount <- ZIO.attempt {
         val document = AltoDocument(ref, documentData.text, metadata)
-        jochreIndex.addAlternatives(ref, documentData.alternativesAtOffset)
+        val docInfo =
+          DocumentIndexInfo(documentData.pageOffsets, documentData.newlineOffsets, documentData.alternativesAtOffset)
+        jochreIndex.addDocumentInfo(ref, docInfo)
         jochreIndex.indexer.indexDocument(document)
         jochreIndex.refresh
-        document.text
+        documentData.pageCount
       }
-    } yield text
+    } yield pageCount
   }
-  private case class DocumentData(text: String, alternativesAtOffset: Map[Int, Seq[SpellingAlternative]])
+  private case class DocumentData(
+      pageCount: Int,
+      text: String,
+      pageOffsets: Set[Int],
+      newlineOffsets: Set[Int],
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]]
+  )
 
   private def persistDocument(ref: DocReference, alto: Alto): Task[DocumentData] = {
     // We'll add the document reference at the start of the document text
@@ -78,14 +119,25 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
           val alternativesAtOffset = pageDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
             case (map, pageData) => map ++ pageData.alternativesAtOffset
           }
+          val pageOffsets = pageDataSeq.foldLeft(Set(initialOffset)) { case (pageOffsets, pageData) =>
+            pageOffsets + pageData.endOffset
+          }
+          val newlineOffsets = pageDataSeq.foldLeft(Set(initialOffset)) { case (newlineOffsets, pageData) =>
+            newlineOffsets ++ pageData.newlineOffsets
+          }
           // As explained above, we add the document reference at the start of the text.
           val text = f"${ref.ref}\n${pageDataSeq.map(_.text).mkString}"
-          DocumentData(text, alternativesAtOffset)
+          DocumentData(pageDataSeq.size, text, pageOffsets, newlineOffsets, alternativesAtOffset)
         }
     } yield documentData
   }
 
-  private case class PageData(text: String, endOffset: Int, alternativesAtOffset: Map[Int, Seq[SpellingAlternative]])
+  private case class PageData(
+      text: String,
+      endOffset: Int,
+      newlineOffsets: Set[Int],
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]]
+  )
 
   private def persistPage(docId: DocId, page: Page, startOffset: Int): Task[PageData] = {
     for {
@@ -108,9 +160,10 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
           val alternativesAtOffset = rowDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
             case (map, rowData) => map ++ rowData.alternativesAtOffset
           }
+          val newlineOffsets = rowDataSeq.map(_.endOffset).toSet
           val finalOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
           val text = rowDataSeq.map(_.text).mkString
-          PageData(text, finalOffset, alternativesAtOffset)
+          PageData(text, finalOffset, newlineOffsets, alternativesAtOffset)
         }
     } yield pageData
   }
@@ -154,8 +207,12 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
           wordsAndSpaces match {
             case (word: Word) +: tail =>
               val hyphenatedOffset = word.subsType match {
-                case Some(SubsType.HypPart1) => Some(offset + word.content.length + 1) // 1 for the newline character
-                case _                       => None
+                case Some(SubsType.HypPart1) =>
+                  // TODO: hyphenated words should be handled differently depending on whether its a soft or hard hyphen
+                  // If soft hyphen, we want to index a single word
+                  // If hard hyphen, we want to index two separate words
+                  Some(offset + word.content.length + 1) // 1 for the newline character
+                case _ => None
               }
               for {
                 _ <- persistWord(docId, rowId, word, offset, hyphenatedOffset)
@@ -181,7 +238,16 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
   }
 
   private def getAlto(altoZipFile: File): Task[Alto] = {
-    def acquire: Task[ZipInputStream] = ZIO.attempt { new ZipInputStream(new FileInputStream(altoZipFile)) }
+    def acquire: Task[ZipInputStream] = ZIO
+      .attempt { new ZipInputStream(new FileInputStream(altoZipFile)) }
+      .foldZIO(
+        error => {
+          log.error("Unable to open alto zip file", error)
+          ZIO.fail(new BadAltoFileFormat(error.getMessage))
+        },
+        success => ZIO.succeed(success)
+      )
+
     def release(zipInputStream: ZipInputStream): URIO[Any, Unit] = ZIO
       .attempt(zipInputStream.close())
       .orDieWith { ex =>
@@ -189,12 +255,20 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
         ex
       }
 
-    def readAlto(zipInputStream: ZipInputStream): Task[Alto] = ZIO.attempt {
-      zipInputStream.getNextEntry
-      val altoXml = XML.load(zipInputStream)
-      val alto = Alto.fromXML(altoXml)
-      alto
-    }
+    def readAlto(zipInputStream: ZipInputStream): Task[Alto] = ZIO
+      .attempt {
+        zipInputStream.getNextEntry
+        val altoXml = XML.load(zipInputStream)
+        val alto = Alto.fromXML(altoXml)
+        alto
+      }
+      .foldZIO(
+        error => {
+          log.error("Unable to read alto zip file", error)
+          ZIO.fail(new BadAltoFileFormat(error.getMessage))
+        },
+        success => ZIO.succeed(success)
+      )
 
     ZIO.acquireReleaseWith(acquire)(release)(readAlto)
   }
@@ -205,8 +279,7 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
       author: Option[String],
       subject: Option[String],
       keywords: Option[String],
-      creator: Option[String],
-      images: Seq[BufferedImage]
+      creator: Option[String]
   )
 
   private def getMetadata(docRef: DocReference, pdfInfo: PdfInfo): DocMetadata = {
@@ -215,13 +288,21 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
       author = pdfInfo.author
     )
   }
-  private def getPdfInfo(pdfFile: File): Task[PdfInfo] = {
-    def acquire: Task[(FileInputStream, PDDocument)] = ZIO.attempt {
-      val inputStream = new FileInputStream(pdfFile)
-      val pdfStream = new RandomAccessReadBuffer(inputStream)
-      val pdf = Loader.loadPDF(pdfStream)
-      (inputStream, pdf)
-    }
+  private def getPdfInfo(docReference: DocReference, pdfFile: File): Task[PdfInfo] = {
+    def acquire: Task[(FileInputStream, PDDocument)] = ZIO
+      .attempt {
+        val inputStream = new FileInputStream(pdfFile)
+        val pdfStream = new RandomAccessReadBuffer(inputStream)
+        val pdf = Loader.loadPDF(pdfStream)
+        (inputStream, pdf)
+      }
+      .foldZIO(
+        error => {
+          log.error("Unable to open pdf file", error)
+          ZIO.fail(new BadPdfFileFormat(error.getMessage))
+        },
+        success => ZIO.succeed(success)
+      )
 
     val release: ((FileInputStream, PDDocument)) => URIO[Any, Unit] = { case (inputStream, pdf) =>
       ZIO
@@ -230,41 +311,74 @@ private[service] case class SearchServiceImpl(jochreIndex: JochreIndex, searchRe
           inputStream.close()
         }
         .orDieWith { ex =>
-          log.error("Cannot close document", ex)
+          log.error("Cannot close pdf file", ex)
           ex
         }
     }
 
     val readPdf: ((FileInputStream, PDDocument)) => Task[PdfInfo] = { case (_, pdf) =>
-      ZIO.attempt {
-        val pdfRenderer = new PDFRenderer(pdf)
-        val docInfo = pdf.getDocumentInformation
-        val pageCount = pdf.getNumberOfPages
+      ZIO
+        .attempt {
+          val pdfRenderer = new PDFRenderer(pdf)
+          val docInfo = pdf.getDocumentInformation
+          val pageCount = pdf.getNumberOfPages
 
-        val images = (1 to pageCount).map { i =>
-          pdfRenderer.renderImage(i)
+          val bookDir = contentDir.resolve(docReference.ref)
+          bookDir.toFile.mkdirs()
+
+          (1 to pageCount).foreach { i =>
+            log.info(f"Extracting PDF page $i")
+            val image = pdfRenderer.renderImageWithDPI(
+              i - 1,
+              300.toFloat,
+              ImageType.RGB
+            )
+            val imageFileName = f"${docReference.ref}_$i%04d.png"
+            val imageFile = bookDir.resolve(imageFileName)
+            ImageIO.write(image, "png", imageFile.toFile)
+          }
+          PdfInfo(
+            pageCount,
+            Option(docInfo.getTitle),
+            Option(docInfo.getAuthor),
+            Option(docInfo.getSubject),
+            Option(docInfo.getKeywords),
+            Option(docInfo.getCreator)
+          )
         }
-        PdfInfo(
-          pageCount,
-          Option(docInfo.getTitle),
-          Option(docInfo.getAuthor),
-          Option(docInfo.getSubject),
-          Option(docInfo.getKeywords),
-          Option(docInfo.getCreator),
-          images
+        .foldZIO(
+          error => {
+            log.error("Unable to read pdf file", error)
+            ZIO.fail(new BadPdfFileFormat(error.getMessage))
+          },
+          success => ZIO.succeed(success)
         )
-      }
     }
 
     ZIO.acquireReleaseWith(acquire)(release)(readPdf)
   }
 
-  override def search(query: String): Task[Unit] = ZIO.fromTry {
-    Using(jochreIndex.searcherManager.acquire()) { searcher => }
+  override def search(
+      query: String,
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      username: String
+  ): Task[SearchResponse] = ZIO.fromTry {
+    Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      val searchQuery = SearchQuery(Contains(query))
+      searcher.search(searchQuery, first, max, maxSnippets, rowPadding)
+    }
   }
 }
 
 object SearchService {
   lazy val live: ZLayer[JochreIndex & SearchRepo, Nothing, SearchService] =
-    ZLayer.fromFunction(SearchServiceImpl(_, _))
+    ZLayer {
+      for {
+        index <- ZIO.service[JochreIndex]
+        searchRepo <- ZIO.service[SearchRepo]
+      } yield SearchServiceImpl(index, searchRepo)
+    }
 }

@@ -5,6 +5,7 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
 import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.search.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
@@ -58,26 +59,42 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Requirements,
     String,
     ValidToken,
-    (DocReference, Int, Int, Int, List[Highlight]),
+    (DocReference, Int, Int, List[Highlight]),
     HttpError,
     ZStream[Any, Throwable, Byte],
     Any with ZioStreams
   ] =
     secureEndpoint()
       .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Offsets refer to words on different pages, or are higher than document length."
+          )
+        )
       )
       .get
       .in("image-snippet")
-      .in(query[DocReference]("doc-id").description("The document containing the image").example(DocReference("nybc200089")))
-      .in(query[Int]("page").description("The page number in the document").example(20))
-      .in(query[Int]("start-line").description("The start line in the page (inclusive)").example(11))
-      .in(query[Int]("end-line").description("The end line in the page (exclusive)").example(17))
+      .in(
+        query[DocReference]("doc-id")
+          .description("The document containing the image")
+          .example(DocReference("nybc200089"))
+      )
+      .in(
+        query[Int]("start-offset")
+          .description("The start character offset of the first word with respect to the entire document (inclusive)")
+          .example(10200)
+      )
+      .in(
+        query[Int]("end-offset")
+          .description("The end character offset of the last word with respect to the entire document (exclusive)")
+          .example(10450)
+      )
       .in(
         query[List[Highlight]]("highlight")
           .description(
             "A list of words to highlight using the start index and end index of each word or contiguous list of words" +
-              ", e.g. \"[100,120]\""
+              ", e.g. \"[10210,10215],[10312,10320]\""
           )
       )
       .out(header(Header.contentType(MediaType.ImagePng)))
