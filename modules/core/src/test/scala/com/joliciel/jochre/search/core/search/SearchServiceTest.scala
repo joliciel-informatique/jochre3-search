@@ -1,15 +1,19 @@
 package com.joliciel.jochre.search.core.search
 
-import com.joliciel.jochre.ocr.core.model.{Alto, Page, TextBlock}
 import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core.{DocMetadata, DocReference}
-import zio.{Scope, ZIO, ZLayer}
+import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
-import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue, ignored}
+import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
+import zio.{Scope, ZIO, ZLayer}
 
+import java.io.File
+import javax.imageio.ImageIO
 import scala.util.Using
 
 object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+  private val log = LoggerFactory.getLogger(getClass)
+
   val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
     "nice" -> Seq("pleasant", "lovely")
@@ -135,6 +139,34 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             "I <b>think</b> it will be\nsunny today, and even"
           )
         )
+      }
+    },
+    test("upload real pdf and get image snippets") {
+      val docRef = DocReference("nybc200089")
+      val pdfStream = getClass.getResourceAsStream("/nybc200089-11-12.pdf")
+
+      val altoStream = getClass.getResourceAsStream("/nybc200089-11-12_alto4.zip")
+
+      val metadataStream = getClass.getResourceAsStream("/nybc200089_meta.xml")
+
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
+        searchResults <- searchService.search("velt", 0, 10, Some(20), Some(1), "test")
+        topResult <- ZIO.attempt(searchResults.results.head)
+        imageSnippet <- searchService.getImageSnippet(
+          topResult.docRef,
+          topResult.snippets.head.start,
+          topResult.snippets.head.end,
+          topResult.snippets.head.highlights
+        )
+      } yield {
+        val tempFile = File.createTempFile("jochre-snippet", ".png")
+        ImageIO.write(imageSnippet, "png", tempFile)
+        log.info(f"Wrote snippet to ${tempFile.getPath}")
+        assertTrue(searchResults.totalCount == 1) &&
+        assertTrue(pageCount == 2)
       }
     }
   ).provideLayer(

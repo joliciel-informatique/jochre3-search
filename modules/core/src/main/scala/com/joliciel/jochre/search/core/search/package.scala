@@ -1,5 +1,7 @@
 package com.joliciel.jochre.search.core
 
+import com.joliciel.jochre.ocr.core.graphics.Rectangle
+
 import java.io.StringReader
 import java.time.Instant
 import scala.util.Using
@@ -9,7 +11,7 @@ package object search {
   case class SearchResponse(results: Seq[SearchResult], totalCount: Long)
 
   case class SearchResult(
-      docId: DocReference,
+      docRef: DocReference,
       score: Double,
       snippets: Seq[Snippet]
   )
@@ -27,7 +29,7 @@ package object search {
     val searchResponseExample: SearchResponse = SearchResponse(
       results = Seq(
         SearchResult(
-          docId = DocReference("nybc200089"),
+          docRef = DocReference("nybc200089"),
           score = 0.90,
           snippets = Seq(
             Snippet(
@@ -43,20 +45,30 @@ package object search {
     )
   }
 
-  private[search] case class DocId(id: Long) extends AnyVal
+  private[core] case class DocRev(rev: Long) extends AnyVal
 
-  private[search] case class DbDocument(id: DocId, ref: DocReference, created: Instant)
+  private[search] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
 
   private[search] case class PageId(id: Long) extends AnyVal
-  private[search] case class DbPage(id: PageId, docId: DocId, index: Int, width: Int, height: Int)
+  private[search] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int)
 
   private[search] case class RowId(id: Long) extends AnyVal
-  private[search] case class DbRow(id: RowId, pageId: PageId, index: Int, left: Int, top: Int, width: Int, height: Int)
+  private[search] case class DbRow(
+      id: RowId,
+      pageId: PageId,
+      index: Int,
+      left: Int,
+      top: Int,
+      width: Int,
+      height: Int
+  ) {
+    val rect = Rectangle(left, top, width, height)
+  }
 
   private[search] case class WordId(id: Long) extends AnyVal
   private[search] case class DbWord(
       id: WordId,
-      docId: DocId,
+      docRev: DocRev,
       rowId: RowId,
       offset: Int,
       hyphenatedOffset: Option[Int],
@@ -64,7 +76,9 @@ package object search {
       top: Int,
       width: Int,
       height: Int
-  )
+  ) {
+    val rect = Rectangle(left, top, width, height)
+  }
 
   trait MetadataReader {
     def read(fileContents: String): DocMetadata

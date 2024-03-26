@@ -10,18 +10,18 @@ import zio._
 import zio.interop.catz._
 
 private[search] case class SearchRepo(transactor: Transactor[Task]) {
-  def insertDocument(ref: DocReference): Task[DocId] =
-    sql"""INSERT INTO document (ref)
+  def insertDocument(ref: DocReference): Task[DocRev] =
+    sql"""INSERT INTO document (reference)
          | VALUES (${ref.ref})
-         | RETURNING id
+         | RETURNING rev
          | """.stripMargin
-      .query[DocId]
+      .query[DocRev]
       .unique
       .transact(transactor)
 
-  def insertPage(docId: DocId, page: Page): Task[PageId] =
-    sql"""INSERT INTO page (doc_id, index, width, height)
-        | VALUES (${docId.id}, ${page.physicalPageNumber}, ${page.width}, ${page.height})
+  def insertPage(docRev: DocRev, page: Page): Task[PageId] =
+    sql"""INSERT INTO page (doc_rev, index, width, height)
+        | VALUES (${docRev.rev}, ${page.physicalPageNumber}, ${page.width}, ${page.height})
         | RETURNING id
         | """.stripMargin
       .query[PageId]
@@ -37,9 +37,9 @@ private[search] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def insertWord(docId: DocId, rowId: RowId, offset: Int, hyphenatedOffset: Option[Int], word: Word): Task[WordId] =
-    sql"""INSERT INTO word(doc_id, row_id, start_offset, hyphenated_offset, lft, top, width, height)
-         | values (${docId.id}, ${rowId.id}, $offset, $hyphenatedOffset, ${word.left}, ${word.top}, ${word.width}, ${word.height})
+  def insertWord(docRev: DocRev, rowId: RowId, offset: Int, hyphenatedOffset: Option[Int], word: Word): Task[WordId] =
+    sql"""INSERT INTO word(doc_rev, row_id, start_offset, hyphenated_offset, lft, top, width, height)
+         | values (${docRev.rev}, ${rowId.id}, $offset, $hyphenatedOffset, ${word.left}, ${word.top}, ${word.width}, ${word.height})
          | RETURNING id
        """.stripMargin
       .query[WordId]
@@ -47,54 +47,81 @@ private[search] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT id, ref, created
-         | FROM document
-         | WHERE document.ref = ${ref.ref}
+    sql"""SELECT rev, reference, created
+         | FROM document d1
+         | WHERE d1.reference = ${ref.ref}
+         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
        """.stripMargin
       .query[DbDocument]
       .unique
       .transact(transactor)
 
-  def getDocument(docId: DocId): Task[DbDocument] =
-    sql"""SELECT id, ref, created
+  def getDocument(docRev: DocRev): Task[DbDocument] =
+    sql"""SELECT rev, reference, created
          | FROM document
-         | WHERE document.id = ${docId.id}
+         | WHERE document.rev = ${docRev.rev}
        """.stripMargin
       .query[DbDocument]
       .unique
       .transact(transactor)
 
-  def getPage(ref: DocReference, pageNumber: Int): Task[DbPage] =
-    sql"""SELECT page.id, doc_id, index, width, height
+  def getPage(ref: DocReference, pageNumber: Int): Task[Option[DbPage]] =
+    sql"""SELECT page.id, doc_rev, index, width, height
          | FROM page
-         | INNER JOIN document ON page.doc_id = document.id
-         | WHERE document.ref = ${ref.ref}
+         | INNER JOIN document ON page.doc_rev = document.rev
+         | WHERE document.reference = ${ref.ref}
          | AND page.index = $pageNumber
        """.stripMargin
-      .query[DbPage]
+      .query[Option[DbPage]]
       .unique
       .transact(transactor)
 
   def getPage(pageId: PageId): Task[DbPage] =
-    sql"""SELECT page.id, doc_id, index, width, height
+    sql"""SELECT page.id, doc_rev, index, width, height
          | FROM page
-         | INNER JOIN document ON page.doc_id = document.id
+         | INNER JOIN document ON page.doc_rev = document.rev
          | WHERE page.id = ${pageId.id}
        """.stripMargin
       .query[DbPage]
       .unique
       .transact(transactor)
 
-  def getRow(ref: DocReference, pageNumber: Int, rowIndex: Int): Task[DbRow] =
-    sql"""SELECT row.id, page_id, row.index, lft, top, row.width, row.height
+  def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
+    sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
          | FROM row
          | INNER JOIN page ON row.page_id = page.id
-         | INNER JOIN document ON page.doc_id = document.id
-         | WHERE document.ref = ${ref.ref}
+         | INNER JOIN document ON page.doc_rev = document.rev
+         | WHERE document.rev = ${docRev.rev}
          | AND page.index = $pageNumber
          | AND row.index = $rowIndex
        """.stripMargin
-      .query[DbRow]
+      .query[Option[DbRow]]
+      .unique
+      .transact(transactor)
+
+  def getRowByStartOffset(docRev: DocRev, startOffset: Int): Task[Option[DbRow]] =
+    sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
+         | FROM row
+         | INNER JOIN word ON row.id = word.row_id
+         | INNER JOIN document ON word.doc_rev = document.rev
+         | WHERE document.rev = ${docRev.rev}
+         | AND word.start_offset = $startOffset
+       """.stripMargin
+      .query[Option[DbRow]]
+      .unique
+      .transact(transactor)
+
+  def getRowByEndOffset(docRev: DocRev, endOffset: Int): Task[Option[DbRow]] =
+    sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
+         | FROM row
+         | INNER JOIN word ON row.id = word.row_id
+         | INNER JOIN document ON word.doc_rev = document.rev
+         | WHERE document.rev = ${docRev.rev}
+         | AND word.start_offset = (SELECT max(w2.start_offset) FROM word w2
+         |   WHERE w2.start_offset < $endOffset
+         |   AND w2.doc_rev = document.rev)
+       """.stripMargin
+      .query[Option[DbRow]]
       .unique
       .transact(transactor)
 
@@ -107,19 +134,19 @@ private[search] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def getWord(ref: DocReference, offset: Int): Task[DbWord] =
-    sql"""SELECT word.id, doc_id, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
+  def getWord(docRev: DocRev, offset: Int): Task[Option[DbWord]] =
+    sql"""SELECT word.id, doc_rev, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
          | FROM word
-         | INNER JOIN document ON word.doc_id = document.id
-         | WHERE document.ref = ${ref.ref}
+         | INNER JOIN document ON word.doc_rev = document.rev
+         | WHERE document.rev = ${docRev.rev}
          | AND word.start_offset = $offset
        """.stripMargin
-      .query[DbWord]
+      .query[Option[DbWord]]
       .unique
       .transact(transactor)
 
   def getWord(wordId: WordId): Task[DbWord] =
-    sql"""SELECT word.id, doc_id, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
+    sql"""SELECT word.id, doc_rev, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
          | FROM word
          | WHERE word.id = ${wordId.id}
        """.stripMargin

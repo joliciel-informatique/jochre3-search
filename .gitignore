@@ -7,3 +7,4 @@ target/
 /modules/yiddish/resources/*.zip
 /modules/api/content
 /modules/api/index
+/content

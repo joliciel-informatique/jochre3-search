@@ -8,6 +8,9 @@ import com.joliciel.jochre.search.core.search.{Highlight, SearchResponse, Search
 import zio.ZIO
 import zio.stream.ZStream
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import javax.imageio.ImageIO
+
 trait SearchLogic extends HttpErrorMapper {
   def getSearchLogic(
       token: ValidToken,
@@ -26,16 +29,21 @@ trait SearchLogic extends HttpErrorMapper {
 
   def getImageSnippetLogic(
       token: ValidToken,
-      docId: DocReference,
+      docRef: DocReference,
       startOffset: Int,
       endOffset: Int,
       highlights: Seq[Highlight]
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
-    ZIO
-      .attempt {
-        val inputStream = getClass.getClassLoader.getResourceAsStream("image_snippet_example.png")
-        ZStream.fromInputStream(inputStream)
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      imageSnippet <- searchService.getImageSnippet(docRef, startOffset, endOffset, highlights)
+      stream <- ZIO.attempt {
+        val out = new ByteArrayOutputStream()
+        ImageIO.write(imageSnippet, "png", out)
+        val in = new ByteArrayInputStream(out.toByteArray)
+        ZStream.fromInputStream(in)
       }
-      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
-      .mapError(mapToHttpError)
+    } yield stream
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
+    .mapError(mapToHttpError)
 }

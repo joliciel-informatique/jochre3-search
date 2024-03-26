@@ -1,12 +1,11 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.ocr.core.model.SpellingAlternative
 import com.joliciel.jochre.search.core.DocReference
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.store.{Directory, FSDirectory, SingleInstanceLockFactory}
-import zio.{Task, ZIO, ZLayer}
+import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
 

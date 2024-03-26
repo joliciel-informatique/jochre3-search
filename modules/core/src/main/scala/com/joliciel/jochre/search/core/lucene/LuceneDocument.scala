@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.DocReference
 import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
-import com.joliciel.jochre.search.core.search.{Highlight, Snippet}
+import com.joliciel.jochre.search.core.search.{DocRev, Highlight, Snippet}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.document.Document
@@ -20,7 +20,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   private val defaultRowPadding = config.getInt("default-row-padding")
 
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
-  lazy val ref: DocReference = DocReference(doc.get(LuceneField.Id.entryName))
+  lazy val ref: DocReference = DocReference(doc.get(LuceneField.Reference.entryName))
+  lazy val rev: DocRev = DocRev(doc.get(LuceneField.Revision.entryName).toLong)
   lazy val termVector: Option[Fields] = Option(indexSearcher.getIndexReader.getTermVectors(luceneId))
 
   private def getTokenStream(field: LuceneField): Option[TokenStream] = {
