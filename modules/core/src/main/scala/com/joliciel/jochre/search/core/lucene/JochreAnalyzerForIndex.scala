@@ -4,7 +4,8 @@ import com.joliciel.jochre.search.core.lucene.tokenizer.{
   AddAlternativesFilter,
   AddDocumentReferenceFilter,
   AddNewlineMarkerFilter,
-  AddPageMarkerFilter
+  AddPageMarkerFilter,
+  HyphenationFilter
 }
 import com.joliciel.jochre.search.core.util.AndThenIf.Implicits._
 import org.apache.lucene.analysis.TokenStream
@@ -20,6 +21,7 @@ class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) 
   override def finalFilter(tokens: TokenStream): TokenStream = (addDocumentReferenceFilter(_))
     .andThen(regexTokenizerFilter)
     .andThen(lowercaseFilter)
+    .andThen(hyphenationFilter)
     .andThen(addAlternativesFilter)
     .andThen(addPageMarkerFilter)
     .andThen(addNewlineMarkerFilter)
@@ -29,6 +31,7 @@ class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) 
   def addDocumentReferenceFilter(tokens: TokenStream): TokenStream =
     new AddDocumentReferenceFilter(tokens, indexingHelper)
 
+  def hyphenationFilter(tokens: TokenStream): TokenStream = new HyphenationFilter(tokens, indexingHelper)
   def addAlternativesFilter(tokens: TokenStream): TokenStream = new AddAlternativesFilter(tokens, indexingHelper)
   def addNewlineMarkerFilter(tokens: TokenStream): TokenStream = new AddNewlineMarkerFilter(tokens, indexingHelper)
   def addPageMarkerFilter(tokens: TokenStream): TokenStream = new AddPageMarkerFilter(tokens, indexingHelper)

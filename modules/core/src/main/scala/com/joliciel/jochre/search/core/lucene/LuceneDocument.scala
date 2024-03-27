@@ -53,7 +53,9 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
                 sb.append(snippetText.substring(lastOffset - start, token.start - start))
               }
               sb.append(highlightPreTag)
-              sb.append(snippetText.substring(token.start - start, token.end - start))
+              val tokenText = snippetText.substring(token.start - start, token.end - start)
+              val tokenTextWithHighlights = tokenText.split("\n").mkString(f"$highlightPostTag\n$highlightPreTag")
+              sb.append(tokenTextWithHighlights)
               sb.append(highlightPostTag)
               sb -> token.end
             }
