@@ -10,6 +10,7 @@
     <logger name="com.joliciel.jochre.search.core.db" level="INFO" />
     <logger name="com.joliciel.jochre.search.core.lucene" level="INFO" />
     <logger name="com.joliciel.jochre.search.core.search" level="INFO" />
+    <logger name="com.joliciel.jochre.search.core.lucene.highlight" level="INFO" />
     <logger name="com.joliciel" level="INFO" />
 
     <root level="${LOGLEVEL:-info}">

@@ -205,6 +205,10 @@ case class JochreHighlighter(query: Query, field: LuceneField) {
         }
       }
 
+    if (log.isTraceEnabled) {
+      log.trace(f"At end of token stream, closing ${openFragments.size} fragments.")
+    }
+
     openFragments.foreach { stillOpen =>
       if (stillOpen.tokens.size > 0) {
         val highlightFragment =
