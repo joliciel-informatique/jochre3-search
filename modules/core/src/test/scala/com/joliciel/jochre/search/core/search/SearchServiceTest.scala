@@ -169,7 +169,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
-        searchResults <- searchService.search("velt", 0, 10, Some(20), Some(1), "test")
+        searchResults <- searchService.search("farshvundn", 0, 10, Some(20), Some(1), "test")
         topResult <- ZIO.attempt(searchResults.results.head)
         imageSnippet <- searchService.getImageSnippet(
           topResult.docRef,
@@ -178,6 +178,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           topResult.snippets.head.highlights
         )
       } yield {
+        log.info(f"$topResult")
         val tempFile = File.createTempFile("jochre-snippet", ".png")
         ImageIO.write(imageSnippet, "png", tempFile)
         log.info(f"Wrote snippet to ${tempFile.getPath}")

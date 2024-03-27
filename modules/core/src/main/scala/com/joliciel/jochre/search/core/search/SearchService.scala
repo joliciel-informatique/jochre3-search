@@ -546,20 +546,22 @@ private[search] case class SearchServiceImpl(
         val horizontalScale = originalImage.getWidth.toDouble / page.width.toDouble
         val verticalScale = originalImage.getHeight.toDouble / page.height.toDouble
 
-        val snippetRect = startRect.union(endRect)
-        val scaledSnippetRect = Rectangle(
-          left = (snippetRect.left * horizontalScale).toInt,
-          top = (snippetRect.top * verticalScale).toInt,
-          width = (snippetRect.width * horizontalScale).toInt,
-          height = (snippetRect.height * verticalScale).toInt
-        )
+        val initialSnippetRect = startRect.union(endRect)
+        val snippetRect = Rectangle(
+          left = (initialSnippetRect.left * horizontalScale).toInt - 5,
+          top = (initialSnippetRect.top * verticalScale).toInt - 5,
+          width = (initialSnippetRect.width * horizontalScale).toInt + 10,
+          height = (initialSnippetRect.height * verticalScale).toInt + 10
+        ).intersection(Rectangle(0, 0, originalImage.getWidth, originalImage.getHeight)).get
+
         val imageSnippet =
-          new BufferedImage(scaledSnippetRect.width, scaledSnippetRect.height, BufferedImage.TYPE_INT_ARGB)
+          new BufferedImage(snippetRect.width, snippetRect.height, BufferedImage.TYPE_INT_ARGB)
+
         val subImage = originalImage.getSubimage(
-          scaledSnippetRect.left,
-          scaledSnippetRect.top,
-          scaledSnippetRect.width,
-          scaledSnippetRect.height
+          snippetRect.left,
+          snippetRect.top,
+          snippetRect.width,
+          snippetRect.height
         )
         val graphics2D = imageSnippet.createGraphics
         graphics2D.drawImage(subImage, 0, 0, subImage.getWidth, subImage.getHeight, null)
@@ -567,25 +569,32 @@ private[search] case class SearchServiceImpl(
 
         val allWordsToHighlight = highlightWords ++ hyphenatedWords.flatten
 
+        if (log.isDebugEnabled) {
+          log.debug(f"Start row: $startRow")
+          log.debug(f"Start row: $endRow")
+          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
+        }
+
         allWordsToHighlight.foreach { highlightWord =>
           val highlightRect = Rectangle(
             left = (highlightWord.rect.left * horizontalScale).toInt,
             top = (highlightWord.rect.top * verticalScale).toInt,
             width = (highlightWord.rect.width * horizontalScale).toInt,
             height = (highlightWord.rect.height * verticalScale).toInt
-          )
+          ).intersection(Rectangle(0, 0, originalImage.getWidth, originalImage.getHeight)).get
+
           graphics2D.setStroke(new BasicStroke(1))
           graphics2D.setPaint(Color.BLACK)
           graphics2D.drawRect(
-            highlightRect.left - scaledSnippetRect.left - extra,
-            highlightRect.top - scaledSnippetRect.top - extra,
+            highlightRect.left - snippetRect.left - extra,
+            highlightRect.top - snippetRect.top - extra,
             highlightRect.width + (extra * 2),
             highlightRect.height + (extra * 2)
           )
           graphics2D.setColor(new Color(255, 255, 0, 127))
           graphics2D.fillRect(
-            highlightRect.left - scaledSnippetRect.left - extra,
-            highlightRect.top - scaledSnippetRect.top - extra,
+            highlightRect.left - snippetRect.left - extra,
+            highlightRect.top - snippetRect.top - extra,
             highlightRect.width + (extra * 2),
             highlightRect.height + (extra * 2)
           )
