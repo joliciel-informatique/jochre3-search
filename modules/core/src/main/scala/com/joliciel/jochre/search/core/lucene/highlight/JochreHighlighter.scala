@@ -188,7 +188,7 @@ case class JochreHighlighter(query: Query, field: LuceneField) {
               val highlightFragment =
                 HighlightFragment(closedFragment.startOffset, rowStartOffset, page, closedFragment.tokens)
               if (log.isTraceEnabled) {
-                log.trace(f"Created ${highlightFragment}")
+                log.trace(f"Created $highlightFragment")
               }
               fragmentQueue.insertWithOverflow(highlightFragment)
             }
@@ -199,7 +199,7 @@ case class JochreHighlighter(query: Query, field: LuceneField) {
         if (tokenScore > 0.0) {
           val token = Token(termAtt.toString, offsetAtt.startOffset(), offsetAtt.endOffset(), tokenScore)
           if (log.isTraceEnabled) {
-            log.trace(f"Found token ${token}")
+            log.trace(f"Found token $token")
           }
           openFragments.foreach(_.addToken(token))
         }
@@ -210,7 +210,7 @@ case class JochreHighlighter(query: Query, field: LuceneField) {
         val highlightFragment =
           HighlightFragment(stillOpen.startOffset, offsetAtt.endOffset(), page, stillOpen.tokens)
         if (log.isTraceEnabled) {
-          log.trace(f"Created ${highlightFragment}")
+          log.trace(f"Created $highlightFragment")
         }
         fragmentQueue.insertWithOverflow(highlightFragment)
       }

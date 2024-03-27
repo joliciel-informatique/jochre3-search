@@ -25,8 +25,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   val alto1 = textToAlto(
     "doc1",
     "Hello world!\n" +
+      "Hello you.\n" +
       "Nice day to-\n" +
-      "day",
+      "day.\n" +
+      "Isn't it?\n" +
+      "Oh yes, it is.",
     alternativeMap
   )
 
@@ -41,12 +44,12 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       "With pleasure.\n" +
       "\n" +
       "Think it will rain\n" +
-      "today? Oh no, I\n" +
+      "tomorrow? Oh no, I\n" +
       "don't think so.\n" +
       "\n" +
       "I think it will be\n" +
-      "sunny today, and even\n" +
-      "tomorrow",
+      "sunny tomorrow, and even\n" +
+      "the day after",
     alternativeMap
   )
 
@@ -108,6 +111,19 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
+    test("search single occurrence with hyphen") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        resultAre <- searchService.search("today", 0, 100, Some(1), Some(1), "test")
+      } yield {
+        assertTrue(
+          resultAre.results.head.snippets.head.text == "Hello you.\nNice day <b>to-</b>\n<b>day</b>.\nIsn't it?"
+        )
+      }
+    },
     test("search multiple occurrence without padding") {
       for {
         _ <- getSearchRepo()
@@ -135,8 +151,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
-            "<b>Think</b> it will rain\ntoday? Oh no, I\ndon't <b>think</b> so.",
-            "I <b>think</b> it will be\nsunny today, and even"
+            "<b>Think</b> it will rain\ntomorrow? Oh no, I\ndon't <b>think</b> so.",
+            "I <b>think</b> it will be\nsunny tomorrow, and even"
           )
         )
       }
