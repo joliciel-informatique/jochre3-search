@@ -16,7 +16,9 @@ package object lucene {
   private[lucene] object LuceneField extends Enum[LuceneField] {
     val values: IndexedSeq[LuceneField] = findValues
 
-    case object Id extends LuceneField
+    case object Reference extends LuceneField
+
+    case object Revision extends LuceneField
 
     case object Author extends LuceneField
 

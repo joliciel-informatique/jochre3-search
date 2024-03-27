@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.HttpError.BadRequest
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
@@ -73,10 +73,18 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           )
         )
       )
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Requested document reference not found in index."
+          )
+        )
+      )
       .get
       .in("image-snippet")
       .in(
-        query[DocReference]("doc-id")
+        query[DocReference]("doc-ref")
           .description("The document containing the image")
           .example(DocReference("nybc200089"))
       )

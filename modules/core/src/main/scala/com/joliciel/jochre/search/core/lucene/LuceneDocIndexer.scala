@@ -25,7 +25,7 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
   }
 
   def indexDocument(doc: AltoDocument): Unit = {
-    val docTerm = new Term(LuceneField.Id.entryName, doc.ref.ref)
+    val docTerm = new Term(LuceneField.Reference.entryName, doc.ref.ref)
     val fields = toLuceneDoc(doc)
     indexWriter.updateDocument(docTerm, fields)
     commit()
@@ -45,7 +45,7 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
       doc: AltoDocument
   ): IndexDocument = fieldsToLuceneDoc(
     Seq(
-      getIdField(doc),
+      getIdFields(doc),
       getFieldsForStringMeta(LuceneField.Title, doc.metadata.title, withFacet = false),
       doc.metadata.author.map(getFieldsForStringMeta(LuceneField.Author, _)).getOrElse(Seq.empty),
       getTextField(doc),
@@ -56,9 +56,10 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
   private def getTextField(doc: AltoDocument): Seq[IndexableField] = Seq(
     new StoredTextField(LuceneField.Text.entryName, doc.text)
   )
-  private def getIdField(doc: AltoDocument): Seq[IndexableField] = Seq(
-    new StringField(LuceneField.Id.entryName, doc.ref.ref, Store.YES),
-    new SortedDocValuesField(LuceneField.Id.entryName, new BytesRef(doc.ref.ref))
+  private def getIdFields(doc: AltoDocument): Seq[IndexableField] = Seq(
+    new StringField(LuceneField.Reference.entryName, doc.ref.ref, Store.YES),
+    new SortedDocValuesField(LuceneField.Reference.entryName, new BytesRef(doc.ref.ref)),
+    new StringField(LuceneField.Revision.entryName, doc.rev.rev.toString, Store.YES)
   )
 
   private def getFieldsForStringMeta(

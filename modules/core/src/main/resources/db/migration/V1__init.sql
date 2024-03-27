@@ -1,18 +1,17 @@
 CREATE TABLE document(
-  id BIGSERIAL PRIMARY KEY,
-  ref TEXT NOT NULL,
-  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
-  CONSTRAINT uk_document UNIQUE (ref)
+  rev BIGSERIAL PRIMARY KEY,
+  reference TEXT NOT NULL,
+  created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE page(
   id BIGSERIAL PRIMARY KEY,
-  doc_id BIGINT NOT NULL,
+  doc_rev BIGINT NOT NULL,
   index SMALLINT NOT NULL,
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
-  FOREIGN KEY(doc_id) REFERENCES document(id),
-  CONSTRAINT uk_page UNIQUE (doc_id, index)
+  FOREIGN KEY(doc_rev) REFERENCES document(rev),
+  CONSTRAINT uk_page UNIQUE (doc_rev, index)
 );
 
 CREATE TABLE row(
@@ -29,7 +28,7 @@ CREATE TABLE row(
 
 CREATE TABLE word(
   id BIGSERIAL PRIMARY KEY,
-  doc_id BIGINT NOT NULL,
+  doc_rev BIGINT NOT NULL,
   row_id BIGINT NOT NULL,
   start_offset INT NOT NULL,
   lft SMALLINT NOT NULL,
@@ -37,7 +36,7 @@ CREATE TABLE word(
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
   hyphenated_offset INT NULL,
-  FOREIGN KEY(doc_id) REFERENCES document(id),
+  FOREIGN KEY(doc_rev) REFERENCES document(rev),
   FOREIGN KEY(row_id) REFERENCES row(id),
-  CONSTRAINT uk_word UNIQUE (doc_id, start_offset)
+  CONSTRAINT uk_word UNIQUE (doc_rev, start_offset)
 );

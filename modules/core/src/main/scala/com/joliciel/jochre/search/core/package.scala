@@ -1,8 +1,21 @@
 package com.joliciel.jochre.search
 
-package object core {
+import com.typesafe.config.ConfigFactory
 
-  case class DocReference(ref: String)
+import java.nio.file.Path
+
+package object core {
+  private val config = ConfigFactory.load().getConfig("jochre.search.index")
+  private val contentDir = Path.of(config.getString("content-directory"))
+
+  case class DocReference(ref: String) {
+    def getPageImagePath(pageNumber: Int): Path = {
+      val bookDir = contentDir.resolve(ref)
+      bookDir.toFile.mkdirs()
+      val imageFileName = f"${ref}_$pageNumber%04d.png"
+      bookDir.resolve(imageFileName)
+    }
+  }
 
   case class DocMetadata(
       title: String,

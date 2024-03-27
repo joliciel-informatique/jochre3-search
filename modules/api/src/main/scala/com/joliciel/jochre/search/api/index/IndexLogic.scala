@@ -6,6 +6,8 @@ import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.core.search.SearchService
 import zio.ZIO
 
+import java.io.FileInputStream
+
 trait IndexLogic extends HttpErrorMapper {
   def postIndexPdfLogic(
       token: ValidToken,
@@ -15,9 +17,9 @@ trait IndexLogic extends HttpErrorMapper {
       searchService <- ZIO.service[SearchService]
       pageCount <- searchService.indexPdf(
         pdfFileForm.docReference,
-        pdfFileForm.pdfFile.body,
-        pdfFileForm.altoFile.body,
-        pdfFileForm.metadataFile.map(_.body)
+        new FileInputStream(pdfFileForm.pdfFile.body),
+        new FileInputStream(pdfFileForm.altoFile.body),
+        pdfFileForm.metadataFile.map(m => new FileInputStream(m.body))
       )
     } yield IndexResponse(pageCount))
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to index pdf file", error))

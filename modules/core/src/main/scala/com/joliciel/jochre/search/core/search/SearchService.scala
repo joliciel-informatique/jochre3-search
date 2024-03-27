@@ -5,7 +5,6 @@ import com.joliciel.jochre.ocr.core.model.{Alto, Page, SpellingAlternative, Subs
 import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
-import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -14,9 +13,9 @@ import org.slf4j.LoggerFactory
 import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
-import java.io.{File, FileInputStream}
+import java.awt.{BasicStroke, Color, Rectangle => JavaRectangle}
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
-import java.nio.file.Path
 import java.util.zip.ZipInputStream
 import javax.imageio.ImageIO
 import scala.io.Source
@@ -24,7 +23,12 @@ import scala.util.Using
 import scala.xml.XML
 
 trait SearchService {
-  def indexPdf(id: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[Int]
+  def indexPdf(
+      ref: DocReference,
+      pdfFile: InputStream,
+      altoFile: InputStream,
+      metadataFile: Option[InputStream]
+  ): Task[Int]
 
   def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int]
 
@@ -36,6 +40,13 @@ trait SearchService {
       rowPadding: Option[Int],
       username: String
   ): Task[SearchResponse]
+
+  def getImageSnippet(
+      docId: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[BufferedImage]
 }
 
 private[search] case class SearchServiceImpl(
@@ -45,18 +56,21 @@ private[search] case class SearchServiceImpl(
 ) extends SearchService
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
-  private val config = ConfigFactory.load().getConfig("jochre.search.index")
-  private val contentDir = Path.of(config.getString("content-directory"))
 
-  override def indexPdf(ref: DocReference, pdfFile: File, altoFile: File, metadataFile: Option[File]): Task[Int] = {
+  override def indexPdf(
+      ref: DocReference,
+      pdfStream: InputStream,
+      altoStream: InputStream,
+      metadataStream: Option[InputStream]
+  ): Task[Int] = {
     for {
-      alto <- getAlto(altoFile)
-      pdfInfo <- getPdfInfo(ref, pdfFile)
+      alto <- getAlto(altoStream)
+      pdfInfo <- getPdfInfo(ref, pdfStream)
       pdfMetadata = getMetadata(ref, pdfInfo)
       metadata <- ZIO.attempt {
-        val providedMetadata = metadataFile.map { metadataFile =>
+        val providedMetadata = metadataStream.map { metadataFile =>
           try {
-            val contents = Source.fromFile(metadataFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
+            val contents = Source.fromInputStream(metadataFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
             metadataReader.read(contents)
           } catch {
             case t: Throwable =>
@@ -74,17 +88,21 @@ private[search] case class SearchServiceImpl(
     for {
       documentData <- persistDocument(ref, alto)
       pageCount <- ZIO.attempt {
-        val document = AltoDocument(ref, documentData.text, metadata)
+        val document = AltoDocument(ref, documentData.docRev, documentData.text, metadata)
         val docInfo =
           DocumentIndexInfo(documentData.pageOffsets, documentData.newlineOffsets, documentData.alternativesAtOffset)
         jochreIndex.addDocumentInfo(ref, docInfo)
         jochreIndex.indexer.indexDocument(document)
-        jochreIndex.refresh
+        val refreshed = jochreIndex.refresh
+        if (log.isDebugEnabled) {
+          log.debug(f"Index refreshed? $refreshed")
+        }
         documentData.pageCount
       }
     } yield pageCount
   }
   private case class DocumentData(
+      docRev: DocRev,
       pageCount: Int,
       text: String,
       pageOffsets: Set[Int],
@@ -102,7 +120,7 @@ private[search] case class SearchServiceImpl(
     // The tokenizer knows which synonyms to add via the document reference.
     val initialOffset = ref.ref.length + 1 // 1 for the newline
     for {
-      docId <- searchRepo.insertDocument(ref)
+      docRev <- searchRepo.insertDocument(ref)
       documentData <- ZIO
         .iterate(alto.pages -> Seq.empty[PageData])(
           cont = { case (p, _) => p.nonEmpty }
@@ -111,7 +129,7 @@ private[search] case class SearchServiceImpl(
             case page +: tail =>
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
               for {
-                pageData <- persistPage(docId, page, startOffset)
+                pageData <- persistPage(docRev, page, startOffset)
               } yield (tail, pageDataSeq :+ pageData)
           }
         }
@@ -127,7 +145,7 @@ private[search] case class SearchServiceImpl(
           }
           // As explained above, we add the document reference at the start of the text.
           val text = f"${ref.ref}\n${pageDataSeq.map(_.text).mkString}"
-          DocumentData(pageDataSeq.size, text, pageOffsets, newlineOffsets, alternativesAtOffset)
+          DocumentData(docRev, pageDataSeq.size, text, pageOffsets, newlineOffsets, alternativesAtOffset)
         }
     } yield documentData
   }
@@ -139,7 +157,7 @@ private[search] case class SearchServiceImpl(
       alternativesAtOffset: Map[Int, Seq[SpellingAlternative]]
   )
 
-  private def persistPage(docId: DocId, page: Page, startOffset: Int): Task[PageData] = {
+  private def persistPage(docId: DocRev, page: Page, startOffset: Int): Task[PageData] = {
     for {
       pageId <- searchRepo.insertPage(docId, page)
       pageData <- ZIO
@@ -171,7 +189,7 @@ private[search] case class SearchServiceImpl(
   private case class RowData(text: String, endOffset: Int, alternativesAtOffset: Map[Int, Seq[SpellingAlternative]])
 
   private def persistRow(
-      docId: DocId,
+      docId: DocRev,
       pageId: PageId,
       textLine: TextLine,
       rowIndex: Int,
@@ -179,7 +197,15 @@ private[search] case class SearchServiceImpl(
       startOffset: Int
   ): Task[RowData] = {
     for {
-      rowId <- searchRepo.insertRow(pageId, rowIndex, rectangle)
+      rowRectangle <- ZIO.attempt {
+        // We take the union of all words and spaces if there are any
+        if (textLine.wordsAndSpaces.isEmpty) {
+          rectangle
+        } else {
+          textLine.wordsAndSpaces.map(_.rectangle).reduceLeft(_.union(_))
+        }
+      }
+      rowId <- searchRepo.insertRow(pageId, rowIndex, rowRectangle)
       wordsAndSpaces <- ZIO.attempt {
         textLine.hyphen match {
           case Some(hyphen) =>
@@ -233,13 +259,13 @@ private[search] case class SearchServiceImpl(
     } yield rowData
   }
 
-  private def persistWord(docId: DocId, rowId: RowId, word: Word, offset: Int, hyphenatedOffset: Option[Int]) = {
+  private def persistWord(docId: DocRev, rowId: RowId, word: Word, offset: Int, hyphenatedOffset: Option[Int]) = {
     searchRepo.insertWord(docId, rowId, offset, hyphenatedOffset, word)
   }
 
-  private def getAlto(altoZipFile: File): Task[Alto] = {
+  private def getAlto(altoStream: InputStream): Task[Alto] = {
     def acquire: Task[ZipInputStream] = ZIO
-      .attempt { new ZipInputStream(new FileInputStream(altoZipFile)) }
+      .attempt { new ZipInputStream(altoStream) }
       .foldZIO(
         error => {
           log.error("Unable to open alto zip file", error)
@@ -288,13 +314,12 @@ private[search] case class SearchServiceImpl(
       author = pdfInfo.author
     )
   }
-  private def getPdfInfo(docReference: DocReference, pdfFile: File): Task[PdfInfo] = {
-    def acquire: Task[(FileInputStream, PDDocument)] = ZIO
+  private def getPdfInfo(docRef: DocReference, pdfStream: InputStream): Task[PdfInfo] = {
+    def acquire: Task[(InputStream, PDDocument)] = ZIO
       .attempt {
-        val inputStream = new FileInputStream(pdfFile)
-        val pdfStream = new RandomAccessReadBuffer(inputStream)
-        val pdf = Loader.loadPDF(pdfStream)
-        (inputStream, pdf)
+        val pdfBuffer = new RandomAccessReadBuffer(pdfStream)
+        val pdf = Loader.loadPDF(pdfBuffer)
+        (pdfStream, pdf)
       }
       .foldZIO(
         error => {
@@ -304,7 +329,7 @@ private[search] case class SearchServiceImpl(
         success => ZIO.succeed(success)
       )
 
-    val release: ((FileInputStream, PDDocument)) => URIO[Any, Unit] = { case (inputStream, pdf) =>
+    val release: ((InputStream, PDDocument)) => URIO[Any, Unit] = { case (inputStream, pdf) =>
       ZIO
         .attempt {
           pdf.close()
@@ -316,15 +341,12 @@ private[search] case class SearchServiceImpl(
         }
     }
 
-    val readPdf: ((FileInputStream, PDDocument)) => Task[PdfInfo] = { case (_, pdf) =>
+    val readPdf: ((InputStream, PDDocument)) => Task[PdfInfo] = { case (_, pdf) =>
       ZIO
         .attempt {
           val pdfRenderer = new PDFRenderer(pdf)
           val docInfo = pdf.getDocumentInformation
           val pageCount = pdf.getNumberOfPages
-
-          val bookDir = contentDir.resolve(docReference.ref)
-          bookDir.toFile.mkdirs()
 
           (1 to pageCount).foreach { i =>
             log.info(f"Extracting PDF page $i")
@@ -333,8 +355,7 @@ private[search] case class SearchServiceImpl(
               300.toFloat,
               ImageType.RGB
             )
-            val imageFileName = f"${docReference.ref}_$i%04d.png"
-            val imageFile = bookDir.resolve(imageFileName)
+            val imageFile = docRef.getPageImagePath(i)
             ImageIO.write(image, "png", imageFile.toFile)
           }
           PdfInfo(
@@ -370,6 +391,105 @@ private[search] case class SearchServiceImpl(
       val searchQuery = SearchQuery(Contains(query))
       searcher.search(searchQuery, first, max, maxSnippets, rowPadding)
     }
+  }
+
+  override def getImageSnippet(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[BufferedImage] = {
+    for {
+      luceneDoc <- ZIO.attempt {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(f"Document ${docRef.ref} not found in index"))
+        }.get
+      }
+      startRowOpt <- searchRepo.getRowByStartOffset(luceneDoc.rev, startOffset)
+      endRowOpt <- searchRepo.getRowByEndOffset(luceneDoc.rev, endOffset)
+      _ <- ZIO.attempt {
+        (startRowOpt, endRowOpt) match {
+          case (None, _) =>
+            throw new BadOffsetForImageSnippet(f"For document ${docRef.ref}, no start row at offset $startOffset")
+          case (_, None) =>
+            throw new BadOffsetForImageSnippet(f"For document ${docRef.ref}, no end row at offset $endOffset")
+          case (Some(startRow), Some(endRow)) if startRow.pageId != endRow.pageId =>
+            throw new BadOffsetForImageSnippet(
+              f"In document ${docRef.ref}, start offset $startOffset is on different page to end offset $endOffset"
+            )
+          case _ => // everything's fine
+        }
+      }
+      highlightWords <- ZIO.foreach(highlights) { highlight =>
+        searchRepo
+          .getWord(luceneDoc.rev, highlight.start)
+          .mapAttempt(
+            _.getOrElse(
+              throw new BadOffsetForImageSnippet(
+                f"For document ${docRef.ref}, no word to highlight at offset $startOffset"
+              )
+            )
+          )
+      }
+      startRow = startRowOpt.get
+      endRow = endRowOpt.get
+      page <- searchRepo.getPage(startRow.pageId)
+      image <- ZIO.attempt {
+        val pageImagePath = docRef.getPageImagePath(page.index)
+        val originalImage = ImageIO.read(pageImagePath.toFile)
+        val startRect = startRow.rect
+        val endRect = endRow.rect
+
+        val horizontalScale = originalImage.getWidth.toDouble / page.width.toDouble
+        val verticalScale = originalImage.getHeight.toDouble / page.height.toDouble
+
+        val snippetRect = startRect.union(endRect)
+        val scaledSnippetRect = Rectangle(
+          left = (snippetRect.left * horizontalScale).toInt,
+          top = (snippetRect.top * verticalScale).toInt,
+          width = (snippetRect.width * horizontalScale).toInt,
+          height = (snippetRect.height * verticalScale).toInt
+        )
+        val imageSnippet =
+          new BufferedImage(scaledSnippetRect.width, scaledSnippetRect.height, BufferedImage.TYPE_INT_ARGB)
+        val subImage = originalImage.getSubimage(
+          scaledSnippetRect.left,
+          scaledSnippetRect.top,
+          scaledSnippetRect.width,
+          scaledSnippetRect.height
+        )
+        val graphics2D = imageSnippet.createGraphics
+        graphics2D.drawImage(subImage, 0, 0, subImage.getWidth, subImage.getHeight, null)
+        val extra = 2
+
+        highlightWords.foreach { highlightWord =>
+          val highlightRect = Rectangle(
+            left = (highlightWord.rect.left * horizontalScale).toInt,
+            top = (highlightWord.rect.top * verticalScale).toInt,
+            width = (highlightWord.rect.width * horizontalScale).toInt,
+            height = (highlightWord.rect.height * verticalScale).toInt
+          )
+          graphics2D.setStroke(new BasicStroke(1))
+          graphics2D.setPaint(Color.BLACK)
+          graphics2D.drawRect(
+            highlightRect.left - scaledSnippetRect.left - extra,
+            highlightRect.top - scaledSnippetRect.top - extra,
+            highlightRect.width + (extra * 2),
+            highlightRect.height + (extra * 2)
+          )
+          graphics2D.setColor(new Color(255, 255, 0, 127))
+          graphics2D.fillRect(
+            highlightRect.left - scaledSnippetRect.left - extra,
+            highlightRect.top - scaledSnippetRect.top - extra,
+            highlightRect.width + (extra * 2),
+            highlightRect.height + (extra * 2)
+          )
+        }
+        imageSnippet
+      }
+    } yield { image }
   }
 }
 
