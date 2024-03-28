@@ -11,6 +11,7 @@ class JochreAnalyzerForSearch(locale: Locale) extends JochreAnalyzerBase(locale)
 
   override def finalFilter(tokens: TokenStream): TokenStream = (regexTokenizerFilter(_))
     .andThen(lowercaseFilter)
+    .andThen(skipPunctuationFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 }

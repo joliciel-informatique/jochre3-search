@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.lucene.tokenizer.{RegexTokenizerFilter, TapFilter}
+import com.joliciel.jochre.search.core.lucene.tokenizer.{RegexTokenizerFilter, SkipPunctuationFilter, TapFilter}
 import org.apache.lucene.analysis.{Analyzer, LowerCaseFilter, TokenStream}
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
 import org.apache.lucene.analysis.core.WhitespaceTokenizer
@@ -8,7 +8,7 @@ import org.slf4j.Logger
 
 import java.util.Locale
 
-private[lucene] abstract case class JochreAnalyzerBase (locale: Locale) extends Analyzer {
+private[lucene] abstract case class JochreAnalyzerBase(locale: Locale) extends Analyzer {
   override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
     val source = new WhitespaceTokenizer();
 
@@ -22,4 +22,5 @@ private[lucene] abstract case class JochreAnalyzerBase (locale: Locale) extends 
     new TapFilter(tokens, log, logName)
 
   protected def lowercaseFilter(tokens: TokenStream): TokenStream = new LowerCaseFilter(tokens)
+  protected def skipPunctuationFilter(tokens: TokenStream): TokenStream = new SkipPunctuationFilter(tokens)
 }

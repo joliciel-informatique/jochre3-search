@@ -27,7 +27,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     "Hello world!\n" +
       "Hello you.\n" +
       "Nice day to-\n" +
-      "day.\n" +
+      "day, Madam.\n" +
       "Isn't it?\n" +
       "Oh yes, it is.",
     alternativeMap
@@ -107,7 +107,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         resultArePadding <- searchService.search("are", 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
-          resultArePadding.results.head.snippets.head.text == "Hello people.\nHow <b>are</b> you?\nFine, thank you."
+          resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
+            "How <b>are</b> you?<br>" +
+            "Fine, thank you."
         )
       }
     },
@@ -120,7 +122,32 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         resultAre <- searchService.search("today", 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
-          resultAre.results.head.snippets.head.text == "Hello you.\nNice day <b>to-</b>\n<b>day</b>.\nIsn't it?"
+          resultAre.results.head.snippets.head.text == "Hello you.<br>" +
+            "Nice day <b>to-</b><br>" +
+            "<b>day</b>, Madam.<br>" +
+            "Isn't it?"
+        )
+      }
+    },
+    test("search phrase containing word with or without hyphen") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        phraseResult <- searchService.search("\"will rain tomorrow\"", 0, 100, Some(1), Some(1), "test")
+        phraseWithHyphenResult <- searchService.search("\"day today Madam\"", 0, 100, Some(1), Some(1), "test")
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "Think it <b>will</b> <b>rain</b><br>" +
+            "<b>tomorrow</b>? Oh no, I<br>" +
+            "don't think so."
+        ) &&
+        assertTrue(
+          phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br>" +
+            "Nice <b>day</b> <b>to-</b><br>" +
+            "<b>day</b>, <b>Madam</b>.<br>" +
+            "Isn't it?"
         )
       }
     },
@@ -151,8 +178,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
-            "<b>Think</b> it will rain\ntomorrow? Oh no, I\ndon't <b>think</b> so.",
-            "I <b>think</b> it will be\nsunny tomorrow, and even"
+            "<b>Think</b> it will rain<br>" +
+              "tomorrow? Oh no, I<br>" +
+              "don't <b>think</b> so.",
+            "I <b>think</b> it will be<br>" +
+              "sunny tomorrow, and even"
           )
         )
       }
@@ -178,12 +208,17 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           topResult.snippets.head.highlights
         )
       } yield {
-        log.info(f"$topResult")
         val tempFile = File.createTempFile("jochre-snippet", ".png")
         ImageIO.write(imageSnippet, "png", tempFile)
         log.info(f"Wrote snippet to ${tempFile.getPath}")
         assertTrue(searchResults.totalCount == 1) &&
-        assertTrue(pageCount == 2)
+        assertTrue(pageCount == 2) &&
+        assertTrue(
+          topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+            "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
+            "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
+        )
       }
     }
   ).provideLayer(
