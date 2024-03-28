@@ -14,13 +14,13 @@ import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
-import java.io.InputStream
+import java.io.{FileOutputStream, InputStream}
 import java.nio.charset.StandardCharsets
-import java.util.zip.ZipInputStream
+import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 import javax.imageio.ImageIO
 import scala.io.Source
 import scala.util.Using
-import scala.xml.XML
+import scala.xml.{PrettyPrinter, XML}
 
 trait SearchService {
   def indexPdf(
@@ -64,7 +64,12 @@ private[search] case class SearchServiceImpl(
       metadataStream: Option[InputStream]
   ): Task[Int] = {
     for {
-      alto <- getAlto(altoStream)
+      _ <- ZIO.attempt {
+        // Create the directory to store the images and Alto
+        val bookDir = ref.getBookDir()
+        bookDir.toFile.mkdirs()
+      }
+      alto <- getAlto(ref, altoStream)
       pdfInfo <- getPdfInfo(ref, pdfStream)
       pdfMetadata = getMetadata(ref, pdfInfo)
       metadata <- ZIO.attempt {
@@ -356,7 +361,7 @@ private[search] case class SearchServiceImpl(
     searchRepo.insertWord(docId, rowId, offset, hyphenatedOffset, word)
   }
 
-  private def getAlto(altoStream: InputStream): Task[Alto] = {
+  private def getAlto(docRef: DocReference, altoStream: InputStream): Task[Alto] = {
     def acquire: Task[ZipInputStream] = ZIO
       .attempt { new ZipInputStream(altoStream) }
       .foldZIO(
@@ -378,6 +383,17 @@ private[search] case class SearchServiceImpl(
       .attempt {
         zipInputStream.getNextEntry
         val altoXml = XML.load(zipInputStream)
+
+        // Store alto in content dir for future access
+        val prettyPrinter = new PrettyPrinter(120, 2)
+        val altoString = prettyPrinter.format(altoXml)
+        val altoFile = docRef.getAltoPath()
+        Using(new ZipOutputStream(new FileOutputStream(altoFile.toFile))) { zos =>
+          zos.putNextEntry(new ZipEntry(f"${docRef.ref}_alto4.xml"))
+          zos.write(altoString.getBytes(StandardCharsets.UTF_8))
+          zos.flush()
+        }
+
         val alto = Alto.fromXML(altoXml)
         alto
       }
