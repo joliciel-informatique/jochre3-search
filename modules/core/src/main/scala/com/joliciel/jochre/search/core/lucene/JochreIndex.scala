@@ -1,16 +1,22 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.db.PostgresDatabase.getClass
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.store.{Directory, FSDirectory, SingleInstanceLockFactory}
+import org.slf4j.LoggerFactory
 import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
 
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
   private val config = new IndexWriterConfig(analyzerGroup.forIndexing)
+  private val log = LoggerFactory.getLogger(getClass)
+
+  log.info(f"Opening index at $indexDirectory")
+
   config.setOpenMode(OpenMode.CREATE_OR_APPEND)
   private val indexWriter = new IndexWriter(indexDirectory, config)
 

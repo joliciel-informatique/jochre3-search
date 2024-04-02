@@ -16,8 +16,8 @@ private[search] object AnalyzerGroup {
   private val locale: Locale = Locale.forLanguageTag(config.getString("locale"))
   val generic: AnalyzerGroup =
     AnalyzerGroup(
-      new JochreAnalyzerForIndex(locale),
-      new JochreAnalyzerForSearch(locale),
-      new JochreAnalyzerForSearch(locale)
+      forIndexing = new JochreAnalyzerForIndex(locale),
+      forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false),
+      forSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true)
     )
 }
