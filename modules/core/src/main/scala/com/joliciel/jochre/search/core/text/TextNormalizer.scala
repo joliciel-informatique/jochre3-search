@@ -1,10 +1,10 @@
-package com.joliciel.jochre.search.core
+package com.joliciel.jochre.search.core.text
 
 import com.typesafe.config.ConfigFactory
 
 import java.util.Locale
-import scala.util.matching.Regex
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
 case class TextNormalizer(locale: Locale) {
   private val config = ConfigFactory.load().getConfig(f"jochre.search.normalizer")

@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core.lucene.tokenizer
 
-import com.joliciel.jochre.search.core.TextNormalizer
+import com.joliciel.jochre.search.core.text.TextNormalizer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.analysis.{TokenFilter, TokenStream}
 

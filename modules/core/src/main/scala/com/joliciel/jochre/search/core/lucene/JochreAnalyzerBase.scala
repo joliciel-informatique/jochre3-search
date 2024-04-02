@@ -1,15 +1,15 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.TextNormalizer
 import com.joliciel.jochre.search.core.lucene.tokenizer.{
   RegexTokenizerFilter,
   SkipPunctuationFilter,
   TapFilter,
   TextNormalizingFilter
 }
-import org.apache.lucene.analysis.{Analyzer, LowerCaseFilter, TokenStream}
+import com.joliciel.jochre.search.core.text.TextNormalizer
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
 import org.apache.lucene.analysis.core.WhitespaceTokenizer
+import org.apache.lucene.analysis.{Analyzer, LowerCaseFilter, TokenStream}
 import org.slf4j.Logger
 
 import java.util.Locale
