@@ -19,6 +19,7 @@ class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) 
   val indexingHelper = IndexingHelper()
 
   override def finalFilter(tokens: TokenStream): TokenStream = (addDocumentReferenceFilter(_))
+    .andThen(textNormalizingFilter)
     .andThen(regexTokenizerFilter)
     .andThen(lowercaseFilter)
     .andThen(addPageMarkerFilter)

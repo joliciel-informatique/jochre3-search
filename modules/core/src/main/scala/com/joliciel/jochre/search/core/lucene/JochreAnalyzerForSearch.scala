@@ -10,7 +10,8 @@ import java.util.Locale
 class JochreAnalyzerForSearch(locale: Locale, forPhrases: Boolean) extends JochreAnalyzerBase(locale) {
   private val log = LoggerFactory.getLogger(getClass)
 
-  override def finalFilter(tokens: TokenStream): TokenStream = (regexTokenizerFilter(_))
+  override def finalFilter(tokens: TokenStream): TokenStream = (textNormalizingFilter(_))
+    .andThen(regexTokenizerFilter)
     .andThenIf(forPhrases)(skipWildcardFilter _)
     .andThen(lowercaseFilter)
     .andThen(skipPunctuationFilter)
