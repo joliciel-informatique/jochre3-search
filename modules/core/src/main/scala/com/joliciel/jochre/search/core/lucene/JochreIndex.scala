@@ -2,6 +2,7 @@ package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.DocReference
 import com.joliciel.jochre.search.core.db.PostgresDatabase.getClass
+import com.joliciel.jochre.search.core.text.SynonymMapReader
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}

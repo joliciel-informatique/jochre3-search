@@ -14,6 +14,7 @@ private[search] case class AnalyzerGroup(
 private[search] object AnalyzerGroup {
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val locale: Locale = Locale.forLanguageTag(config.getString("locale"))
+
   val generic: AnalyzerGroup =
     AnalyzerGroup(
       forIndexing = new JochreAnalyzerForIndex(locale),
