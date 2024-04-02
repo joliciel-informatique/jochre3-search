@@ -7,19 +7,21 @@ import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 case class TextNormalizer(locale: Locale) {
-  private val config = ConfigFactory.load().getConfig(f"jochre.search.normalizer")
-  private val configList = config.getConfigList(locale.getLanguage)
+  private val config = ConfigFactory.load().getConfig(f"jochre.search")
+  private val configKey = f"${locale.getLanguage}.normalizer"
 
-  case class RegexAndReplacement(regex: Regex, replacement: String)
+  private case class RegexAndReplacement(regex: Regex, replacement: String)
 
-  private val regexList = configList.asScala.map{ config =>
-    val regex = config.getString("find").r
-    val replacement = config.getString("replace")
-    RegexAndReplacement(regex, replacement)
-  }
+  private val regexList = Option
+    .when(config.hasPath(configKey))(config.getConfigList(configKey).asScala.map { config =>
+      val regex = config.getString("find").r
+      val replacement = config.getString("replace")
+      RegexAndReplacement(regex, replacement)
+    })
+    .getOrElse(Seq.empty)
 
   def normalize(string: String): String = {
-    regexList.foldLeft(string){ case (string, RegexAndReplacement(regex, replacement)) =>
+    regexList.foldLeft(string) { case (string, RegexAndReplacement(regex, replacement)) =>
       regex.replaceAllIn(string, replacement)
     }
   }
