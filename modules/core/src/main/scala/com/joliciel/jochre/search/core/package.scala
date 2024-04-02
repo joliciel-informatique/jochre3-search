@@ -9,11 +9,20 @@ package object core {
   private val contentDir = Path.of(config.getString("content-directory"))
 
   case class DocReference(ref: String) {
+    def getBookDir(): Path = {
+      contentDir.resolve(ref)
+    }
+
     def getPageImagePath(pageNumber: Int): Path = {
-      val bookDir = contentDir.resolve(ref)
-      bookDir.toFile.mkdirs()
+      val bookDir = this.getBookDir()
       val imageFileName = f"${ref}_$pageNumber%04d.png"
       bookDir.resolve(imageFileName)
+    }
+
+    def getAltoPath(): Path = {
+      val bookDir = this.getBookDir()
+      val altoFileName = f"${ref}_alto4.zip"
+      bookDir.resolve(altoFileName)
     }
   }
 

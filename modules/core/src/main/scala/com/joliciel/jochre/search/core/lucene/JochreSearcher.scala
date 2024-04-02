@@ -109,9 +109,9 @@ private[lucene] class JochreSearcher(
     query.criterion match {
       case Contains(queryString) =>
         val parser = new JochreMultiFieldQueryParser(
-          Seq(LuceneField.Text),
-          analyzerGroup.forSearch,
-          analyzerGroup.forSearchPhrases
+          fields = Seq(LuceneField.Text),
+          termAnalyzer = analyzerGroup.forSearch,
+          phraseAnalyzer = analyzerGroup.forSearchPhrases
         )
         parser.parse(queryString)
     }

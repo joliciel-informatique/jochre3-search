@@ -2,7 +2,12 @@ package com.joliciel.jochre.search.core.lucene.tokenizer
 
 import com.joliciel.jochre.search.core.DocReference
 import com.joliciel.jochre.search.core.lucene.IndexingHelper
-import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute, TypeAttribute}
+import org.apache.lucene.analysis.tokenattributes.{
+  CharTermAttribute,
+  OffsetAttribute,
+  PositionIncrementAttribute,
+  TypeAttribute
+}
 import org.apache.lucene.analysis.{TokenFilter, TokenStream}
 import org.apache.lucene.util.AttributeSource
 import org.slf4j.LoggerFactory
@@ -11,6 +16,7 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
   private val log = LoggerFactory.getLogger(getClass)
 
   private val termAttr = addAttribute(classOf[CharTermAttribute])
+  private val posIncAttr = addAttribute(classOf[PositionIncrementAttribute])
   private val offsetAttr = addAttribute(classOf[OffsetAttribute])
   private val typeAttr = addAttribute(classOf[TypeAttribute])
 
@@ -21,6 +27,9 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
     if (setAside.nonEmpty) {
       clearAttributes()
       restoreState(setAside.head)
+      // Since we're inside a hyphenation, we always set the position increment to 0
+      posIncAttr.setPositionIncrement(0)
+
       setAside = setAside.tail
       true
     } else if (input.incrementToken()) {

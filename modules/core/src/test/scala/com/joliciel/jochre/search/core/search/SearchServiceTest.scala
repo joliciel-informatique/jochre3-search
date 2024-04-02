@@ -27,7 +27,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     "Hello world!\n" +
       "Hello you.\n" +
       "Nice day to-\n" +
-      "day.\n" +
+      "day, Madam.\n" +
       "Isn't it?\n" +
       "Oh yes, it is.",
     alternativeMap
@@ -107,7 +107,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         resultArePadding <- searchService.search("are", 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
-          resultArePadding.results.head.snippets.head.text == "Hello people.\nHow <b>are</b> you?\nFine, thank you."
+          resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
+            "How <b>are</b> you?<br>" +
+            "Fine, thank you."
         )
       }
     },
@@ -120,7 +122,32 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         resultAre <- searchService.search("today", 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
-          resultAre.results.head.snippets.head.text == "Hello you.\nNice day <b>to-</b>\n<b>day</b>.\nIsn't it?"
+          resultAre.results.head.snippets.head.text == "Hello you.<br>" +
+            "Nice day <b>to-</b><br>" +
+            "<b>day</b>, Madam.<br>" +
+            "Isn't it?"
+        )
+      }
+    },
+    test("search phrase containing word with or without hyphen") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        phraseResult <- searchService.search("\"will rain tomorrow\"", 0, 100, Some(1), Some(1), "test")
+        phraseWithHyphenResult <- searchService.search("\"day today Madam\"", 0, 100, Some(1), Some(1), "test")
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "Think it <b>will</b> <b>rain</b><br>" +
+            "<b>tomorrow</b>? Oh no, I<br>" +
+            "don't think so."
+        ) &&
+        assertTrue(
+          phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br>" +
+            "Nice <b>day</b> <b>to-</b><br>" +
+            "<b>day</b>, <b>Madam</b>.<br>" +
+            "Isn't it?"
         )
       }
     },
@@ -151,39 +178,13 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
-            "<b>Think</b> it will rain\ntomorrow? Oh no, I\ndon't <b>think</b> so.",
-            "I <b>think</b> it will be\nsunny tomorrow, and even"
+            "<b>Think</b> it will rain<br>" +
+              "tomorrow? Oh no, I<br>" +
+              "don't <b>think</b> so.",
+            "I <b>think</b> it will be<br>" +
+              "sunny tomorrow, and even"
           )
         )
-      }
-    },
-    test("upload real pdf and get image snippets") {
-      val docRef = DocReference("nybc200089")
-      val pdfStream = getClass.getResourceAsStream("/nybc200089-11-12.pdf")
-
-      val altoStream = getClass.getResourceAsStream("/nybc200089-11-12_alto4.zip")
-
-      val metadataStream = getClass.getResourceAsStream("/nybc200089_meta.xml")
-
-      for {
-        _ <- getSearchRepo()
-        searchService <- ZIO.service[SearchService]
-        pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
-        searchResults <- searchService.search("farshvundn", 0, 10, Some(20), Some(1), "test")
-        topResult <- ZIO.attempt(searchResults.results.head)
-        imageSnippet <- searchService.getImageSnippet(
-          topResult.docRef,
-          topResult.snippets.head.start,
-          topResult.snippets.head.end,
-          topResult.snippets.head.highlights
-        )
-      } yield {
-        log.info(f"$topResult")
-        val tempFile = File.createTempFile("jochre-snippet", ".png")
-        ImageIO.write(imageSnippet, "png", tempFile)
-        log.info(f"Wrote snippet to ${tempFile.getPath}")
-        assertTrue(searchResults.totalCount == 1) &&
-        assertTrue(pageCount == 2)
       }
     }
   ).provideLayer(

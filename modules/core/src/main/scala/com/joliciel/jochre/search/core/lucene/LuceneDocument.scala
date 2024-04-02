@@ -62,7 +62,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
             if (lastOffset < end) {
               sb.append(snippetText.substring(lastOffset - start))
             }
-            val highlightedText = sb.toString().trim
+            val highlightedText = sb.toString().trim.replace("\n", "<br>")
             val highlights = tokens.map(token => Highlight(token.start, token.end))
             Snippet(highlightedText, start, end, highlights)
           }

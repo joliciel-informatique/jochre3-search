@@ -21,9 +21,8 @@ import org.slf4j.LoggerFactory
 import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 import zio._
-import zio.interop.catz._
 import zio.config.typesafe.TypesafeConfigProvider
-import zio.stream.ZSink
+import zio.interop.catz._
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._

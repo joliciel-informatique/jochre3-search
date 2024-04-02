@@ -102,8 +102,10 @@ private[lucene] class RegexTokenizerFilter(input: TokenStream, regex: Regex) ext
 object RegexTokenizerFilter {
   def apply(input: TokenStream, locale: Locale): RegexTokenizerFilter = {
     val config = ConfigFactory.load().getConfig(f"jochre.search")
+    val configKey = f"${locale.getLanguage}.tokenizer"
+
     val regexes = config
-      .getStringList(f"tokenizer.${locale.getLanguage}")
+      .getStringList(configKey)
       .asScala
       .map(r => f"($r)")
     val regex = f"(?U)${regexes.mkString("|")}".r
