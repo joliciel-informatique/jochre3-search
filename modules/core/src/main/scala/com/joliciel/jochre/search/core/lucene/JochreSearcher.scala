@@ -1,11 +1,22 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.service.{SearchResponse, SearchResult}
-import com.joliciel.jochre.search.core.{AggregationBin, AuthorStartsWith, Contains, DocReference, IndexField, SearchQuery}
+import com.joliciel.jochre.search.core.{AggregationBin, DocReference, IndexField, SearchCriterion, SearchQuery}
 import org.apache.lucene.facet.FacetsCollector
 import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, PrefixQuery, Query, TermQuery, TopDocs, TopScoreDocCollectorManager, Sort => LuceneSort}
+import org.apache.lucene.search.BooleanClause.Occur
+import org.apache.lucene.search.{
+  BooleanQuery,
+  IndexSearcher,
+  MatchAllDocsQuery,
+  PrefixQuery,
+  Query,
+  TermQuery,
+  TopDocs,
+  TopScoreDocCollectorManager,
+  Sort => LuceneSort
+}
 import org.slf4j.LoggerFactory
 
 import scala.collection.compat.immutable.ArraySeq
@@ -72,7 +83,7 @@ private[lucene] class JochreSearcher(
 
     val results = page.map { case (luceneDoc, score) =>
       val snippets = luceneDoc.highlight(luceneQuery, maxSnippets, rowPadding)
-      SearchResult(luceneDoc.ref, score, snippets)
+      SearchResult(luceneDoc.ref, luceneDoc.rev, luceneDoc.metadata, score, snippets)
     }
     SearchResponse(results, topDocs.totalHits.value)
   }
@@ -97,18 +108,7 @@ private[lucene] class JochreSearcher(
   override def close(): Unit = manager.release(this)
 
   private def toLuceneQuery(query: SearchQuery): Query = {
-    query.criterion match {
-      case Contains(queryString) =>
-        val parser = new JochreMultiFieldQueryParser(
-          fields = Seq(IndexField.Text),
-          termAnalyzer = analyzerGroup.forSearch,
-          phraseAnalyzer = analyzerGroup.forSearchPhrases
-        )
-        parser.parse(queryString)
-      case AuthorStartsWith(prefix) =>
-        val prefixQuery = new PrefixQuery(new Term(IndexField.Author.entryName, prefix))
-        prefixQuery
-    }
+    query.criterion.toLuceneQuery(analyzerGroup)
   }
 
   def aggregate(searchQuery: SearchQuery, field: IndexField, maxBins: Int): Seq[AggregationBin] = {

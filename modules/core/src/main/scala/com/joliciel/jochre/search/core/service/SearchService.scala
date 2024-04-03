@@ -7,10 +7,10 @@ import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.joliciel.jochre.search.core.{
   AggregationBins,
   AltoDocument,
-  AuthorStartsWith,
   DocMetadata,
   DocReference,
   IndexField,
+  SearchCriterion,
   SearchQuery
 }
 import org.apache.pdfbox.Loader
@@ -42,11 +42,11 @@ trait SearchService {
 
   def search(
       query: SearchQuery,
-      first: Int,
-      max: Int,
-      maxSnippets: Option[Int],
-      rowPadding: Option[Int],
-      username: String
+      first: Int = 0,
+      max: Int = 100,
+      maxSnippets: Option[Int] = None,
+      rowPadding: Option[Int] = None,
+      username: String = "unknown"
   ): Task[SearchResponse]
 
   def getImageSnippet(
@@ -90,7 +90,7 @@ private[service] case class SearchServiceImpl(
       }
       alto <- getAlto(ref, altoStream)
       pdfInfo <- getPdfInfo(ref, pdfStream)
-      pdfMetadata = getMetadata(ref, pdfInfo)
+      pdfMetadata = getMetadata(pdfInfo)
       metadata <- ZIO.attempt {
         val providedMetadata = metadataStream.map { metadataFile =>
           try {
@@ -436,9 +436,9 @@ private[service] case class SearchServiceImpl(
       creator: Option[String]
   )
 
-  private def getMetadata(docRef: DocReference, pdfInfo: PdfInfo): DocMetadata = {
+  private def getMetadata(pdfInfo: PdfInfo): DocMetadata = {
     DocMetadata(
-      title = pdfInfo.title.getOrElse(docRef.ref),
+      title = pdfInfo.title,
       author = pdfInfo.author
     )
   }
@@ -514,10 +514,27 @@ private[service] case class SearchServiceImpl(
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       username: String
-  ): Task[SearchResponse] = ZIO.fromTry {
-    Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      searcher.search(query, first, max, maxSnippets, rowPadding)
-    }
+  ): Task[SearchResponse] = {
+    for {
+      initialResponse <- ZIO.fromTry {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.search(query, first, max, maxSnippets, rowPadding)
+        }
+      }
+      pages <- ZIO.foreach(initialResponse.results) { searchResult =>
+        ZIO.foreach(searchResult.snippets) { snippet =>
+          val page = searchRepo.getPageByStartOffset(searchResult.docRev, snippet.start)
+          page
+        }
+      }
+      responseWithPages <- ZIO.attempt {
+        initialResponse.copy(results = initialResponse.results.zip(pages).map { case (searchResult, pages) =>
+          searchResult.copy(snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
+            snippet.copy(page = page.map(_.index).getOrElse(-1))
+          })
+        })
+      }
+    } yield responseWithPages
   }
 
   override def aggregate(query: SearchQuery, field: IndexField, maxBins: Int): Task[AggregationBins] = ZIO.attempt {
@@ -535,7 +552,7 @@ private[service] case class SearchServiceImpl(
       maxBins: Int
   ): Task[AggregationBins] = ZIO.fromTry {
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val searchQuery = SearchQuery(AuthorStartsWith(prefix))
+      val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.Author, prefix))
       val bins = searcher.aggregate(searchQuery, IndexField.Author, maxBins)
       AggregationBins(bins.sortBy(_.label))
     }

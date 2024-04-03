@@ -1,7 +1,7 @@
 package com.joliciel.jochre.search.core.service
 
-import com.joliciel.jochre.search.core.{Contains, DocReference, SearchQuery}
 import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, SearchQuery}
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -13,7 +13,7 @@ import javax.imageio.ImageIO
 object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
   private val log = LoggerFactory.getLogger(getClass)
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceYiddhsTest")(
+  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceYiddishTest")(
     test("upload real pdf and get image snippets") {
       val docRef = DocReference("nybc200089")
       val pdfStream = getClass.getResourceAsStream("/nybc200089-11-12.pdf")
@@ -26,7 +26,14 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
-        searchResults <- searchService.search(SearchQuery(Contains("farshvundn")), 0, 10, Some(20), Some(1), "test")
+        searchResults <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn", strict = false)),
+          0,
+          10,
+          Some(20),
+          Some(1),
+          "test"
+        )
         topResult <- ZIO.attempt(searchResults.results.head)
         imageSnippet <- searchService.getImageSnippet(
           topResult.docRef,
@@ -45,7 +52,8 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
             "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
             "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
             "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
-        )
+        ) &&
+        assertTrue(topResult.snippets.head.page == 2)
       }
     }
   ).provideLayer(

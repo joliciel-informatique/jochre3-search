@@ -29,7 +29,21 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Requirements,
     String,
     ValidToken,
-    (String, Int, Int, Option[Int], Option[Int]),
+    (
+        Option[String],
+        Option[String],
+        List[String],
+        Boolean,
+        Boolean,
+        Option[Int],
+        Option[Int],
+        List[String],
+        Int,
+        Int,
+        Option[Int],
+        Option[Int],
+        Option[String]
+    ),
     HttpError,
     SearchResponse,
     Any
@@ -40,7 +54,26 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("search")
-      .in(query[String]("query").description("The search query string").example(""""פון * װעגן""""))
+      .in(
+        query[Option[String]]("query")
+          .description("Query string for searching in the text")
+          .example(Some(""""פון * װעגן""""))
+      )
+      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
+      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
+      .in(
+        query[Boolean]("authorInclude").description("Whether the authors should be included or excluded").example(true)
+      )
+      .in(
+        query[Boolean]("strict")
+          .description("Whether query strings should be expanded to related synonyms (false) or not (true)")
+          .example(false)
+      )
+      .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
+      .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))
+      .in(
+        query[List[String]]("docRefs").description("Which document references to include").example(List("nybc200089"))
+      )
       .in(query[Int]("first").description("The first result to return on the page of results").example(20))
       .in(query[Int]("max").description("The max number of results to return on the page of results").example(10))
       .in(query[Option[Int]]("max-snippets").description("The maximum number of snippets per result").example(Some(20)))
@@ -49,6 +82,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .description("How many rows to add in the snippet before the first highlight and after the last highlight")
           .example(Some(2))
       )
+      .in(query[Option[String]]("sort").description("The sort order (optional)").example(None))
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index.")
 
@@ -116,7 +150,18 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Requirements,
     String,
     ValidToken,
-    (String, String, Int),
+    (
+        Option[String],
+        Option[String],
+        List[String],
+        Boolean,
+        Boolean,
+        Option[Int],
+        Option[Int],
+        List[String],
+        String,
+        Int
+    ),
     HttpError,
     AggregationBins,
     Any
@@ -127,7 +172,26 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("aggregate")
-      .in(query[String]("query").description("The search query string").example(""""פון * װעגן""""))
+      .in(
+        query[Option[String]]("query")
+          .description("Query string for searching in the text")
+          .example(Some(""""פון * װעגן""""))
+      )
+      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
+      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
+      .in(
+        query[Boolean]("authorInclude").description("Whether the authors should be included or excluded").example(true)
+      )
+      .in(
+        query[Boolean]("strict")
+          .description("Whether query strings should be expanded to related synonyms (false) or not (true)")
+          .example(false)
+      )
+      .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
+      .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))
+      .in(
+        query[List[String]]("docRefs").description("Which document references to include").example(List("nybc200089"))
+      )
       .in(
         query[String]("field")
           .description(f"The field to choose among ${IndexField.aggregatableFields.map(_.entryName).mkString(", ")}")

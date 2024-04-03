@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.{DocReference, IndexField}
+import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField}
 import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
 import com.joliciel.jochre.search.core.service.{DocRev, Highlight, Snippet}
 import com.typesafe.config.ConfigFactory
@@ -22,7 +22,22 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
   lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.entryName))
   lazy val rev: DocRev = DocRev(doc.get(IndexField.Revision.entryName).toLong)
-  lazy val termVector: Option[Fields] = Option(indexSearcher.getIndexReader.getTermVectors(luceneId))
+  lazy val termVector: Option[Fields] = Option {
+    val termVectors = indexSearcher.getIndexReader.termVectors()
+    termVectors.get(luceneId)
+  }
+
+  lazy val metadata: DocMetadata =
+    DocMetadata(
+      title = Option(doc.get(IndexField.Title.entryName)),
+      titleEnglish = Option(doc.get(IndexField.TitleEnglish.entryName)),
+      author = Option(doc.get(IndexField.Author.entryName)),
+      authorEnglish = Option(doc.get(IndexField.AuthorEnglish.entryName)),
+      publisher = Option(doc.get(IndexField.Publisher.entryName)),
+      publicationYear = Option(doc.get(IndexField.PublicationYear.entryName)),
+      volume = Option(doc.get(IndexField.Volume.entryName)),
+      url = Option(doc.get(IndexField.URL.entryName))
+    )
 
   private def getTokenStream(field: IndexField): Option[TokenStream] = {
     val maxStartOffset = -1
@@ -64,7 +79,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
             }
             val highlightedText = sb.toString().trim.replace("\n", "<br>")
             val highlights = tokens.map(token => Highlight(token.start, token.end))
-            Snippet(highlightedText, start, end, highlights)
+            Snippet(highlightedText, -1, start, end, highlights)
           }
         }.get
       case _ =>

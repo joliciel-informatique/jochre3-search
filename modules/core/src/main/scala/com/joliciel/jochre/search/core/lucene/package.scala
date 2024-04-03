@@ -1,7 +1,5 @@
 package com.joliciel.jochre.search.core
 
-import enumeratum._
-
 package object lucene {
   private[lucene] case class Token(value: String, start: Int, end: Int, score: Float)
 

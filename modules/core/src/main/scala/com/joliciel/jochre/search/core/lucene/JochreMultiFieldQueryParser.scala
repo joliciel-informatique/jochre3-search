@@ -6,7 +6,7 @@ import org.apache.lucene.queryparser.classic.MultiFieldQueryParser
 import org.apache.lucene.search.Query
 import org.slf4j.LoggerFactory
 
-private[lucene] class JochreMultiFieldQueryParser(
+private[core] class JochreMultiFieldQueryParser(
     fields: Seq[IndexField],
     termAnalyzer: Analyzer,
     phraseAnalyzer: Analyzer

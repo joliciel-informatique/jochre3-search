@@ -12,12 +12,15 @@ package object service {
 
   case class SearchResult(
       docRef: DocReference,
+      docRev: DocRev,
+      metadata: DocMetadata,
       score: Double,
       snippets: Seq[Snippet]
   )
 
   case class Snippet(
       text: String,
+      page: Int,
       start: Int,
       end: Int,
       highlights: Seq[Highlight]
@@ -30,10 +33,21 @@ package object service {
       results = Seq(
         SearchResult(
           docRef = DocReference("nybc200089"),
+          docRev = DocRev(42),
+          metadata = DocMetadata(
+            title = Some("אלע ווערק"),
+            titleEnglish = Some("Ale verk"),
+            author = Some("שלום עליכם"),
+            authorEnglish = Some("Sholem Aleykhem"),
+            volume = Some("18"),
+            publisher = Some("Nyu York : Sholem-Aleykhem folksfond"),
+            publicationYear = Some("1917")
+          ),
           score = 0.90,
           snippets = Seq(
             Snippet(
               text = "אין דער <b>אַלטער הײם</b>.",
+              page = 11,
               start = 100,
               end = 118,
               highlights = Seq(Highlight(108, 117))
@@ -97,7 +111,7 @@ package object service {
 
       Using(new StringReader(fileContents)) { reader =>
         val fileXml = XML.load(reader)
-        val title = (fileXml \\ "title-alt-script").headOption.map(_.textContent).getOrElse("")
+        val title = (fileXml \\ "title-alt-script").headOption.map(_.textContent)
         val titleEnglish = (fileXml \\ "title").headOption.map(_.textContent)
         val author = (fileXml \\ "creator-alt-script").headOption.map(_.textContent)
         val authorEnglish = (fileXml \\ "creator").headOption.map(_.textContent)
@@ -110,7 +124,7 @@ package object service {
           titleEnglish = titleEnglish,
           author = author,
           authorEnglish = authorEnglish,
-          date = date,
+          publicationYear = date,
           publisher = publisher,
           volume = volume,
           url = url

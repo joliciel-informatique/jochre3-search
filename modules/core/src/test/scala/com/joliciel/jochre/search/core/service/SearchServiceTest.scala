@@ -1,7 +1,15 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.{AggregationBin, AggregationBins, Contains, DocMetadata, DocReference, IndexField, SearchQuery}
+import com.joliciel.jochre.search.core.{
+  AggregationBin,
+  AggregationBins,
+  DocMetadata,
+  DocReference,
+  IndexField,
+  SearchCriterion,
+  SearchQuery
+}
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -18,7 +26,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   )
 
   private val docRef1 = DocReference("doc1")
-  private val metadata1 = DocMetadata(title = "Hello World", author = Some("Joe Schmoe"))
+  private val metadata1 =
+    DocMetadata(title = Some("Hello World"), author = Some("Joe Schmoe"), publicationYear = Some("1917"))
   private val alto1 = textToAlto(
     "doc1",
     "Hello world!\n" +
@@ -31,7 +40,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   )
 
   private val docRef2 = DocReference("doc2")
-  private val metadata2 = DocMetadata(title = "Hello people", author = Some("Jack Sprat"))
+  private val metadata2 =
+    DocMetadata(title = Some("Hello people"), author = Some("Jack Sprat"), publicationYear = Some("[192_]"))
   private val alto2 = textToAlto(
     "doc2",
     "Hello people.\n" +
@@ -50,7 +60,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   )
 
   private val docRef3 = DocReference("doc3")
-  private val metadata3 = DocMetadata(title = "Hi everyone", author = Some("Joe Schmoe"))
+  private val metadata3 =
+    DocMetadata(title = Some("Hi everyone"), author = Some("Joe Schmoe"), publicationYear = Some("1937"))
   private val alto3 = textToAlto(
     "doc3",
     "Hello everyone",
@@ -66,19 +77,19 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         pageCount2 <- searchService.indexAlto(docRef2, alto2, metadata2)
         index <- ZIO.service[JochreIndex]
         refsWorld <- ZIO.attempt {
-          val query = SearchQuery(Contains("world"))
+          val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "world", strict = false))
           Using(index.searcherManager.acquire()) { searcher =>
             searcher.findMatchingRefs(query)
           }.get
         }
         refsHello <- ZIO.attempt {
-          val query = SearchQuery(Contains("Hello"))
+          val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello", strict = false))
           Using(index.searcherManager.acquire()) { searcher =>
             searcher.findMatchingRefs(query)
           }.get
         }
         refsHiWorld <- ZIO.attempt {
-          val query = SearchQuery(Contains("\"Hi World\""))
+          val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"Hi World\"", strict = false))
           Using(index.searcherManager.acquire()) { searcher =>
             searcher.findMatchingRefs(query)
           }.get
@@ -97,7 +108,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultAre <- searchService.search(SearchQuery(Contains("are")), 0, 100, Some(1), Some(0), "test")
+        resultAre <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "are", strict = false)),
+          0,
+          100,
+          Some(1),
+          Some(0),
+          "test"
+        )
       } yield {
         assertTrue(resultAre.results.head.snippets.head.text == "How <b>are</b> you?")
       }
@@ -108,7 +126,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultArePadding <- searchService.search(SearchQuery(Contains("are")), 0, 100, Some(1), Some(1), "test")
+        resultArePadding <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "are", strict = false)),
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test"
+        )
       } yield {
         assertTrue(
           resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
@@ -123,7 +148,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultAre <- searchService.search(SearchQuery(Contains("today")), 0, 100, Some(1), Some(1), "test")
+        resultAre <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "today", strict = false)),
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test"
+        )
       } yield {
         assertTrue(
           resultAre.results.head.snippets.head.text == "Hello you.<br>" +
@@ -140,7 +172,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         phraseResult <- searchService.search(
-          SearchQuery(Contains("\"will rain tomorrow\"")),
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"will rain tomorrow\"", strict = false)),
           0,
           100,
           Some(1),
@@ -148,7 +180,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           "test"
         )
         phraseWithHyphenResult <- searchService.search(
-          SearchQuery(Contains("\"day today Madam\"")),
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"day today Madam\"", strict = false)),
           0,
           100,
           Some(1),
@@ -162,10 +194,16 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             "don't think so."
         ) &&
         assertTrue(
+          phraseResult.results.head.snippets.head.page == 1
+        ) &&
+        assertTrue(
           phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br>" +
             "Nice <b>day</b> <b>to-</b><br>" +
             "<b>day</b>, <b>Madam</b>.<br>" +
             "Isn't it?"
+        ) &&
+        assertTrue(
+          phraseWithHyphenResult.results.head.snippets.head.page == 0
         )
       }
     },
@@ -175,7 +213,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultsThink <- searchService.search(SearchQuery(Contains("think")), 0, 100, Some(100), Some(0), "test")
+        resultsThink <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "think", strict = false)),
+          0,
+          100,
+          Some(100),
+          Some(0),
+          "test"
+        )
       } yield {
         assertTrue(
           resultsThink.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
@@ -192,7 +237,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultsThinkPadding <- searchService.search(SearchQuery(Contains("think")), 0, 100, Some(100), Some(1), "test")
+        resultsThinkPadding <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "think", strict = false)),
+          0,
+          100,
+          Some(100),
+          Some(1),
+          "test"
+        )
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
@@ -205,6 +257,50 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
+    test("various search criteria") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        titleContainsWorld <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), "world", strict = false))
+        )
+        authorInJoe <- searchService.search(SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe"))))
+        authorStartsWithJo <- searchService.search(SearchQuery(SearchCriterion.StartsWith(IndexField.Author, "Jo")))
+        yearBefore1920 <- searchService.search(
+          SearchQuery(SearchCriterion.LessThanOrEqualTo(IndexField.PublicationYearAsNumber, 1920))
+        )
+        yearAfter1920 <- searchService.search(
+          SearchQuery(SearchCriterion.GreaterThanOrEqualTo(IndexField.PublicationYearAsNumber, 1920))
+        )
+        notAuthorInJoe <- searchService.search(
+          SearchQuery(
+            SearchCriterion.And(
+              SearchCriterion.Contains(IndexField.Title, "Hello"),
+              SearchCriterion.Not(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
+            )
+          )
+        )
+        andYear <- searchService.search(
+          SearchQuery(
+            SearchCriterion.And(
+              SearchCriterion.LessThanOrEqualTo(IndexField.PublicationYearAsNumber, 1920),
+              SearchCriterion.GreaterThanOrEqualTo(IndexField.PublicationYearAsNumber, 1920)
+            )
+          )
+        )
+      } yield {
+        assertTrue(titleContainsWorld.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1)) &&
+        assertTrue(authorInJoe.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef3)) &&
+        assertTrue(authorStartsWithJo.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef3)) &&
+        assertTrue(yearBefore1920.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef2)) &&
+        assertTrue(yearAfter1920.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2, docRef3)) &&
+        assertTrue(notAuthorInJoe.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2)) &&
+        assertTrue(andYear.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2))
+      }
+    },
     test("aggregate") {
       for {
         _ <- getSearchRepo()
@@ -212,8 +308,16 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         _ <- searchService.indexAlto(docRef3, alto3, metadata3)
-        binsHello <- searchService.aggregate(SearchQuery(Contains("Hello")), IndexField.Author, 2)
-        binsHello1 <- searchService.aggregate(SearchQuery(Contains("Hello")), IndexField.Author, 1)
+        binsHello <- searchService.aggregate(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello", strict = false)),
+          IndexField.Author,
+          2
+        )
+        binsHello1 <- searchService.aggregate(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello", strict = false)),
+          IndexField.Author,
+          1
+        )
       } yield {
         assertTrue(
           binsHello == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2), AggregationBin("Jack Sprat", 1)))

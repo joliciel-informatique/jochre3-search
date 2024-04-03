@@ -81,6 +81,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         dbWord2 <- searchRepo.getWord(wordId)
         _ <- searchRepo.insertWord(docRev, rowId, 20, Some(26), word)
         hyphenatedWord <- searchRepo.getWord(docRev, 20).map(_.get)
+        wordPage <- searchRepo.getPageByStartOffset(docRev, 10)
       } yield {
         assertTrue(dbWord.id == wordId) &&
         assertTrue(dbWord.docRev == docRev) &&
@@ -92,7 +93,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(dbWord.offset == 10) &&
         assertTrue(dbWord.hyphenatedOffset == None) &&
         assertTrue(dbWord == dbWord2) &&
-        assertTrue(hyphenatedWord.hyphenatedOffset == Some(26))
+        assertTrue(hyphenatedWord.hyphenatedOffset == Some(26)) &&
+        assertTrue(wordPage.map(_.index) == Some(42))
       }
     }
   ).provideLayer(searchRepoLayer) @@ TestAspect.sequential

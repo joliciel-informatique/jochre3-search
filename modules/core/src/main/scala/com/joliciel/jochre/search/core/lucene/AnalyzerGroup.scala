@@ -7,8 +7,11 @@ import java.util.Locale
 
 private[search] case class AnalyzerGroup(
     forIndexing: JochreAnalyzerForIndex,
+    forIndexingFields: Analyzer,
     forSearch: Analyzer,
-    forSearchPhrases: Analyzer
+    forSearchPhrases: Analyzer,
+    forStrictSearch: Analyzer,
+    forStrictSearchPhrases: Analyzer
 )
 
 private[search] object AnalyzerGroup {
@@ -18,7 +21,10 @@ private[search] object AnalyzerGroup {
   val generic: AnalyzerGroup =
     AnalyzerGroup(
       forIndexing = new JochreAnalyzerForIndex(locale),
-      forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false),
-      forSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true)
+      forIndexingFields = new JochreAnalyzerForIndexFields(locale),
+      forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = true),
+      forSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = true),
+      forStrictSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = false),
+      forStrictSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false)
     )
 }

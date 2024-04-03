@@ -86,6 +86,19 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
+  def getPageByStartOffset(docRev: DocRev, startOffset: Int): Task[Option[DbPage]] =
+    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height
+         | FROM page
+         | INNER JOIN document ON page.doc_rev = document.rev
+         | INNER JOIN word ON word.doc_rev = document.rev
+         | INNER JOIN row ON row.id = word.row_id AND row.page_id = page.id
+         | WHERE document.rev = ${docRev.rev}
+         | AND word.start_offset = $startOffset
+       """.stripMargin
+      .query[Option[DbPage]]
+      .unique
+      .transact(transactor)
+
   def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
     sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
          | FROM row
