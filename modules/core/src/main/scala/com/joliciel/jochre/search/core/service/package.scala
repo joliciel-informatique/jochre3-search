@@ -7,7 +7,7 @@ import java.time.Instant
 import scala.util.Using
 import scala.xml.XML
 
-package object search {
+package object service {
   case class SearchResponse(results: Seq[SearchResult], totalCount: Long)
 
   case class SearchResult(
@@ -43,17 +43,24 @@ package object search {
       ),
       totalCount = 42
     )
+
+    val aggregationBinsExample: AggregationBins = AggregationBins(
+      Seq(
+        AggregationBin("שלום עליכם", 212),
+        AggregationBin("שלום אַש", 12)
+      )
+    )
   }
 
   private[core] case class DocRev(rev: Long) extends AnyVal
 
-  private[search] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
+  private[service] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
 
-  private[search] case class PageId(id: Long) extends AnyVal
-  private[search] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int)
+  private[service] case class PageId(id: Long) extends AnyVal
+  private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int)
 
-  private[search] case class RowId(id: Long) extends AnyVal
-  private[search] case class DbRow(
+  private[service] case class RowId(id: Long) extends AnyVal
+  private[service] case class DbRow(
       id: RowId,
       pageId: PageId,
       index: Int,
@@ -65,8 +72,8 @@ package object search {
     val rect = Rectangle(left, top, width, height)
   }
 
-  private[search] case class WordId(id: Long) extends AnyVal
-  private[search] case class DbWord(
+  private[service] case class WordId(id: Long) extends AnyVal
+  private[service] case class DbWord(
       id: WordId,
       docRev: DocRev,
       rowId: RowId,

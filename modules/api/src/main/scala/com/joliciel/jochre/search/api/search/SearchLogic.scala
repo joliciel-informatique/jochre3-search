@@ -3,8 +3,16 @@ package com.joliciel.jochre.search.api.search
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper}
-import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.search.{Highlight, SearchResponse, SearchService}
+import com.joliciel.jochre.search.core.{
+  AggregationBins,
+  AuthorStartsWith,
+  Contains,
+  DocReference,
+  IndexField,
+  SearchQuery,
+  UnknownFieldException
+}
+import com.joliciel.jochre.search.core.service.{Highlight, SearchResponse, SearchService}
 import zio.ZIO
 import zio.stream.ZStream
 
@@ -20,9 +28,10 @@ trait SearchLogic extends HttpErrorMapper {
       maxSnippets: Option[Int],
       rowPadding: Option[Int]
   ): ZIO[Requirements, HttpError, SearchResponse] = {
+    val searchQuery = SearchQuery(Contains(query))
     for {
       searchService <- ZIO.service[SearchService]
-      searchResponse <- searchService.search(query, first, max, maxSnippets, rowPadding, token.username)
+      searchResponse <- searchService.search(searchQuery, first, max, maxSnippets, rowPadding, token.username)
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
     .mapError(mapToHttpError)
@@ -45,5 +54,38 @@ trait SearchLogic extends HttpErrorMapper {
       }
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
+    .mapError(mapToHttpError)
+
+  def getAggregateLogic(
+      token: ValidToken,
+      query: String,
+      field: String,
+      maxBins: Int
+  ): ZIO[Requirements, HttpError, AggregationBins] = {
+    val searchQuery = SearchQuery(Contains(query))
+    for {
+      indexField <- ZIO.attempt {
+        try {
+          IndexField.withName(field)
+        } catch {
+          case ex: NoSuchElementException => throw new UnknownFieldException(ex.getMessage)
+        }
+      }
+      searchService <- ZIO.service[SearchService]
+      searchResponse <- searchService.aggregate(searchQuery, indexField, maxBins)
+    } yield searchResponse
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to aggregate", error))
+    .mapError(mapToHttpError)
+
+  def getTopAuthorsLogic(
+      token: ValidToken,
+      prefix: String,
+      maxBins: Int
+  ): ZIO[Requirements, HttpError, AggregationBins] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      searchResponse <- searchService.getTopAuthors(prefix, maxBins)
+    } yield searchResponse
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top authors", error))
     .mapError(mapToHttpError)
 }

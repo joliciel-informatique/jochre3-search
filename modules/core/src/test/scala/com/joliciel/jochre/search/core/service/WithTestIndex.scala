@@ -1,4 +1,4 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.{AnalyzerGroup, JochreIndex}
 import org.apache.lucene.store.MMapDirectory

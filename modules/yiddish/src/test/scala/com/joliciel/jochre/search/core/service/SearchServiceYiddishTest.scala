@@ -1,6 +1,6 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.{Contains, DocReference, SearchQuery}
 import com.joliciel.jochre.search.core.lucene.JochreIndex
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
@@ -26,7 +26,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
-        searchResults <- searchService.search("farshvundn", 0, 10, Some(20), Some(1), "test")
+        searchResults <- searchService.search(SearchQuery(Contains("farshvundn")), 0, 10, Some(20), Some(1), "test")
         topResult <- ZIO.attempt(searchResults.results.head)
         imageSnippet <- searchService.getImageSnippet(
           topResult.docRef,
@@ -39,13 +39,13 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         ImageIO.write(imageSnippet, "png", tempFile)
         log.info(f"Wrote snippet to ${tempFile.getPath}")
         assertTrue(searchResults.totalCount == 1) &&
-          assertTrue(pageCount == 2) &&
-          assertTrue(
-            topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
-              "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
-              "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
-              "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
-          )
+        assertTrue(pageCount == 2) &&
+        assertTrue(
+          topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+            "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
+            "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
+        )
       }
     }
   ).provideLayer(

@@ -1,10 +1,18 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Alto, Page, SpellingAlternative, SubsType, TextLine, Word}
 import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
-import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
+import com.joliciel.jochre.search.core.{
+  AggregationBins,
+  AltoDocument,
+  AuthorStartsWith,
+  DocMetadata,
+  DocReference,
+  IndexField,
+  SearchQuery
+}
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -33,7 +41,7 @@ trait SearchService {
   def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int]
 
   def search(
-      query: String,
+      query: SearchQuery,
       first: Int,
       max: Int,
       maxSnippets: Option[Int],
@@ -47,9 +55,20 @@ trait SearchService {
       endOffset: Int,
       highlights: Seq[Highlight]
   ): Task[BufferedImage]
+
+  def aggregate(
+      query: SearchQuery,
+      field: IndexField,
+      maxBins: Int
+  ): Task[AggregationBins]
+
+  def getTopAuthors(
+      prefix: String,
+      maxBins: Int
+  ): Task[AggregationBins]
 }
 
-private[search] case class SearchServiceImpl(
+private[service] case class SearchServiceImpl(
     jochreIndex: JochreIndex,
     searchRepo: SearchRepo,
     metadataReader: MetadataReader = MetadataReader.default
@@ -489,7 +508,7 @@ private[search] case class SearchServiceImpl(
   }
 
   override def search(
-      query: String,
+      query: SearchQuery,
       first: Int,
       max: Int,
       maxSnippets: Option[Int],
@@ -497,8 +516,28 @@ private[search] case class SearchServiceImpl(
       username: String
   ): Task[SearchResponse] = ZIO.fromTry {
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val searchQuery = SearchQuery(Contains(query))
-      searcher.search(searchQuery, first, max, maxSnippets, rowPadding)
+      searcher.search(query, first, max, maxSnippets, rowPadding)
+    }
+  }
+
+  override def aggregate(query: SearchQuery, field: IndexField, maxBins: Int): Task[AggregationBins] = ZIO.attempt {
+    if (!field.aggregatable) {
+      throw new IndexFieldNotAggregatable(f"Field ${field.entryName} is not aggregatable.")
+    }
+    Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      val bins = searcher.aggregate(query, field, maxBins)
+      AggregationBins(bins)
+    }.get
+  }
+
+  override def getTopAuthors(
+      prefix: String,
+      maxBins: Int
+  ): Task[AggregationBins] = ZIO.fromTry {
+    Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      val searchQuery = SearchQuery(AuthorStartsWith(prefix))
+      val bins = searcher.aggregate(searchQuery, IndexField.Author, maxBins)
+      AggregationBins(bins.sortBy(_.label))
     }
   }
 

@@ -1,4 +1,4 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}

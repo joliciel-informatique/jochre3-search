@@ -4,8 +4,8 @@ import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
-import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.search.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
+import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
+import com.joliciel.jochre.search.core.service.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
@@ -112,13 +112,68 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   val getImageSnippetHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
     getImageSnippetEndpoint.serverLogic[Requirements](token => input => (getImageSnippetLogic _).tupled(token +: input))
 
+  val getAggregateEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (String, String, Int),
+    HttpError,
+    AggregationBins,
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+      )
+      .get
+      .in("aggregate")
+      .in(query[String]("query").description("The search query string").example(""""פון * װעגן""""))
+      .in(
+        query[String]("field")
+          .description(f"The field to choose among ${IndexField.aggregatableFields.map(_.entryName).mkString(", ")}")
+          .example(IndexField.Author.entryName)
+      )
+      .in(query[Int]("maxBins").description("Maximum bins to return").example(20))
+      .out(jsonBody[AggregationBins].example(SearchHelper.aggregationBinsExample))
+      .description("Return aggregated bins for this search query and a given field.")
+
+  val getAggregateHttp: ZServerEndpoint[Requirements, Any] =
+    getAggregateEndpoint.serverLogic[Requirements](token => input => (getAggregateLogic _).tupled(token +: input))
+
+  val getTopAuthorsEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (String, Int),
+    HttpError,
+    AggregationBins,
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+      )
+      .get
+      .in("authors")
+      .in(query[String]("prefix").description("The author name prefix").example("ש"))
+      .in(query[Int]("maxBins").description("Maximum bins to return").example(20))
+      .out(jsonBody[AggregationBins].example(SearchHelper.aggregationBinsExample))
+      .description("Return most common authors matching prefix in alphabetical order.")
+
+  val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
+    getTopAuthorsEndpoint.serverLogic[Requirements](token => input => (getTopAuthorsLogic _).tupled(token +: input))
+
   val endpoints: List[AnyEndpoint] = List(
     getSearchEndpoint,
-    getImageSnippetEndpoint
+    getImageSnippetEndpoint,
+    getAggregateEndpoint,
+    getTopAuthorsEndpoint
   ).map(_.endpoint.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     getSearchHttp,
-    getImageSnippetHttp
+    getImageSnippetHttp,
+    getAggregateHttp,
+    getTopAuthorsHttp
   )
 }

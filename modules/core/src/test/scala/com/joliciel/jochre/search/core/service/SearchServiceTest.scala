@@ -1,28 +1,25 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.{DocMetadata, DocReference}
+import com.joliciel.jochre.search.core.{AggregationBin, AggregationBins, Contains, DocMetadata, DocReference, IndexField, SearchQuery}
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
 
-import java.io.File
-import javax.imageio.ImageIO
 import scala.util.Using
 
 object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
   private val log = LoggerFactory.getLogger(getClass)
 
-  val alternativeMap = Map(
+  private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
     "nice" -> Seq("pleasant", "lovely")
   )
 
-  val docRef1 = DocReference("doc1")
-  val metadata1 = DocMetadata(title = "Hello World")
-
-  val alto1 = textToAlto(
+  private val docRef1 = DocReference("doc1")
+  private val metadata1 = DocMetadata(title = "Hello World", author = Some("Joe Schmoe"))
+  private val alto1 = textToAlto(
     "doc1",
     "Hello world!\n" +
       "Hello you.\n" +
@@ -33,10 +30,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     alternativeMap
   )
 
-  val docRef2 = DocReference("doc2")
-  val metadata2 = DocMetadata(title = "Hello people")
-
-  val alto2 = textToAlto(
+  private val docRef2 = DocReference("doc2")
+  private val metadata2 = DocMetadata(title = "Hello people", author = Some("Jack Sprat"))
+  private val alto2 = textToAlto(
     "doc2",
     "Hello people.\n" +
       "How are you?\n" +
@@ -50,6 +46,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       "I think it will be\n" +
       "sunny tomorrow, and even\n" +
       "the day after",
+    alternativeMap
+  )
+
+  private val docRef3 = DocReference("doc3")
+  private val metadata3 = DocMetadata(title = "Hi everyone", author = Some("Joe Schmoe"))
+  private val alto3 = textToAlto(
+    "doc3",
+    "Hello everyone",
     alternativeMap
   )
 
@@ -93,7 +97,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultAre <- searchService.search("are", 0, 100, Some(1), Some(0), "test")
+        resultAre <- searchService.search(SearchQuery(Contains("are")), 0, 100, Some(1), Some(0), "test")
       } yield {
         assertTrue(resultAre.results.head.snippets.head.text == "How <b>are</b> you?")
       }
@@ -104,7 +108,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultArePadding <- searchService.search("are", 0, 100, Some(1), Some(1), "test")
+        resultArePadding <- searchService.search(SearchQuery(Contains("are")), 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
           resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
@@ -119,7 +123,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultAre <- searchService.search("today", 0, 100, Some(1), Some(1), "test")
+        resultAre <- searchService.search(SearchQuery(Contains("today")), 0, 100, Some(1), Some(1), "test")
       } yield {
         assertTrue(
           resultAre.results.head.snippets.head.text == "Hello you.<br>" +
@@ -135,8 +139,22 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        phraseResult <- searchService.search("\"will rain tomorrow\"", 0, 100, Some(1), Some(1), "test")
-        phraseWithHyphenResult <- searchService.search("\"day today Madam\"", 0, 100, Some(1), Some(1), "test")
+        phraseResult <- searchService.search(
+          SearchQuery(Contains("\"will rain tomorrow\"")),
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test"
+        )
+        phraseWithHyphenResult <- searchService.search(
+          SearchQuery(Contains("\"day today Madam\"")),
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test"
+        )
       } yield {
         assertTrue(
           phraseResult.results.head.snippets.head.text == "Think it <b>will</b> <b>rain</b><br>" +
@@ -157,7 +175,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultsThink <- searchService.search("think", 0, 100, Some(100), Some(0), "test")
+        resultsThink <- searchService.search(SearchQuery(Contains("think")), 0, 100, Some(100), Some(0), "test")
       } yield {
         assertTrue(
           resultsThink.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
@@ -174,7 +192,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        resultsThinkPadding <- searchService.search("think", 0, 100, Some(100), Some(1), "test")
+        resultsThinkPadding <- searchService.search(SearchQuery(Contains("think")), 0, 100, Some(100), Some(1), "test")
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
@@ -185,6 +203,38 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
               "sunny tomorrow, and even"
           )
         )
+      }
+    },
+    test("aggregate") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        binsHello <- searchService.aggregate(SearchQuery(Contains("Hello")), IndexField.Author, 2)
+        binsHello1 <- searchService.aggregate(SearchQuery(Contains("Hello")), IndexField.Author, 1)
+      } yield {
+        assertTrue(
+          binsHello == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2), AggregationBin("Jack Sprat", 1)))
+        ) &&
+        assertTrue(binsHello1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2))))
+      }
+    },
+    test("return top authors in alphabetical order") {
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        binsJ <- searchService.getTopAuthors("J", 5)
+        binsJo <- searchService.getTopAuthors("Jo", 5)
+        binsJ1 <- searchService.getTopAuthors("J", 1)
+      } yield {
+        assertTrue(binsJ == AggregationBins(Seq(AggregationBin("Jack Sprat", 1), AggregationBin("Joe Schmoe", 2)))) &&
+        assertTrue(binsJo == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2)))) &&
+        assertTrue(binsJ1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2))))
       }
     }
   ).provideLayer(

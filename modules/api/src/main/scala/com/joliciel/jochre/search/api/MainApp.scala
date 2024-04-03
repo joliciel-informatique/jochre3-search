@@ -9,7 +9,7 @@ import com.joliciel.jochre.search.api.search.SearchApp
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.search.{SearchRepo, SearchService}
+import com.joliciel.jochre.search.core.service.{SearchRepo, SearchService}
 import com.typesafe.config.ConfigFactory
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder

@@ -1,23 +1,14 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.DocReference
-import com.joliciel.jochre.search.core.search.{Contains, SearchQuery, SearchResponse, SearchResult}
+import com.joliciel.jochre.search.core.service.{SearchResponse, SearchResult}
+import com.joliciel.jochre.search.core.{AggregationBin, AuthorStartsWith, Contains, DocReference, IndexField, SearchQuery}
+import org.apache.lucene.facet.FacetsCollector
+import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
-import org.apache.lucene.search.{
-  IndexSearcher,
-  MatchAllDocsQuery,
-  Query,
-  TermQuery,
-  TopDocs,
-  TopScoreDocCollector,
-  TopScoreDocCollectorManager,
-  Sort => LuceneSort
-}
+import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, PrefixQuery, Query, TermQuery, TopDocs, TopScoreDocCollectorManager, Sort => LuceneSort}
 import org.slf4j.LoggerFactory
 
-import scala.collection.Searching.SearchResult
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Using
 
 /** If retrieved with a [[JochreSearcherManager]], should give an immutable view of the index.
   */
@@ -42,7 +33,7 @@ private[lucene] class JochreSearcher(
   def indexSize: Int = this.getIndexReader.numDocs
 
   def getByDocRef(docRef: DocReference): Option[LuceneDocument] = {
-    val topDocs = search(new TermQuery(new Term(LuceneField.Reference.entryName, docRef.ref)), 1)
+    val topDocs = search(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)), 1)
     topDocs.scoreDocs.headOption.map(luceneId => new LuceneDocument(this, luceneId.doc))
   }
 
@@ -109,11 +100,34 @@ private[lucene] class JochreSearcher(
     query.criterion match {
       case Contains(queryString) =>
         val parser = new JochreMultiFieldQueryParser(
-          fields = Seq(LuceneField.Text),
+          fields = Seq(IndexField.Text),
           termAnalyzer = analyzerGroup.forSearch,
           phraseAnalyzer = analyzerGroup.forSearchPhrases
         )
         parser.parse(queryString)
+      case AuthorStartsWith(prefix) =>
+        val prefixQuery = new PrefixQuery(new Term(IndexField.Author.entryName, prefix))
+        prefixQuery
     }
+  }
+
+  def aggregate(searchQuery: SearchQuery, field: IndexField, maxBins: Int): Seq[AggregationBin] = {
+    val facetCollector = this.prepareFacetCollector(searchQuery)
+    val facets = new SortedSetDocValuesFacetCounts(
+      new DefaultSortedSetDocValuesReaderState(this.indexReader, FacetConfigHolder.facetsConfig),
+      facetCollector
+    ).getTopChildren(maxBins, field.entryName)
+
+    facets.labelValues.map { labelAndValue =>
+      AggregationBin(labelAndValue.label, labelAndValue.value.intValue())
+    }.toSeq
+  }
+
+  private def prepareFacetCollector(searchQuery: SearchQuery): FacetsCollector = {
+    val facetCollector = new FacetsCollector(true)
+    val hitCountForSearchResult = 0
+    val luceneQuery = this.toLuceneQuery(searchQuery)
+    FacetsCollector.search(this, luceneQuery, hitCountForSearchResult, facetCollector)
+    facetCollector
   }
 }
