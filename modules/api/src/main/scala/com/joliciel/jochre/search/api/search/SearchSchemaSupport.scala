@@ -1,7 +1,7 @@
 package com.joliciel.jochre.search.api.search
 
 import com.joliciel.jochre.search.api.TapirSchemaSupport
-import com.joliciel.jochre.search.core.search.{Highlight, SearchProtocol}
+import com.joliciel.jochre.search.core.service.{Highlight, SearchProtocol}
 import io.circe.parser._
 import io.circe.syntax._
 import sttp.tapir.{Codec, CodecFormat, DecodeResult}

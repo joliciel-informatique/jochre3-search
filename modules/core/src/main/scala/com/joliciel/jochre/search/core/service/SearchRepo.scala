@@ -1,4 +1,4 @@
-package com.joliciel.jochre.search.core.search
+package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
@@ -9,7 +9,7 @@ import doobie.postgres.implicits._
 import zio._
 import zio.interop.catz._
 
-private[search] case class SearchRepo(transactor: Transactor[Task]) {
+private[service] case class SearchRepo(transactor: Transactor[Task]) {
   def insertDocument(ref: DocReference): Task[DocRev] =
     sql"""INSERT INTO document (reference)
          | VALUES (${ref.ref})
@@ -83,6 +83,19 @@ private[search] case class SearchRepo(transactor: Transactor[Task]) {
          | WHERE page.id = ${pageId.id}
        """.stripMargin
       .query[DbPage]
+      .unique
+      .transact(transactor)
+
+  def getPageByStartOffset(docRev: DocRev, startOffset: Int): Task[Option[DbPage]] =
+    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height
+         | FROM page
+         | INNER JOIN document ON page.doc_rev = document.rev
+         | INNER JOIN word ON word.doc_rev = document.rev
+         | INNER JOIN row ON row.id = word.row_id AND row.page_id = page.id
+         | WHERE document.rev = ${docRev.rev}
+         | AND word.start_offset = $startOffset
+       """.stripMargin
+      .query[Option[DbPage]]
       .unique
       .transact(transactor)
 
@@ -166,7 +179,7 @@ private[search] case class SearchRepo(transactor: Transactor[Task]) {
   private val deleteAllDocuments: Task[Int] =
     sql"""DELETE FROM document""".update.run.transact(transactor)
 
-  private[search] val deleteAll: Task[Int] =
+  private[service] val deleteAll: Task[Int] =
     for {
       _ <- deleteAllWords
       _ <- deleteAllRows

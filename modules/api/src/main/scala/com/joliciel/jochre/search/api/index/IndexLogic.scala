@@ -3,7 +3,7 @@ package com.joliciel.jochre.search.api.index
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
-import com.joliciel.jochre.search.core.search.SearchService
+import com.joliciel.jochre.search.core.service.SearchService
 import zio.ZIO
 
 import java.io.FileInputStream

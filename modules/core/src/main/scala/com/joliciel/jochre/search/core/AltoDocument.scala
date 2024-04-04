@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core
 
-import com.joliciel.jochre.search.core.search.DocRev
+import com.joliciel.jochre.search.core.service.DocRev
 
 case class AltoDocument(
     ref: DocReference,

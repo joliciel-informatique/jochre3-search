@@ -1,8 +1,8 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField}
 import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
-import com.joliciel.jochre.search.core.search.{DocRev, Highlight, Snippet}
+import com.joliciel.jochre.search.core.service.{DocRev, Highlight, Snippet}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.document.Document
@@ -20,29 +20,44 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   private val defaultRowPadding = config.getInt("default-row-padding")
 
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
-  lazy val ref: DocReference = DocReference(doc.get(LuceneField.Reference.entryName))
-  lazy val rev: DocRev = DocRev(doc.get(LuceneField.Revision.entryName).toLong)
-  lazy val termVector: Option[Fields] = Option(indexSearcher.getIndexReader.getTermVectors(luceneId))
+  lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.entryName))
+  lazy val rev: DocRev = DocRev(doc.get(IndexField.Revision.entryName).toLong)
+  lazy val termVector: Option[Fields] = Option {
+    val termVectors = indexSearcher.getIndexReader.termVectors()
+    termVectors.get(luceneId)
+  }
 
-  private def getTokenStream(field: LuceneField): Option[TokenStream] = {
+  lazy val metadata: DocMetadata =
+    DocMetadata(
+      title = Option(doc.get(IndexField.Title.entryName)),
+      titleEnglish = Option(doc.get(IndexField.TitleEnglish.entryName)),
+      author = Option(doc.get(IndexField.Author.entryName)),
+      authorEnglish = Option(doc.get(IndexField.AuthorEnglish.entryName)),
+      publisher = Option(doc.get(IndexField.Publisher.entryName)),
+      publicationYear = Option(doc.get(IndexField.PublicationYear.entryName)),
+      volume = Option(doc.get(IndexField.Volume.entryName)),
+      url = Option(doc.get(IndexField.URL.entryName))
+    )
+
+  private def getTokenStream(field: IndexField): Option[TokenStream] = {
     val maxStartOffset = -1
     termVector.flatMap { termVector =>
       Option(TokenSources.getTermVectorTokenStreamOrNull(field.entryName, termVector, maxStartOffset))
     }
   }
 
-  def getText(field: LuceneField): Option[String] = Option(doc.get(field.entryName))
+  def getText(field: IndexField): Option[String] = Option(doc.get(field.entryName))
 
-  private def getTokenStreamAndText(field: LuceneField): (Option[TokenStream], Option[String]) = {
+  private def getTokenStreamAndText(field: IndexField): (Option[TokenStream], Option[String]) = {
     this.getTokenStream(field) -> this.getText(field);
   }
 
   def highlight(query: Query, maxSnippets: Option[Int] = None, rowPadding: Option[Int] = None): Seq[Snippet] = {
     val effectiveMaxSnippets = maxSnippets.getOrElse(defaultMaxSnippetCount)
     val effectiveRowPadding = rowPadding.getOrElse(defaultRowPadding)
-    val highlighter = JochreHighlighter(query, LuceneField.Text)
+    val highlighter = JochreHighlighter(query, IndexField.Text)
 
-    this.getTokenStreamAndText(LuceneField.Text) match {
+    this.getTokenStreamAndText(IndexField.Text) match {
       case (Some(tokenStream), Some(text)) =>
         Using(tokenStream) { tokenStream =>
           val fragments = highlighter.findSnippets(tokenStream, effectiveMaxSnippets, effectiveRowPadding)
@@ -64,7 +79,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
             }
             val highlightedText = sb.toString().trim.replace("\n", "<br>")
             val highlights = tokens.map(token => Highlight(token.start, token.end))
-            Snippet(highlightedText, start, end, highlights)
+            Snippet(highlightedText, -1, start, end, highlights)
           }
         }.get
       case _ =>

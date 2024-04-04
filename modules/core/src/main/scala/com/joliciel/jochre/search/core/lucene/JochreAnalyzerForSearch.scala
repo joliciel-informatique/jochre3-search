@@ -11,7 +11,8 @@ import org.slf4j.LoggerFactory
 
 import java.util.Locale
 
-class JochreAnalyzerForSearch(locale: Locale, forPhrases: Boolean) extends JochreAnalyzerBase(locale) {
+class JochreAnalyzerForSearch(locale: Locale, forPhrases: Boolean, addSynonyms: Boolean)
+    extends JochreAnalyzerBase(locale) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
 
@@ -24,7 +25,7 @@ class JochreAnalyzerForSearch(locale: Locale, forPhrases: Boolean) extends Jochr
     .andThenIf(!forPhrases)(stopWordFilter)
     .andThen(lowercaseFilter)
     .andThen(skipPunctuationFilter)
-    .andThen(synonymFilter)
+    .andThenIf(addSynonyms)(synonymFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 

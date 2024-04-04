@@ -1,9 +1,11 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.{DocReference, IndexField}
 import com.joliciel.jochre.search.core.db.PostgresDatabase.getClass
 import com.joliciel.jochre.search.core.text.SynonymMapReader
 import com.typesafe.config.ConfigFactory
+import org.apache.lucene.analysis.Analyzer
+import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.store.{Directory, FSDirectory, SingleInstanceLockFactory}
@@ -12,8 +14,17 @@ import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
 
+import scala.jdk.CollectionConverters._
+
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
-  private val config = new IndexWriterConfig(analyzerGroup.forIndexing)
+  val analyzerPerField: Map[String, Analyzer] = Map(
+    IndexField.Text.entryName -> analyzerGroup.forIndexing
+  )
+
+  val indexAnalyzer: PerFieldAnalyzerWrapper =
+    new PerFieldAnalyzerWrapper(analyzerGroup.forIndexingFields, analyzerPerField.asJava)
+
+  private val config = new IndexWriterConfig(indexAnalyzer)
   private val log = LoggerFactory.getLogger(getClass)
 
   log.info(f"Opening index at $indexDirectory")

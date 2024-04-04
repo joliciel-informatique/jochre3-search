@@ -1,6 +1,7 @@
 package com.joliciel.jochre.search.core.lucene.highlight
 
-import com.joliciel.jochre.search.core.lucene.{LuceneField, NEWLINE_TOKEN, PAGE_TOKEN, Token}
+import com.joliciel.jochre.search.core.IndexField
+import com.joliciel.jochre.search.core.lucene.{NEWLINE_TOKEN, PAGE_TOKEN, Token}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute}
@@ -11,7 +12,7 @@ import org.slf4j.LoggerFactory
 
 import scala.collection.immutable.ArraySeq
 
-case class JochreHighlighter(query: Query, field: LuceneField) {
+case class JochreHighlighter(query: Query, field: IndexField) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search.highlighter")
   protected val formatter =
