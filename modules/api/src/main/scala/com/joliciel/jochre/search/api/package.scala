@@ -12,4 +12,6 @@ package object api {
   val PngCodecFormat: CodecFormat = new CodecFormat {
     override def mediaType: MediaType = MediaType.ImagePng
   }
+
+  case class OkResponse(result: String = "OK")
 }

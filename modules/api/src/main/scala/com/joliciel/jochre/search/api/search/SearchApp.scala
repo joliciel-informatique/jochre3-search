@@ -33,8 +33,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Option[String],
         Option[String],
         List[String],
-        Boolean,
-        Boolean,
+        Option[Boolean],
+        Option[Boolean],
         Option[Int],
         Option[Int],
         List[String],
@@ -62,12 +62,16 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
       .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
       .in(
-        query[Boolean]("authorInclude").description("Whether the authors should be included or excluded").example(true)
+        query[Option[Boolean]]("authorInclude")
+          .description("Whether the authors should be included or excluded. Default is true.")
+          .example(Some(true))
       )
       .in(
-        query[Boolean]("strict")
-          .description("Whether query strings should be expanded to related synonyms (false) or not (true)")
-          .example(false)
+        query[Option[Boolean]]("strict")
+          .description(
+            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
+          )
+          .example(Some(false))
       )
       .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
       .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))
@@ -154,8 +158,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Option[String],
         Option[String],
         List[String],
-        Boolean,
-        Boolean,
+        Option[Boolean],
+        Option[Boolean],
         Option[Int],
         Option[Int],
         List[String],
@@ -180,12 +184,16 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
       .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
       .in(
-        query[Boolean]("authorInclude").description("Whether the authors should be included or excluded").example(true)
+        query[Option[Boolean]]("authorInclude")
+          .description("Whether the authors should be included or excluded. Default is true.")
+          .example(Some(true))
       )
       .in(
-        query[Boolean]("strict")
-          .description("Whether query strings should be expanded to related synonyms (false) or not (true)")
-          .example(false)
+        query[Option[Boolean]]("strict")
+          .description(
+            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
+          )
+          .example(Some(false))
       )
       .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
       .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))

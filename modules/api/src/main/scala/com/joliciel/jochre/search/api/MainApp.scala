@@ -6,10 +6,11 @@ import com.joliciel.jochre.search.api.Types.AppTask
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, AuthenticationProviderConfig}
 import com.joliciel.jochre.search.api.index.IndexApp
 import com.joliciel.jochre.search.api.search.SearchApp
+import com.joliciel.jochre.search.api.users.UserApp
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.service.{SearchRepo, SearchService}
+import com.joliciel.jochre.search.core.service.{PreferenceRepo, PreferenceService, SearchRepo, SearchService}
 import com.typesafe.config.ConfigFactory
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder
@@ -44,17 +45,19 @@ object MainApp extends ZIOAppDefault {
     val searchRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(searchDirectives.http).toRoutes
     val indexDirectives: IndexApp = IndexApp(authenticationProvider, executor.asExecutionContext)
     val indexRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(indexDirectives.http).toRoutes
+    val userDirectives: UserApp = UserApp(authenticationProvider, executor.asExecutionContext)
+    val userRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(userDirectives.http).toRoutes
 
     val version = sys.env.get("JOCHRE3_SEARCH_VERSION").getOrElse("0.1.0-SNAPSHOT")
     val swaggerDirectives =
       SwaggerInterpreter().fromEndpoints[AppTask](
-        searchDirectives.endpoints ++ indexDirectives.endpoints,
+        searchDirectives.endpoints ++ indexDirectives.endpoints ++ userDirectives.endpoints,
         "Jochre Search Server",
         version
       )
     val swaggerRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(swaggerDirectives).toRoutes
 
-    val routes = searchRoutes <+> indexRoutes <+> swaggerRoutes
+    val routes = searchRoutes <+> indexRoutes <+> userRoutes <+> swaggerRoutes
 
     val httpApp = Router("/" -> routes).orNotFound
 
@@ -103,7 +106,9 @@ object MainApp extends ZIOAppDefault {
         PostgresDatabase.transactorLive,
         SearchRepo.live,
         JochreIndex.live,
-        SearchService.live
+        SearchService.live,
+        PreferenceRepo.live,
+        PreferenceService.live
       )
   }
 

@@ -22,4 +22,12 @@ trait DatabaseTestBase {
       searchRepo <- ZIO.service[SearchRepo]
       _ <- searchRepo.deleteAll
     } yield searchRepo
+
+  val preferenceRepoLayer = transactorLayer >>> PreferenceRepo.live
+
+  def getPreferenceRepo() =
+    for {
+      preferenceRepo <- ZIO.service[PreferenceRepo]
+      _ <- preferenceRepo.deleteAll
+    } yield preferenceRepo
 }

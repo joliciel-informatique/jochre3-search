@@ -8,3 +8,4 @@ class BadMetadataFileFormat(message: String) extends BadRequestException(message
 class DocumentNotFoundInIndex(message: String) extends NotFoundException(message)
 class BadOffsetForImageSnippet(message: String) extends BadRequestException(message)
 class IndexFieldNotAggregatable(message: String) extends BadRequestException(message)
+class InvalidJsonException(message: String) extends BadRequestException(message)

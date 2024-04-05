@@ -17,9 +17,11 @@ object Libraries {
   val flywayVersion = "10.6.0"
   val catsVersion = "2.10.0"
   val sttpVersion = "3.9.2"
+  val circeVersion = "0.14.6"
 
   val typeDeps = Seq(
-    "com.beachape" %% "enumeratum" % enumeratumVersion
+    "com.beachape" %% "enumeratum" % enumeratumVersion,
+    "io.circe" %% "circe-literal" % circeVersion
   )
 
   val loggingDeps = Seq(
@@ -48,6 +50,7 @@ object Libraries {
     "org.tpolecat" %% "doobie-core" % doobieVersion,
     "org.tpolecat" %% "doobie-hikari" % doobieVersion, // HikariCP transactor.
     "org.tpolecat" %% "doobie-postgres" % doobieVersion, // Postgres driver 42.3.1 + type mappings.
+    "org.tpolecat" %% "doobie-postgres-circe" % doobieVersion,
     "org.tpolecat" %% "doobie-specs2" % doobieVersion % "test", // Specs2 support for typechecking statements.
     "org.tpolecat" %% "doobie-scalatest" % doobieVersion % "test", // ScalaTest support for typechecking statements.
     "com.beachape" %% "enumeratum-doobie" % enumeratumDoobieVersion,

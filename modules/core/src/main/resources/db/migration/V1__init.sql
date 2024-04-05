@@ -40,3 +40,10 @@ CREATE TABLE word(
   FOREIGN KEY(row_id) REFERENCES row(id),
   CONSTRAINT uk_word UNIQUE (doc_rev, start_offset)
 );
+
+CREATE TABLE preferences (
+  username TEXT NOT NULL,
+  key TEXT NOT NULL,
+  preference json NOT NULL,
+  PRIMARY KEY(username, key)
+);

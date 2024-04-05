@@ -72,8 +72,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | WHERE document.reference = ${ref.ref}
          | AND page.index = $pageNumber
        """.stripMargin
-      .query[Option[DbPage]]
-      .unique
+      .query[DbPage]
+      .option
       .transact(transactor)
 
   def getPage(pageId: PageId): Task[DbPage] =
@@ -95,8 +95,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | WHERE document.rev = ${docRev.rev}
          | AND word.start_offset = $startOffset
        """.stripMargin
-      .query[Option[DbPage]]
-      .unique
+      .query[DbPage]
+      .option
       .transact(transactor)
 
   def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
@@ -108,8 +108,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | AND page.index = $pageNumber
          | AND row.index = $rowIndex
        """.stripMargin
-      .query[Option[DbRow]]
-      .unique
+      .query[DbRow]
+      .option
       .transact(transactor)
 
   def getRowByStartOffset(docRev: DocRev, startOffset: Int): Task[Option[DbRow]] =
@@ -120,8 +120,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | WHERE document.rev = ${docRev.rev}
          | AND word.start_offset = $startOffset
        """.stripMargin
-      .query[Option[DbRow]]
-      .unique
+      .query[DbRow]
+      .option
       .transact(transactor)
 
   def getRowByEndOffset(docRev: DocRev, endOffset: Int): Task[Option[DbRow]] =
@@ -134,8 +134,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          |   WHERE w2.start_offset < $endOffset
          |   AND w2.doc_rev = document.rev)
        """.stripMargin
-      .query[Option[DbRow]]
-      .unique
+      .query[DbRow]
+      .option
       .transact(transactor)
 
   def getRow(rowId: RowId): Task[DbRow] =
@@ -154,8 +154,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | WHERE document.rev = ${docRev.rev}
          | AND word.start_offset = $offset
        """.stripMargin
-      .query[Option[DbWord]]
-      .unique
+      .query[DbWord]
+      .option
       .transact(transactor)
 
   def getWord(wordId: WordId): Task[DbWord] =

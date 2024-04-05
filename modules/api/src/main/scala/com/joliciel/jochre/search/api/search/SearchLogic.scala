@@ -25,8 +25,8 @@ trait SearchLogic extends HttpErrorMapper {
       query: Option[String],
       title: Option[String],
       authors: List[String],
-      authorInclude: Boolean,
-      strict: Boolean,
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
       fromYear: Option[Int],
       toYear: Option[Int],
       docRefs: List[String],
@@ -69,8 +69,8 @@ trait SearchLogic extends HttpErrorMapper {
       query: Option[String],
       title: Option[String],
       authors: List[String],
-      authorInclude: Boolean,
-      strict: Boolean,
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
       fromYear: Option[Int],
       toYear: Option[Int],
       docRefs: List[String],
@@ -108,20 +108,22 @@ trait SearchLogic extends HttpErrorMapper {
       query: Option[String],
       title: Option[String],
       authors: List[String],
-      authorInclude: Boolean,
-      strict: Boolean,
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
       fromYear: Option[Int],
       toYear: Option[Int],
       docRefs: List[String]
   ): Task[SearchQuery] = ZIO.attempt {
+    val effectiveStrict = strict.getOrElse(false)
+    val effectiveAuthorInclude = authorInclude.getOrElse(true)
     val criteria = Seq(
-      query.map(SearchCriterion.Contains(IndexField.Text, _, strict = strict)),
-      title.map(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), _, strict = strict)),
+      query.map(SearchCriterion.Contains(IndexField.Text, _, strict = effectiveStrict)),
+      title.map(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), _, strict = effectiveStrict)),
       Option.when(authors.nonEmpty) {
         val authorCriterion = SearchCriterion.ValueIn(IndexField.Author, authors)
         val authorEnglishCriterion = SearchCriterion.ValueIn(IndexField.AuthorEnglish, authors)
         val orCriterion = SearchCriterion.Or(authorCriterion, authorEnglishCriterion)
-        if (authorInclude) {
+        if (effectiveAuthorInclude) {
           orCriterion
         } else {
           SearchCriterion.Not(orCriterion)
