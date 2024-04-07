@@ -1,8 +1,10 @@
 package com.joliciel.jochre.search.api.authentication
 
 import com.joliciel.jochre.search.api.HttpError.Unauthorized
+import com.joliciel.jochre.search.api.MainApp.getClass
 import com.safetydata.cloakroom.scala.{VerificationError, VerifiedToken}
 import io.circe.generic.auto._
+import org.slf4j.LoggerFactory
 import sttp.model.StatusCode
 import sttp.tapir.PublicEndpoint
 import sttp.tapir.generic.auto._
@@ -13,6 +15,8 @@ import zio._
 import scala.concurrent.{ExecutionContext, Future}
 
 trait TokenAuthentication {
+  private val log = LoggerFactory.getLogger(getClass)
+
   def authenticationProvider: AuthenticationProvider
 
   def secureEndpoint[R](
@@ -56,8 +60,12 @@ trait TokenAuthentication {
     }
     .flatMap(ZIO.fromEither[VerificationError, VerifiedToken](_))
     .mapError {
-      case error: VerificationError => Unauthorized(f"Token verification error: ${error.reason}")
-      case throwable: Throwable     => Unauthorized(f"Unable to authorize: ${throwable.getMessage}")
+      case error: VerificationError =>
+        log.error(f"Token verification error: ${error.reason}")
+        Unauthorized(f"Token verification error: ${error.reason}")
+      case throwable: Throwable =>
+        log.error(f"Unable to authorize", throwable)
+        Unauthorized(f"Unable to authorize: ${throwable.getMessage}")
     }
 
   private def extractToken(headerValue: String): String = headerValue.replaceFirst("\\s_Bearer\\s+", "")

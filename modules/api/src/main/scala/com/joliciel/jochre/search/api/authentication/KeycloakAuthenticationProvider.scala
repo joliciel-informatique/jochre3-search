@@ -16,9 +16,9 @@ object KeycloakAuthenticationProvider {
   def create(realm: String, timeout: Option[Duration]): AuthenticationProvider = {
     val keycloakDeployment = CloakroomConfig.fromTypeSafeConf(realm).keycloakDeployment()
 
-    val endpoint = auth.oauth2.authorizationCode(
-      authorizationUrl = Some(keycloakDeployment.getAuthUrl.build().toString),
-      tokenUrl = Some(keycloakDeployment.getTokenUrl),
+    val endpoint = auth.oauth2.authorizationCodeFlow(
+      authorizationUrl = keycloakDeployment.getAuthUrl.build().toString,
+      tokenUrl = keycloakDeployment.getTokenUrl,
       scopes = ListMap()
     )
 

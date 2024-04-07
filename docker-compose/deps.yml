@@ -22,8 +22,8 @@ services:
       dockerfile: keycloak-with-test-realm.Dockerfile
     environment:
       KEYCLOAK_IMPORT: /realm.json
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: password
       KEYCLOAK_HTTP_PORT: 8080
       DB_VENDOR: h2
     logging:

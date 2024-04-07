@@ -10,7 +10,7 @@ services:
       - sbt_cache:/root/.sbt
     environment:
       POSTGRES_URL: jdbc:postgresql://postgres:5432/jochre_search
-      KEYCLOAK_AUTH_SERVER_URL: http://keycloak:8080/auth/
+      KEYCLOAK_AUTH_SERVER_URL: http://keycloak:8080/
   publisher:
     command: docker:publish
     build:

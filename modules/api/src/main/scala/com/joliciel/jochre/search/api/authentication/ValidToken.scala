@@ -2,12 +2,14 @@ package com.joliciel.jochre.search.api.authentication
 
 import com.joliciel.jochre.search.api.HttpError.Unauthorized
 import com.safetydata.cloakroom.scala.VerifiedToken
+import org.slf4j.LoggerFactory
 
 /** Corresponds to a verified token with a username, email and roles
   */
 case class ValidToken private[api] (username: String, email: String, roles: Set[RoleName])
 
 object ValidToken {
+  private val log = LoggerFactory.getLogger(getClass)
 
   def fromVerifiedToken(
       verifiedToken: VerifiedToken,
@@ -19,6 +21,8 @@ object ValidToken {
       case token if token.email.isEmpty =>
         Left(Unauthorized("Token without email"))
       case token if !requiresRoles.map(_.name).subsetOf(token.roles) =>
+        log.warn(f"User ${verifiedToken.username} has roles ${verifiedToken.roles
+          .mkString(",")}. Required: ${requiresRoles.map(_.name).mkString(",")}")
         Left(Unauthorized("Unauthorized user"))
       case token =>
         Right(

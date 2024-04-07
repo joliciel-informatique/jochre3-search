@@ -43,6 +43,57 @@
   "quickLoginCheckMilliSeconds": 1000,
   "maxDeltaTimeSeconds": 43200,
   "failureFactor": 30,
+  "users": [
+    {
+      "username": "test@joli-ciel.com",
+      "enabled": true,
+      "email": "test@joli-ciel.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "clientRoles": {
+        "jochre": [
+        ]
+      }
+    },
+    {
+      "username": "admintest@joli-ciel.com",
+      "enabled": true,
+      "email": "admintest@joli-ciel.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "clientRoles": {
+        "jochre": [
+          "index"
+        ]
+      }
+    },
+    {
+      "username": "jochre.admin",
+      "enabled": true,
+      "email": "jochre@joli-ciel.com",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password"
+        }
+      ],
+      "clientRoles": {
+        "realm-management": [
+          "realm-admin"
+        ]
+      }
+    }
+  ],
   "roles": {
     "realm": [
       {
@@ -89,7 +140,7 @@
       "jochre": [
         {
           "id": "fc85a3f2-a403-43a6-b783-0f1a8a569806",
-          "name": "analysis",
+          "name": "index",
           "composite": false,
           "clientRole": true,
           "containerId": "bdc00e06-17dd-4853-b782-8487767a03b3",
@@ -643,8 +694,13 @@
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
-      "redirectUris": [],
-      "webOrigins": [],
+      "redirectUris": [
+        "http://localhost:4242/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,
