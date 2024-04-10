@@ -17,7 +17,7 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.headers.Origin
 import org.http4s.implicits._
 import org.http4s.server.Router
-import org.http4s.server.middleware.CORS
+import org.http4s.server.middleware.{CORS, Logger}
 import org.slf4j.LoggerFactory
 import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
@@ -87,7 +87,14 @@ object MainApp extends ZIOAppDefault {
       )
     }
 
-    val corsService = corsPolicyWithHosts.apply(httpApp)
+    val loggerService = Logger.httpApp[AppTask](
+      logHeaders = false,
+      logBody = true,
+      redactHeadersWhen = _ => false,
+      logAction = Some((msg: String) => ZIO.succeed(log.info(msg)))
+    )(httpApp)
+
+    val corsService = corsPolicyWithHosts.apply(loggerService)
 
     // Starting the server
     val server = EmberServerBuilder

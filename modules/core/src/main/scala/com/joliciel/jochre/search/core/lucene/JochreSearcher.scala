@@ -113,14 +113,18 @@ private[lucene] class JochreSearcher(
 
   def aggregate(searchQuery: SearchQuery, field: IndexField, maxBins: Int): Seq[AggregationBin] = {
     val facetCollector = this.prepareFacetCollector(searchQuery)
-    val facets = new SortedSetDocValuesFacetCounts(
-      new DefaultSortedSetDocValuesReaderState(this.indexReader, FacetConfigHolder.facetsConfig),
-      facetCollector
-    ).getTopChildren(maxBins, field.entryName)
+    val facets = Option(
+      new SortedSetDocValuesFacetCounts(
+        new DefaultSortedSetDocValuesReaderState(this.indexReader, FacetConfigHolder.facetsConfig),
+        facetCollector
+      ).getTopChildren(maxBins, field.entryName)
+    )
 
-    facets.labelValues.map { labelAndValue =>
-      AggregationBin(labelAndValue.label, labelAndValue.value.intValue())
-    }.toSeq
+    facets
+      .map(_.labelValues.map { labelAndValue =>
+        AggregationBin(labelAndValue.label, labelAndValue.value.intValue())
+      }.toSeq)
+      .getOrElse(Seq.empty)
   }
 
   private def prepareFacetCollector(searchQuery: SearchQuery): FacetsCollector = {

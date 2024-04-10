@@ -62,7 +62,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
       .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
       .in(
-        query[Option[Boolean]]("authorInclude")
+        query[Option[Boolean]]("author-include")
           .description("Whether the authors should be included or excluded. Default is true.")
           .example(Some(true))
       )
@@ -73,10 +73,10 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           )
           .example(Some(false))
       )
-      .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
-      .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))
+      .in(query[Option[Int]]("from-year").description("The earliest year of publication").example(Some(1900)))
+      .in(query[Option[Int]]("to-year").description("The latest year of publication").example(Some(1920)))
       .in(
-        query[List[String]]("docRefs").description("Which document references to include").example(List("nybc200089"))
+        query[List[String]]("doc-refs").description("Which document references to include").example(List("nybc200089"))
       )
       .in(query[Int]("first").description("The first result to return on the page of results").example(20))
       .in(query[Int]("max").description("The max number of results to return on the page of results").example(10))
