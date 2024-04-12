@@ -89,7 +89,7 @@ object MainApp extends ZIOAppDefault {
 
     val loggerService = Logger.httpApp[AppTask](
       logHeaders = false,
-      logBody = true,
+      logBody = false,
       redactHeadersWhen = _ => false,
       logAction = Some((msg: String) => ZIO.succeed(log.info(msg)))
     )(httpApp)
