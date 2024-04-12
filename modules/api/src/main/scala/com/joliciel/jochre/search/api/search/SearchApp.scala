@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound, Unauthorized}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
@@ -235,17 +235,35 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
     getTopAuthorsEndpoint.serverLogic[Requirements](token => input => (getTopAuthorsLogic _).tupled(token +: input))
 
+  val getSizeEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    Unit,
+    HttpError,
+    SizeResponse,
+    Any
+  ] = secureEndpoint().get
+    .in("size")
+    .out(jsonBody[SizeResponse].example(SizeResponse(42)))
+    .description("Return the number of documents in the index")
+
+  val getSizeHttp: ZServerEndpoint[Requirements, Any] =
+    getSizeEndpoint.serverLogic[Requirements](_ => _ => getSizeLogic())
+
   val endpoints: List[AnyEndpoint] = List(
     getSearchEndpoint,
     getImageSnippetEndpoint,
     getAggregateEndpoint,
-    getTopAuthorsEndpoint
+    getTopAuthorsEndpoint,
+    getSizeEndpoint
   ).map(_.endpoint.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     getSearchHttp,
     getImageSnippetHttp,
     getAggregateHttp,
-    getTopAuthorsHttp
+    getTopAuthorsHttp,
+    getSizeHttp
   )
 }

@@ -104,6 +104,14 @@ trait SearchLogic extends HttpErrorMapper {
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top authors", error))
     .mapError(mapToHttpError)
 
+  def getSizeLogic(): ZIO[Requirements, HttpError, SizeResponse] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      size <- searchService.getIndexSize()
+    } yield SizeResponse(size)
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get index size", error))
+    .mapError(mapToHttpError)
+
   private def getSearchQuery(
       query: Option[String],
       title: Option[String],

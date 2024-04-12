@@ -1,5 +1,6 @@
 package com.joliciel.jochre.search.api.authentication
 
+import com.joliciel.jochre.search.api.HttpError
 import com.joliciel.jochre.search.api.HttpError.Unauthorized
 import com.joliciel.jochre.search.api.MainApp.getClass
 import com.safetydata.cloakroom.scala.{VerificationError, VerifiedToken}
@@ -21,12 +22,12 @@ trait TokenAuthentication {
 
   def secureEndpoint[R](
       requiresRoles: RoleName*
-  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, Unauthorized, Unit, Any] =
+  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, HttpError, Unit, Any] =
     RichZEndpoint(
       tapirEndpoint
         .securityIn(authenticationProvider.tokenEndpointInput)
         .errorOut(
-          oneOf[Unauthorized](
+          oneOf[HttpError](
             oneOfVariant[Unauthorized](
               StatusCode.Unauthorized,
               jsonBody[Unauthorized].description("Invalid token or missing permissions")

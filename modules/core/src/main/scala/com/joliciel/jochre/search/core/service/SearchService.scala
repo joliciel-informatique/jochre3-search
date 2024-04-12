@@ -66,6 +66,8 @@ trait SearchService {
       prefix: String,
       maxBins: Int
   ): Task[AggregationBins]
+
+  def getIndexSize(): Task[Int]
 }
 
 private[service] case class SearchServiceImpl(
@@ -674,6 +676,12 @@ private[service] case class SearchServiceImpl(
         imageSnippet
       }
     } yield { image }
+  }
+
+  override def getIndexSize(): Task[Int] = ZIO.fromTry {
+    Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      searcher.indexSize
+    }
   }
 }
 
