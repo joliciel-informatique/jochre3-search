@@ -19,9 +19,9 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def insertPage(docRev: DocRev, page: Page): Task[PageId] =
-    sql"""INSERT INTO page (doc_rev, index, width, height)
-        | VALUES (${docRev.rev}, ${page.physicalPageNumber}, ${page.width}, ${page.height})
+  def insertPage(docRev: DocRev, page: Page, offset: Int): Task[PageId] =
+    sql"""INSERT INTO page (doc_rev, index, width, height, start_offset)
+        | VALUES (${docRev.rev}, ${page.physicalPageNumber}, ${page.width}, ${page.height}, $offset)
         | RETURNING id
         | """.stripMargin
       .query[PageId]
@@ -65,11 +65,11 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def getPage(ref: DocReference, pageNumber: Int): Task[Option[DbPage]] =
-    sql"""SELECT page.id, doc_rev, index, width, height
+  def getPage(docRev: DocRev, pageNumber: Int): Task[Option[DbPage]] =
+    sql"""SELECT page.id, doc_rev, index, width, height, start_offset
          | FROM page
          | INNER JOIN document ON page.doc_rev = document.rev
-         | WHERE document.reference = ${ref.ref}
+         | WHERE document.rev = ${docRev.rev}
          | AND page.index = $pageNumber
        """.stripMargin
       .query[DbPage]
@@ -77,7 +77,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getPage(pageId: PageId): Task[DbPage] =
-    sql"""SELECT page.id, doc_rev, index, width, height
+    sql"""SELECT page.id, doc_rev, index, width, height, start_offset
          | FROM page
          | INNER JOIN document ON page.doc_rev = document.rev
          | WHERE page.id = ${pageId.id}
@@ -86,17 +86,27 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def getPageByStartOffset(docRev: DocRev, startOffset: Int): Task[Option[DbPage]] =
-    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height
+  def getPageByWordOffset(docRev: DocRev, wordOffset: Int): Task[Option[DbPage]] =
+    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height, page.start_offset
          | FROM page
          | INNER JOIN document ON page.doc_rev = document.rev
          | INNER JOIN word ON word.doc_rev = document.rev
          | INNER JOIN row ON row.id = word.row_id AND row.page_id = page.id
          | WHERE document.rev = ${docRev.rev}
-         | AND word.start_offset = $startOffset
+         | AND word.start_offset = $wordOffset
        """.stripMargin
       .query[DbPage]
       .option
+      .transact(transactor)
+
+  def getPages(docRev: DocRev): Task[Seq[DbPage]] =
+    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height, page.start_offset
+         | FROM page
+         | WHERE page.doc_rev = ${docRev.rev}
+         | ORDER BY page.index
+       """.stripMargin
+      .query[DbPage]
+      .to[Seq]
       .transact(transactor)
 
   def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
@@ -136,6 +146,25 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
        """.stripMargin
       .query[DbRow]
       .option
+      .transact(transactor)
+
+  def getRowsByStartAndEndOffset(docRev: DocRev, startOffset: Int, endOffset: Int): Task[Seq[DbRow]] =
+    sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
+         | FROM row
+         | INNER JOIN row AS start_row ON row.page_id = start_row.page_id AND row.index >= start_row.index
+         | INNER JOIN row AS end_row ON row.page_id = end_row.page_id AND row.index <= end_row.index
+         | INNER JOIN word AS start_word ON start_row.id = start_word.row_id
+         | INNER JOIN word AS end_word ON end_row.id = end_word.row_id
+         | INNER JOIN document ON start_word.doc_rev = document.rev AND end_word.doc_rev = document.rev
+         | WHERE document.rev = ${docRev.rev}
+         | AND start_word.start_offset = $startOffset
+         | AND end_word.start_offset = (SELECT max(w2.start_offset) FROM word w2
+         |   WHERE w2.start_offset < $endOffset
+         |   AND w2.doc_rev = document.rev)
+         | ORDER BY row.page_id, row.index
+       """.stripMargin
+      .query[DbRow]
+      .to[Seq]
       .transact(transactor)
 
   def getRow(rowId: RowId): Task[DbRow] =

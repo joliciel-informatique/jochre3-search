@@ -22,12 +22,12 @@ trait TokenAuthentication {
 
   def secureEndpoint[R](
       requiresRoles: RoleName*
-  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, HttpError, Unit, Any] =
+  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, Unauthorized, Unit, Any] =
     RichZEndpoint(
       tapirEndpoint
         .securityIn(authenticationProvider.tokenEndpointInput)
         .errorOut(
-          oneOf[HttpError](
+          oneOf[Unauthorized](
             oneOfVariant[Unauthorized](
               StatusCode.Unauthorized,
               jsonBody[Unauthorized].description("Invalid token or missing permissions")

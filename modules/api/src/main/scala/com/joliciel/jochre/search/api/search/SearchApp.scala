@@ -1,21 +1,22 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound, Unauthorized}
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
-import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
 import com.joliciel.jochre.search.core.service.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
+import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.{Header, MediaType, StatusCode}
-import sttp.tapir.AnyEndpoint
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
+import sttp.tapir.{AnyEndpoint, CodecFormat}
 import zio.stream.ZStream
 
+import java.nio.charset.StandardCharsets
 import scala.concurrent.ExecutionContext
 
 case class SearchApp(override val authenticationProvider: AuthenticationProvider, executionContext: ExecutionContext)
@@ -235,6 +236,42 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
     getTopAuthorsEndpoint.serverLogic[Requirements](token => input => (getTopAuthorsLogic _).tupled(token +: input))
 
+  val getTextAsHtmlEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    DocReference,
+    HttpError,
+    ZStream[
+      Any,
+      Throwable,
+      Byte
+    ],
+    Any with ZioStreams
+  ] = secureEndpoint().get
+    .errorOutVariant[HttpError](
+      oneOfVariant[NotFound](
+        StatusCode.NotFound,
+        jsonBody[NotFound].description("Document reference not found in index")
+      )
+    )
+    .in("text-as-html")
+    .in(
+      query[DocReference]("doc-ref")
+        .description("Document reference whose text we want.")
+        .example(DocReference("nybc200089"))
+    )
+    .out(
+      streamTextBody(ZioStreams)(
+        CodecFormat.TextHtml(),
+        Some(StandardCharsets.UTF_8)
+      )
+    )
+    .description("Return the document in HTML format")
+
+  val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
+    getTextAsHtmlEndpoint.serverLogic[Requirements](_ => input => getTextAsHtmlLogic(input))
+
   val getSizeEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
@@ -244,6 +281,9 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     SizeResponse,
     Any
   ] = secureEndpoint().get
+    .errorOutVariant[HttpError](
+      oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Index not found"))
+    )
     .in("size")
     .out(jsonBody[SizeResponse].example(SizeResponse(42)))
     .description("Return the number of documents in the index")
@@ -256,6 +296,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getImageSnippetEndpoint,
     getAggregateEndpoint,
     getTopAuthorsEndpoint,
+    getTextAsHtmlEndpoint,
     getSizeEndpoint
   ).map(_.endpoint.tag("search"))
 
@@ -264,6 +305,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getImageSnippetHttp,
     getAggregateHttp,
     getTopAuthorsHttp,
+    getTextAsHtmlHttp,
     getSizeHttp
   )
 }
