@@ -3,6 +3,9 @@ services:
   postgres:
     ports:
       - 5432:5432
+  postgres-test:
+    ports:
+      - 5433:5432
   keycloak:
     ports:
       - 8080:8080

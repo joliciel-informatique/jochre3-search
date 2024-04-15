@@ -5,12 +5,23 @@ volumes:
 services:
   postgres:
     image: postgres:15.3-alpine
-    #volumes:
-    #  - pgdata:/var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: jochre
       POSTGRES_PASSWORD: password
       POSTGRES_DB: jochre_search
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "10"
+  postgres-test:
+    image: postgres:15.3-alpine
+    environment:
+      POSTGRES_USER: jochre
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jochre_search_test
     logging:
       driver: "json-file"
       options:
