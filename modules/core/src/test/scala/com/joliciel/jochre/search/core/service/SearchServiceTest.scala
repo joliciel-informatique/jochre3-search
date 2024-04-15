@@ -8,7 +8,8 @@ import com.joliciel.jochre.search.core.{
   DocReference,
   IndexField,
   SearchCriterion,
-  SearchQuery
+  SearchQuery,
+  Sort
 }
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
@@ -122,6 +123,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         resultAre <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "are", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(1),
@@ -140,6 +142,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         resultArePadding <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "are", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(1),
@@ -162,6 +165,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         resultAre <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "today", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(1),
@@ -185,6 +189,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         phraseResult <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"will rain tomorrow\"", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(1),
@@ -193,6 +198,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
         phraseWithHyphenResult <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"day today Madam\"", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(1),
@@ -227,6 +233,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         resultsThink <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "think", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(100),
@@ -251,6 +258,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
         resultsThinkPadding <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "think", strict = false)),
+          Sort.Score,
           0,
           100,
           Some(100),

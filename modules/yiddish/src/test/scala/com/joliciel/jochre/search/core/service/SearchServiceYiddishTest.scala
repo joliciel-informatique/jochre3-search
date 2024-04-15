@@ -1,7 +1,7 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, SearchQuery}
+import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, SearchQuery, Sort}
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -28,6 +28,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
         searchResults <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn", strict = false)),
+          Sort.Score,
           0,
           10,
           Some(20),
