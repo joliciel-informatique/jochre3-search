@@ -61,7 +61,7 @@ object SearchCriterion {
       if (field.isTokenized) {
         throw new WrongFieldTypeException(f"Cannot perform StartsWith on field ${field.entryName}: field is tokenized")
       }
-      val prefixQuery = new PrefixQuery(new Term(IndexField.Author.entryName, prefix))
+      val prefixQuery = new PrefixQuery(new Term(field.entryName, prefix))
       prefixQuery
     }
   }

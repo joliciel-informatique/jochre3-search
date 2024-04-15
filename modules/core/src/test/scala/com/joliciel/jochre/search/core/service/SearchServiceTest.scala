@@ -27,7 +27,12 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
 
   private val docRef1 = DocReference("doc1")
   private val metadata1 =
-    DocMetadata(title = Some("Hello World"), author = Some("Joe Schmoe"), publicationYear = Some("1917"))
+    DocMetadata(
+      title = Some("Hello World"),
+      author = Some("Joe Schmoe"),
+      authorEnglish = Some("דשאָו שמאָו"),
+      publicationYear = Some("1917")
+    )
   private val alto1 = textToAlto(
     "doc1",
     "Hello world!\n" +
@@ -342,10 +347,12 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         binsJ <- searchService.getTopAuthors("J", 5)
         binsJo <- searchService.getTopAuthors("Jo", 5)
         binsJ1 <- searchService.getTopAuthors("J", 1)
+        binsDalet <- searchService.getTopAuthors("ד", 5)
       } yield {
         assertTrue(binsJ == AggregationBins(Seq(AggregationBin("Jack Sprat", 1), AggregationBin("Joe Schmoe", 2)))) &&
         assertTrue(binsJo == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2)))) &&
-        assertTrue(binsJ1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2))))
+        assertTrue(binsJ1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2)))) &&
+        assertTrue(binsDalet == AggregationBins(Seq(AggregationBin("דשאָו שמאָו", 1))))
       }
     }
   ).provideLayer(

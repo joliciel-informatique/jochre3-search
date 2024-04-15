@@ -560,7 +560,13 @@ private[service] case class SearchServiceImpl(
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
       val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.Author, prefix))
       val bins = searcher.aggregate(searchQuery, IndexField.Author, maxBins)
-      AggregationBins(bins.sortBy(_.label))
+      val transcribedBins = if (bins.isEmpty) {
+        val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.AuthorEnglish, prefix))
+        searcher.aggregate(searchQuery, IndexField.AuthorEnglish, maxBins)
+      } else {
+        bins
+      }
+      AggregationBins(transcribedBins.sortBy(_.label))
     }
   }
 
