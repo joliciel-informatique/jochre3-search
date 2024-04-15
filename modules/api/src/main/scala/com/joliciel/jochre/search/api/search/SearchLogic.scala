@@ -4,17 +4,9 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper}
 import com.joliciel.jochre.search.core.service.{Highlight, SearchResponse, SearchService}
-import com.joliciel.jochre.search.core.{
-  AggregationBins,
-  DocReference,
-  IndexField,
-  NoSearchCriteriaException,
-  SearchCriterion,
-  SearchQuery,
-  UnknownFieldException
-}
+import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField, NoSearchCriteriaException, SearchCriterion, SearchQuery, UnknownFieldException}
+import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
-import zio.stream.ZStream
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import javax.imageio.ImageIO
@@ -103,6 +95,19 @@ trait SearchLogic extends HttpErrorMapper {
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top authors", error))
     .mapError(mapToHttpError)
+
+  def getTextAsHtmlLogic(
+      docRef: DocReference
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      textAsHtml <- searchService.getTextAsHtml(docRef)
+    } yield {
+      ZStream(textAsHtml)
+        .via(ZPipeline.utf8Encode)
+    })
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
+      .mapError(mapToHttpError)
 
   def getSizeLogic(): ZIO[Requirements, HttpError, SizeResponse] = {
     for {

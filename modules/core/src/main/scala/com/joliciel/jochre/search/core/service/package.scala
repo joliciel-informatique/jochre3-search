@@ -71,7 +71,7 @@ package object service {
   private[service] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
 
   private[service] case class PageId(id: Long) extends AnyVal
-  private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int)
+  private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
 
   private[service] case class RowId(id: Long) extends AnyVal
   private[service] case class DbRow(

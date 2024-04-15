@@ -42,20 +42,23 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   private val docRef2 = DocReference("doc2")
   private val metadata2 =
     DocMetadata(title = Some("Hello people"), author = Some("Jack Sprat"), publicationYear = Some("[192_]"))
+
+  private val text2 = "Hello people.\n" +
+    "How are you?\n" +
+    "Fine, thank you.\n" +
+    "With pleasure.\n" +
+    "\n" +
+    "Think it will rain\n" +
+    "tomorrow? Oh no, I\n" +
+    "don't think so.\n" +
+    "\n" +
+    "I think it will be\n" +
+    "sunny tomorrow, and even\n" +
+    "the day after"
+
   private val alto2 = textToAlto(
     "doc2",
-    "Hello people.\n" +
-      "How are you?\n" +
-      "Fine, thank you.\n" +
-      "With pleasure.\n" +
-      "\n" +
-      "Think it will rain\n" +
-      "tomorrow? Oh no, I\n" +
-      "don't think so.\n" +
-      "\n" +
-      "I think it will be\n" +
-      "sunny tomorrow, and even\n" +
-      "the day after",
+    text2,
     alternativeMap
   )
 
@@ -94,12 +97,16 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             searcher.findMatchingRefs(query)
           }.get
         }
+        textWithHtml <- searchService.getTextAsHtml(docRef2)
       } yield {
         assertTrue(pageCount1 == 1) &&
         assertTrue(pageCount2 == 3) &&
         assertTrue(refsWorld == Seq(docRef1)) &&
         assertTrue(refsHiWorld == Seq(docRef1)) &&
-        assertTrue(refsHello.toSet == Set(docRef1, docRef2))
+        assertTrue(refsHello.toSet == Set(docRef1, docRef2)) &&
+        assertTrue(
+          textWithHtml.replaceAll("<(.+?)>", "") == f"${metadata2.title.get}${text2.replaceAll("\n", "")}"
+        )
       }
     },
     test("search single occurrence without padding") {

@@ -67,6 +67,10 @@ trait SearchService {
       maxBins: Int
   ): Task[AggregationBins]
 
+  def getTextAsHtml(
+      docRef: DocReference
+  ): Task[String]
+
   def getIndexSize(): Task[Int]
 }
 
@@ -203,7 +207,7 @@ private[service] case class SearchServiceImpl(
 
   private def persistPage(docId: DocRev, page: Page, startOffset: Int): Task[PageData] = {
     for {
-      pageId <- searchRepo.insertPage(docId, page)
+      pageId <- searchRepo.insertPage(docId, page, startOffset)
       textLineSeq <- ZIO.attempt {
         if (page.textLinesWithRectangles.nonEmpty) {
           page.textLinesWithRectangles
@@ -525,7 +529,7 @@ private[service] case class SearchServiceImpl(
       }
       pages <- ZIO.foreach(initialResponse.results) { searchResult =>
         ZIO.foreach(searchResult.snippets) { snippet =>
-          val page = searchRepo.getPageByStartOffset(searchResult.docRev, snippet.start)
+          val page = searchRepo.getPageByWordOffset(searchResult.docRev, snippet.start)
           page
         }
       }
@@ -574,17 +578,12 @@ private[service] case class SearchServiceImpl(
             .getOrElse(throw new DocumentNotFoundInIndex(f"Document ${docRef.ref} not found in index"))
         }.get
       }
-      startRowOpt <- searchRepo.getRowByStartOffset(luceneDoc.rev, startOffset)
-      endRowOpt <- searchRepo.getRowByEndOffset(luceneDoc.rev, endOffset)
+      rows <- searchRepo.getRowsByStartAndEndOffset(luceneDoc.rev, startOffset, endOffset)
       _ <- ZIO.attempt {
-        (startRowOpt, endRowOpt) match {
-          case (None, _) =>
-            throw new BadOffsetForImageSnippet(f"For document ${docRef.ref}, no start row at offset $startOffset")
-          case (_, None) =>
-            throw new BadOffsetForImageSnippet(f"For document ${docRef.ref}, no end row at offset $endOffset")
-          case (Some(startRow), Some(endRow)) if startRow.pageId != endRow.pageId =>
+        rows match {
+          case Nil =>
             throw new BadOffsetForImageSnippet(
-              f"In document ${docRef.ref}, start offset $startOffset is on different page to end offset $endOffset"
+              f"For document ${docRef.ref}, no rows found between start offset $startOffset and end offset $endOffset. Are you sure they're on the same page?"
             )
           case _ => // everything's fine
         }
@@ -608,19 +607,17 @@ private[service] case class SearchServiceImpl(
             ZIO.succeed(None)
         }
       }
-      startRow = startRowOpt.get
-      endRow = endRowOpt.get
-      page <- searchRepo.getPage(startRow.pageId)
+      page <- searchRepo.getPage(rows.head.pageId)
       image <- ZIO.attempt {
         val pageImagePath = docRef.getPageImagePath(page.index)
         val originalImage = ImageIO.read(pageImagePath.toFile)
-        val startRect = startRow.rect
-        val endRect = endRow.rect
+
+        val startRect = rows.head.rect
+        val initialSnippetRect = rows.map(_.rect).tail.foldLeft(startRect)(_.union(_))
 
         val horizontalScale = originalImage.getWidth.toDouble / page.width.toDouble
         val verticalScale = originalImage.getHeight.toDouble / page.height.toDouble
 
-        val initialSnippetRect = startRect.union(endRect)
         val snippetRect = Rectangle(
           left = (initialSnippetRect.left * horizontalScale).toInt - 5,
           top = (initialSnippetRect.top * verticalScale).toInt - 5,
@@ -644,8 +641,7 @@ private[service] case class SearchServiceImpl(
         val allWordsToHighlight = highlightWords ++ hyphenatedWords.flatten
 
         if (log.isDebugEnabled) {
-          log.debug(f"Start row: $startRow")
-          log.debug(f"Start row: $endRow")
+          log.debug(f"Rows: ${rows.mkString(", ")}")
           log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
         }
 
@@ -682,6 +678,43 @@ private[service] case class SearchServiceImpl(
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
       searcher.indexSize
     }
+  }
+
+  override def getTextAsHtml(docRef: DocReference): Task[String] = {
+    for {
+      docWithInfo <- ZIO.fromTry {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          val document = searcher
+            .getByDocRef(docRef)
+            .getOrElse(
+              throw new DocumentNotFoundInIndex(f"Document ${docRef.ref} not found in index.")
+            )
+          val title = document.metadata.title
+          val text = document.getText(IndexField.Text).getOrElse("")
+
+          (document.rev, title, text)
+        }
+      }
+      pages <- searchRepo.getPages(docWithInfo._1)
+    } yield {
+      val title = docWithInfo._2
+      val text = docWithInfo._3
+
+      val textWithPageBreaks = pages
+        .appended(DbPage(PageId(0), docWithInfo._1, 0, 0, 0, text.length))
+        .foldLeft(new StringBuilder() -> 0) { case ((textSoFar, lastOffset), page) =>
+          val nextPage = text.substring(lastOffset, page.offset).replaceAll("\n", "<br>")
+          textSoFar.append(nextPage + f"""<hr id="page${page.index}">""") -> page.offset
+        }
+        ._1
+        .toString()
+
+      val response = title.map(t => f"<h1>${t}</h1>").getOrElse("") + textWithPageBreaks.substring(
+        docRef.ref.length + "<br>".length
+      )
+      response
+    }
+
   }
 }
 

@@ -10,6 +10,7 @@ CREATE TABLE page(
   index SMALLINT NOT NULL,
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
+  start_offset INT NOT NULL,
   FOREIGN KEY(doc_rev) REFERENCES document(rev),
   CONSTRAINT uk_page UNIQUE (doc_rev, index)
 );
