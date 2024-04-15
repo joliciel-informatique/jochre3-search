@@ -1,7 +1,15 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.service.{SearchResponse, SearchResult}
-import com.joliciel.jochre.search.core.{AggregationBin, DocReference, IndexField, SearchCriterion, SearchQuery}
+import com.joliciel.jochre.search.core.{
+  AggregationBin,
+  DocReference,
+  FieldKind,
+  IndexField,
+  SearchCriterion,
+  SearchQuery,
+  Sort
+}
 import org.apache.lucene.facet.FacetsCollector
 import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
@@ -12,8 +20,13 @@ import org.apache.lucene.search.{
   MatchAllDocsQuery,
   PrefixQuery,
   Query,
+  SortField,
+  SortedNumericSortField,
+  SortedSetSortField,
   TermQuery,
   TopDocs,
+  TopFieldCollector,
+  TopFieldCollectorManager,
   TopScoreDocCollectorManager,
   Sort => LuceneSort
 }
@@ -60,6 +73,7 @@ private[lucene] class JochreSearcher(
 
   def search(
       query: SearchQuery,
+      sort: Sort,
       first: Int,
       max: Int,
       maxSnippets: Option[Int],
@@ -69,7 +83,31 @@ private[lucene] class JochreSearcher(
     if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
     val maxCount = Math.max(1, indexSize)
 
-    val docCollectorManager = new TopScoreDocCollectorManager(first + max, maxCount)
+    val docCollectorManager = sort match {
+      case Sort.Score => new TopScoreDocCollectorManager(first + max, maxCount)
+      case Sort.Field(field, ascending) =>
+        if (!field.sortable) {
+          throw new Exception(s"Cannot sort on field ${field.entryName}. Not sortable!")
+        }
+
+        val sortField: SortField = field.kind match {
+          case FieldKind.Integer =>
+            val sortField = new SortedNumericSortField(field.entryName, SortField.Type.INT, !ascending)
+            sortField.setMissingValue(Int.MinValue)
+            sortField
+          case FieldKind.String =>
+            new SortedSetSortField(field.entryName, !ascending)
+          case FieldKind.Instant =>
+            val sortField = new SortedNumericSortField(field.entryName, SortField.Type.LONG, !ascending)
+            sortField.setMissingValue(Long.MinValue)
+            sortField
+          case _ =>
+            throw new Exception(s"Cannot sort on field ${field.entryName} of type ${field.kind.entryName}")
+        }
+        val collector = new TopFieldCollectorManager(new LuceneSort(sortField), first + max, maxCount)
+        collector
+    }
+
     val topDocs = this.search(luceneQuery, docCollectorManager)
     if (log.isDebugEnabled) log.debug(f"Found ${topDocs.totalHits} results")
 

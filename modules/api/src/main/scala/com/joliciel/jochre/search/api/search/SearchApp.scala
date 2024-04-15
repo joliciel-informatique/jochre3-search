@@ -87,7 +87,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .description("How many rows to add in the snippet before the first highlight and after the last highlight")
           .example(Some(2))
       )
-      .in(query[Option[String]]("sort").description("The sort order (optional)").example(None))
+      .in(
+        query[Option[String]]("sort")
+          .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
+          .example(None)
+      )
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index.")
 

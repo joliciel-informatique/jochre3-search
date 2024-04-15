@@ -11,7 +11,8 @@ import com.joliciel.jochre.search.core.{
   DocReference,
   IndexField,
   SearchCriterion,
-  SearchQuery
+  SearchQuery,
+  Sort
 }
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
@@ -42,6 +43,7 @@ trait SearchService {
 
   def search(
       query: SearchQuery,
+      sort: Sort = Sort.Score,
       first: Int = 0,
       max: Int = 100,
       maxSnippets: Option[Int] = None,
@@ -515,6 +517,7 @@ private[service] case class SearchServiceImpl(
 
   override def search(
       query: SearchQuery,
+      sort: Sort,
       first: Int,
       max: Int,
       maxSnippets: Option[Int],
@@ -524,7 +527,7 @@ private[service] case class SearchServiceImpl(
     for {
       initialResponse <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.search(query, first, max, maxSnippets, rowPadding)
+          searcher.search(query, sort, first, max, maxSnippets, rowPadding)
         }
       }
       pages <- ZIO.foreach(initialResponse.results) { searchResult =>

@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.api.search
 
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
-import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper}
+import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, UnknownSortException}
 import com.joliciel.jochre.search.core.service.{Highlight, SearchResponse, SearchService}
 import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField, NoSearchCriteriaException, SearchCriterion, SearchQuery, UnknownFieldException}
 import zio.stream.{ZPipeline, ZStream}
@@ -31,7 +31,22 @@ trait SearchLogic extends HttpErrorMapper {
     for {
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
       searchService <- ZIO.service[SearchService]
-      searchResponse <- searchService.search(searchQuery, first, max, maxSnippets, rowPadding, token.username)
+      parsedSort <- ZIO.attempt {
+        try {
+          sort.map(SortKind.withName(_)).getOrElse(SortKind.Score).toSort
+        } catch {
+          case nsee: NoSuchElementException => throw new UnknownSortException(nsee.getMessage)
+        }
+      }
+      searchResponse <- searchService.search(
+        searchQuery,
+        parsedSort,
+        first,
+        max,
+        maxSnippets,
+        rowPadding,
+        token.username
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
     .mapError(mapToHttpError)

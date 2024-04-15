@@ -124,4 +124,12 @@ package object core {
   case class AggregationBin(label: String, count: Int)
 
   case class AggregationBins(bins: Seq[AggregationBin])
+
+  sealed trait Sort
+
+  object Sort {
+    case object Score extends Sort
+
+    case class Field(field: IndexField, ascending: Boolean) extends Sort
+  }
 }
