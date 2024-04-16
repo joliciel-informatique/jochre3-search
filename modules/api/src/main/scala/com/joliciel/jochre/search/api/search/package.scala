@@ -6,6 +6,8 @@ import enumeratum.{Enum, EnumEntry}
 package object search {
   case class SizeResponse(size: Int)
 
+  case class WordText(text: String)
+
   sealed trait SortKind extends EnumEntry {
     def toSort: Sort
   }

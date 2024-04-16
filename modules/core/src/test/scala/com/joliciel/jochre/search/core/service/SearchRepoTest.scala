@@ -76,6 +76,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val page = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val rectangle = Rectangle(10, 13, 90, 20)
       val word = Word("hello", Rectangle(20, 13, 40, 20), Seq.empty, Seq.empty, 0.80)
+      val word2 = Word("uni-", Rectangle(70, 13, 100, 20), Seq.empty, Seq.empty, 0.90)
       for {
         searchRepo <- getSearchRepo()
         docRev <- searchRepo.insertDocument(docRef)
@@ -83,10 +84,11 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         rowId <- searchRepo.insertRow(pageId, 12, rectangle)
         wordId <- searchRepo.insertWord(docRev, rowId, 10, None, word)
         dbWord <- searchRepo.getWord(docRev, 10).map(_.get)
-        dbWord2 <- searchRepo.getWord(wordId)
-        _ <- searchRepo.insertWord(docRev, rowId, 20, Some(26), word)
+        dbWordById <- searchRepo.getWord(wordId)
+        hyphenatedWordId <- searchRepo.insertWord(docRev, rowId, 20, Some(26), word2)
         hyphenatedWord <- searchRepo.getWord(docRev, 20).map(_.get)
         wordPage <- searchRepo.getPageByWordOffset(docRev, 10)
+        wordsInRow <- searchRepo.getWordsInRow(docRev, 10)
       } yield {
         assertTrue(dbWord.id == wordId) &&
         assertTrue(dbWord.docRev == docRev) &&
@@ -95,11 +97,12 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(dbWord.top == 13) &&
         assertTrue(dbWord.width == 40) &&
         assertTrue(dbWord.height == 20) &&
-        assertTrue(dbWord.offset == 10) &&
+        assertTrue(dbWord.startOffset == 10) &&
         assertTrue(dbWord.hyphenatedOffset == None) &&
-        assertTrue(dbWord == dbWord2) &&
+        assertTrue(dbWord == dbWordById) &&
         assertTrue(hyphenatedWord.hyphenatedOffset == Some(26)) &&
-        assertTrue(wordPage.map(_.index) == Some(42))
+        assertTrue(wordPage.map(_.index) == Some(42)) &&
+        assertTrue(wordsInRow.map(_.id) == Seq(wordId, hyphenatedWordId))
       }
     },
     test("retrieve sequential rows by offset") {

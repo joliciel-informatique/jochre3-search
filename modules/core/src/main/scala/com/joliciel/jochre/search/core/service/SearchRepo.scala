@@ -42,8 +42,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def insertWord(docRev: DocRev, rowId: RowId, offset: Int, hyphenatedOffset: Option[Int], word: Word): Task[WordId] =
-    sql"""INSERT INTO word(doc_rev, row_id, start_offset, hyphenated_offset, lft, top, width, height)
-         | values (${docRev.rev}, ${rowId.id}, $offset, $hyphenatedOffset, ${word.left}, ${word.top}, ${word.width}, ${word.height})
+    sql"""INSERT INTO word(doc_rev, row_id, start_offset, end_offset, hyphenated_offset, lft, top, width, height)
+         | values (${docRev.rev}, ${rowId.id}, $offset, ${offset + word.content.length}, $hyphenatedOffset, ${word.left}, ${word.top}, ${word.width}, ${word.height})
          | RETURNING id
        """.stripMargin
       .query[WordId]
@@ -201,7 +201,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getWord(docRev: DocRev, offset: Int): Task[Option[DbWord]] =
-    sql"""SELECT word.id, doc_rev, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
+    sql"""SELECT word.id, doc_rev, row_id, start_offset, end_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
          | FROM word
          | INNER JOIN document ON word.doc_rev = document.rev
          | WHERE document.rev = ${docRev.rev}
@@ -212,12 +212,26 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getWord(wordId: WordId): Task[DbWord] =
-    sql"""SELECT word.id, doc_rev, row_id, start_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
+    sql"""SELECT word.id, doc_rev, row_id, start_offset, end_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
          | FROM word
          | WHERE word.id = ${wordId.id}
        """.stripMargin
       .query[DbWord]
       .unique
+      .transact(transactor)
+
+  def getWordsInRow(docRev: DocRev, offset: Int): Task[Seq[DbWord]] =
+    sql"""SELECT word.id, word.doc_rev, word.row_id, word.start_offset, word.end_offset, word.hyphenated_offset, word.lft, word.top, word.width, word.height
+         | FROM word
+         | INNER JOIN word AS w2 on w2.row_id = word.row_id
+         | WHERE w2.doc_rev = ${docRev.rev}
+         |   AND w2.start_offset = (SELECT MIN(w3.start_offset) FROM word w3
+         |   WHERE w3.doc_rev = ${docRev.rev}
+         |   AND w3.start_offset >= $offset)
+         | ORDER BY word.start_offset
+       """.stripMargin
+      .query[DbWord]
+      .to[Seq]
       .transact(transactor)
 
   def getQuery(queryId: QueryId): Task[DbQuery] =

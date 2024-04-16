@@ -77,7 +77,8 @@ private[lucene] class JochreSearcher(
       first: Int,
       max: Int,
       maxSnippets: Option[Int],
-      rowPadding: Option[Int]
+      rowPadding: Option[Int],
+      addOffsets: Boolean = true
   ): SearchResponse = {
     val luceneQuery = toLuceneQuery(query)
     if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
@@ -120,7 +121,7 @@ private[lucene] class JochreSearcher(
       }
 
     val results = page.map { case (luceneDoc, score) =>
-      val snippets = luceneDoc.highlight(luceneQuery, maxSnippets, rowPadding)
+      val snippets = luceneDoc.highlight(luceneQuery, maxSnippets, rowPadding, addOffsets)
       SearchResult(luceneDoc.ref, luceneDoc.rev, luceneDoc.metadata, score, snippets)
     }
     SearchResponse(results, topDocs.totalHits.value)

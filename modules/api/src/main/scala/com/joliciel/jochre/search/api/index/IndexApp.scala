@@ -22,7 +22,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     with CoreProtocol {
   implicit val ec: ExecutionContext = executionContext
 
-  val postIndexPdfEndpoint: ZPartialServerEndpoint[
+  private val postIndexPdfEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
@@ -49,7 +49,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
       .description("Post an image file for analysis and return xml result.")
 
-  val postIndexHttp: ZServerEndpoint[Requirements, Any] =
+  private val postIndexHttp: ZServerEndpoint[Requirements, Any] =
     postIndexPdfEndpoint.serverLogic[Requirements](token => input => postIndexPdfLogic(token, input))
 
   val endpoints: List[AnyEndpoint] = List(

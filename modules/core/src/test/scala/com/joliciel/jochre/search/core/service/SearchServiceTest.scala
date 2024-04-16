@@ -130,7 +130,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(1),
           Some(0),
-          "test"
+          "test",
+          addOffsets = false
         )
         queries <- searchRepo.getQueriesSince(startTime)
       } yield {
@@ -151,13 +152,30 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(1),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
+        )
+        resultWithOffsets <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "are", strict = false)),
+          Sort.Score,
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test",
+          addOffsets = true
         )
       } yield {
         assertTrue(
           resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
             "How <b>are</b> you?<br>" +
             "Fine, thank you."
+        ) &&
+        assertTrue(
+          resultWithOffsets.results.head.snippets.head.text ==
+            """<span offset="5">Hello people.</span><br>
+              |<span offset="19">How </span><b><span offset="23">are</span></b><span offset="26"> you?</span><br>
+              |<span offset="32">Fine, thank you.</span>""".stripMargin.replaceAll("\n", "")
         )
       }
     },
@@ -174,7 +192,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(1),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
         )
       } yield {
         assertTrue(
@@ -198,7 +217,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(1),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
         )
         phraseWithHyphenResult <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"day today Madam\"", strict = false)),
@@ -207,7 +227,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(1),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
         )
       } yield {
         assertTrue(
@@ -242,7 +263,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(100),
           Some(0),
-          "test"
+          "test",
+          addOffsets = false
         )
       } yield {
         assertTrue(
@@ -267,7 +289,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           100,
           Some(100),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
         )
       } yield {
         assertTrue(
