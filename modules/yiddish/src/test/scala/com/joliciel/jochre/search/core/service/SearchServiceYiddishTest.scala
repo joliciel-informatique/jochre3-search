@@ -33,7 +33,8 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           10,
           Some(20),
           Some(1),
-          "test"
+          "test",
+          addOffsets = false
         )
         topResult <- ZIO.attempt(searchResults.results.head)
         imageSnippet <- searchService.getImageSnippet(

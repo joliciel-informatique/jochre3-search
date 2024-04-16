@@ -32,6 +32,7 @@ CREATE TABLE word(
   doc_rev BIGINT NOT NULL,
   row_id BIGINT NOT NULL,
   start_offset INT NOT NULL,
+  end_offset INT NOT NULL,
   lft SMALLINT NOT NULL,
   top SMALLINT NOT NULL,
   width SMALLINT NOT NULL,

@@ -4,7 +4,15 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, UnknownSortException}
 import com.joliciel.jochre.search.core.service.{Highlight, SearchResponse, SearchService}
-import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField, NoSearchCriteriaException, SearchCriterion, SearchQuery, UnknownFieldException}
+import com.joliciel.jochre.search.core.{
+  AggregationBins,
+  DocReference,
+  IndexField,
+  NoSearchCriteriaException,
+  SearchCriterion,
+  SearchQuery,
+  UnknownFieldException
+}
 import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
 
@@ -123,6 +131,34 @@ trait SearchLogic extends HttpErrorMapper {
     })
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
       .mapError(mapToHttpError)
+
+  def getWordTextLogic(
+      docRef: DocReference,
+      wordOffset: Int
+  ): ZIO[Requirements, HttpError, WordText] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      text <- searchService.getWordText(docRef, wordOffset)
+    } yield WordText(text)
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get word text", error))
+    .mapError(mapToHttpError)
+
+  def getWordImageLogic(
+      docRef: DocReference,
+      wordOffset: Int
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      imageSnippet <- searchService.getWordImage(docRef, wordOffset)
+      stream <- ZIO.attempt {
+        val out = new ByteArrayOutputStream()
+        ImageIO.write(imageSnippet, "png", out)
+        val in = new ByteArrayInputStream(out.toByteArray)
+        ZStream.fromInputStream(in)
+      }
+    } yield stream
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
+    .mapError(mapToHttpError)
 
   def getSizeLogic(): ZIO[Requirements, HttpError, SizeResponse] = {
     for {

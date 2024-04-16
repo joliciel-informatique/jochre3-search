@@ -52,7 +52,12 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
     this.getTokenStream(field) -> this.getText(field);
   }
 
-  def highlight(query: Query, maxSnippets: Option[Int] = None, rowPadding: Option[Int] = None): Seq[Snippet] = {
+  def highlight(
+      query: Query,
+      maxSnippets: Option[Int] = None,
+      rowPadding: Option[Int] = None,
+      addOffsets: Boolean = true
+  ): Seq[Snippet] = {
     val effectiveMaxSnippets = maxSnippets.getOrElse(defaultMaxSnippetCount)
     val effectiveRowPadding = rowPadding.getOrElse(defaultRowPadding)
     val highlighter = JochreHighlighter(query, IndexField.Text)
@@ -61,23 +66,65 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
       case (Some(tokenStream), Some(text)) =>
         Using(tokenStream) { tokenStream =>
           val fragments = highlighter.findSnippets(tokenStream, effectiveMaxSnippets, effectiveRowPadding)
-          fragments.map { case HighlightFragment(start, end, _, tokens) =>
+          fragments.map { case HighlightFragment(start, end, page, tokens) =>
             val snippetText = text.substring(start, end)
-            val (sb, lastOffset) = tokens.foldLeft(new StringBuilder() -> start) { case ((sb, lastOffset), token) =>
-              if (lastOffset < token.start) {
-                sb.append(snippetText.substring(lastOffset - start, token.start - start))
+            val snippetLines = snippetText.split("\n")
+            val (_, lineFragments) = snippetLines.foldLeft(start -> Seq.empty[HighlightFragment]) {
+              case ((prevOffset, lineFragments), snippetLine) =>
+                val lineStart = prevOffset
+                val lineEnd = prevOffset + snippetLine.length
+                val myTokens = tokens.filter(token => token.end >= lineStart && token.start < lineEnd)
+                val fragment = HighlightFragment(lineStart, lineEnd, page, myTokens)
+                // Add 1 to the line end for the newline character
+                (lineEnd + 1) -> (lineFragments :+ fragment)
+            }
+
+            val lines =
+              lineFragments.zip(snippetLines).map { case (HighlightFragment(start, end, _, tokens), snippetLine) =>
+                val sb = new StringBuilder()
+                val lastOffset = tokens.foldLeft(start) { case (lastOffset, token) =>
+                  if (lastOffset < token.start) {
+                    if (addOffsets) {
+                      sb.append("<span offset=\"" + lastOffset + "\">")
+                    }
+                    sb.append(snippetLine.substring(lastOffset - start, token.start - start))
+                    if (addOffsets) {
+                      sb.append("</span>")
+                    }
+                  }
+                  val tokenStart = if (token.start < start) { start }
+                  else { token.start }
+                  val tokenEnd = if (token.end > end) { end }
+                  else { token.end }
+                  val tokenText = snippetLine.substring(tokenStart - start, tokenEnd - start)
+
+                  sb.append(highlightPreTag)
+                  if (addOffsets) {
+                    sb.append("<span offset=\"" + tokenStart + "\">")
+                  }
+                  sb.append(tokenText)
+                  if (addOffsets) {
+                    sb.append("</span>")
+                  }
+                  sb.append(highlightPostTag)
+
+                  tokenEnd
+                }
+
+                if (lastOffset < end) {
+                  if (addOffsets) {
+                    sb.append("<span offset=\"" + lastOffset + "\">")
+                  }
+                  sb.append(snippetLine.substring(lastOffset - start))
+                  if (addOffsets) {
+                    sb.append("</span>")
+                  }
+                }
+
+                sb.toString()
               }
-              sb.append(highlightPreTag)
-              val tokenText = snippetText.substring(token.start - start, token.end - start)
-              val tokenTextWithHighlights = tokenText.split("\n").mkString(f"$highlightPostTag\n$highlightPreTag")
-              sb.append(tokenTextWithHighlights)
-              sb.append(highlightPostTag)
-              sb -> token.end
-            }
-            if (lastOffset < end) {
-              sb.append(snippetText.substring(lastOffset - start))
-            }
-            val highlightedText = sb.toString().trim.replace("\n", "<br>")
+
+            val highlightedText = lines.mkString("<br>")
             val highlights = tokens.map(token => Highlight(token.start, token.end))
             Snippet(highlightedText, -1, start, end, highlights)
           }

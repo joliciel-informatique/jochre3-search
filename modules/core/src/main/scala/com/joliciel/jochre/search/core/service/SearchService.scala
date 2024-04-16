@@ -48,7 +48,8 @@ trait SearchService {
       max: Int = 100,
       maxSnippets: Option[Int] = None,
       rowPadding: Option[Int] = None,
-      username: String = "unknown"
+      username: String = "unknown",
+      addOffsets: Boolean = true
   ): Task[SearchResponse]
 
   def getImageSnippet(
@@ -72,6 +73,16 @@ trait SearchService {
   def getTextAsHtml(
       docRef: DocReference
   ): Task[String]
+
+  def getWordText(
+      docRef: DocReference,
+      wordOffset: Int
+  ): Task[String]
+
+  def getWordImage(
+      docRef: DocReference,
+      wordOffset: Int
+  ): Task[BufferedImage]
 
   def getIndexSize(): Task[Int]
 }
@@ -522,12 +533,13 @@ private[service] case class SearchServiceImpl(
       max: Int,
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
-      username: String
+      username: String,
+      addOffsets: Boolean
   ): Task[SearchResponse] = {
     for {
       initialResponse <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.search(query, sort, first, max, maxSnippets, rowPadding)
+          searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
         }
       }
       _ <- searchRepo.insertQuery(username, query.criterion, sort, first, max, initialResponse.totalCount.toInt)
@@ -585,7 +597,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(f"Document ${docRef.ref} not found in index"))
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
         }.get
       }
       rows <- searchRepo.getRowsByStartAndEndOffset(luceneDoc.rev, startOffset, endOffset)
@@ -697,7 +709,7 @@ private[service] case class SearchServiceImpl(
           val document = searcher
             .getByDocRef(docRef)
             .getOrElse(
-              throw new DocumentNotFoundInIndex(f"Document ${docRef.ref} not found in index.")
+              throw new DocumentNotFoundInIndex(docRef)
             )
           val title = document.metadata.title
           val text = document.getText(IndexField.Text).getOrElse("")
@@ -719,12 +731,117 @@ private[service] case class SearchServiceImpl(
         ._1
         .toString()
 
-      val response = title.map(t => f"<h1>${t}</h1>").getOrElse("") + textWithPageBreaks.substring(
+      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + textWithPageBreaks.substring(
         docRef.ref.length + "<br>".length
       )
       response
     }
 
+  }
+
+  private def getWordGroup(wordsInRow: Seq[DbWord], wordOffset: Int): Seq[DbWord] = {
+    val (wordsBefore, wordsAfter) = wordsInRow.span(_.startOffset < wordOffset)
+    val word = wordsAfter.head
+    val wordToStart = (wordsBefore :+ word).reverse
+    val attachedWordsBefore = wordToStart
+      .zip(wordToStart.tail)
+      .takeWhile { case (word, prevWord) =>
+        prevWord.endOffset == word.startOffset
+      }
+      .map(_._2)
+      .reverse
+    val attachedWordsAfter = wordsAfter
+      .zip(wordsAfter.tail)
+      .takeWhile { case (word, nextWord) =>
+        word.endOffset == nextWord.startOffset
+      }
+      .map(_._2)
+
+    val wordGroup = (attachedWordsBefore :+ word) ++ attachedWordsAfter
+    wordGroup
+  }
+
+  override def getWordText(docRef: DocReference, wordOffset: Int): Task[String] = {
+    for {
+      luceneDoc <- ZIO.attempt {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+        }.get
+      }
+      wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
+        if (wordsInRow.isEmpty) {
+          throw new WordOffsetNotFound(docRef, wordOffset)
+        }
+        wordsInRow
+      }
+      wordText <- ZIO.attempt {
+        val wordGroup = getWordGroup(wordsInRow, wordOffset)
+        val startOffset = wordGroup.map(_.startOffset).min
+        val endOffset = wordGroup.map(_.endOffset).max
+
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getText(IndexField.Text)
+            .map(_.substring(startOffset, endOffset))
+            .getOrElse(throw new WordOffsetNotFound(docRef, wordOffset))
+        }.get
+      }
+    } yield wordText
+  }
+
+  override def getWordImage(docRef: DocReference, wordOffset: Int): Task[BufferedImage] = {
+    for {
+      luceneDoc <- ZIO.attempt {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+        }.get
+      }
+      wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
+        if (wordsInRow.isEmpty) { throw new WordOffsetNotFound(docRef, wordOffset) }
+        wordsInRow
+      }
+      row <- searchRepo.getRow(wordsInRow.head.rowId)
+      page <- searchRepo.getPage(row.pageId)
+      image <- ZIO.attempt {
+        val pageImagePath = docRef.getPageImagePath(page.index)
+        val originalImage = ImageIO.read(pageImagePath.toFile)
+
+        val wordGroup = getWordGroup(wordsInRow, wordOffset)
+
+        val startRect = wordGroup.head.rect
+        val wordRect = wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_))
+
+        val horizontalScale = originalImage.getWidth.toDouble / page.width.toDouble
+        val verticalScale = originalImage.getHeight.toDouble / page.height.toDouble
+
+        val snippetRect = Rectangle(
+          left = (wordRect.left * horizontalScale).toInt - 5,
+          top = (wordRect.top * verticalScale).toInt - 5,
+          width = (wordRect.width * horizontalScale).toInt + 10,
+          height = (wordRect.height * verticalScale).toInt + 10
+        ).intersection(Rectangle(0, 0, originalImage.getWidth, originalImage.getHeight)).get
+
+        val wordImage =
+          new BufferedImage(snippetRect.width, snippetRect.height, BufferedImage.TYPE_INT_ARGB)
+
+        val subImage = originalImage.getSubimage(
+          snippetRect.left,
+          snippetRect.top,
+          snippetRect.width,
+          snippetRect.height
+        )
+        val graphics2D = wordImage.createGraphics
+        graphics2D.drawImage(subImage, 0, 0, subImage.getWidth, subImage.getHeight, null)
+
+        wordImage
+      }
+    } yield { image }
   }
 }
 
