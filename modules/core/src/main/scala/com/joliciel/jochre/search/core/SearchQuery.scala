@@ -13,6 +13,7 @@ case class SearchQuery(criterion: SearchCriterion)
 
 sealed trait SearchCriterion {
   private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query
+  private[core] def getContains(): Option[SearchCriterion.Contains] = None
 }
 
 object SearchCriterion {
@@ -40,6 +41,8 @@ object SearchCriterion {
       }
       parser.parse(queryString)
     }
+
+    override private[core] def getContains(): Option[Contains] = Some(this)
   }
 
   object Contains {
@@ -91,6 +94,8 @@ object SearchCriterion {
       builder.add(criterion.toLuceneQuery(analyzerGroup), Occur.MUST_NOT)
       builder.build()
     }
+
+    override private[core] def getContains(): Option[Contains] = criterion.getContains()
   }
 
   case class And(criteria: SearchCriterion*) extends SearchCriterion {
@@ -101,6 +106,8 @@ object SearchCriterion {
       }
       builder.build()
     }
+
+    override private[core] def getContains(): Option[Contains] = criteria.map(_.getContains()).flatten.headOption
   }
 
   case class Or(criteria: SearchCriterion*) extends SearchCriterion {
@@ -111,5 +118,7 @@ object SearchCriterion {
       }
       builder.build()
     }
+
+    override private[core] def getContains(): Option[Contains] = criteria.map(_.getContains()).flatten.headOption
   }
 }

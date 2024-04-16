@@ -16,6 +16,7 @@ import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
 
+import java.time.Instant
 import scala.util.Using
 
 object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
@@ -116,8 +117,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       }
     },
     test("search single occurrence without padding") {
+      val startTime = Instant.now()
       for {
-        _ <- getSearchRepo()
+        searchRepo <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         _ <- searchService.indexAlto(docRef1, alto1, metadata1)
         _ <- searchService.indexAlto(docRef2, alto2, metadata2)
@@ -130,8 +132,10 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           Some(0),
           "test"
         )
+        queries <- searchRepo.getQueriesSince(startTime)
       } yield {
-        assertTrue(resultAre.results.head.snippets.head.text == "How <b>are</b> you?")
+        assertTrue(resultAre.results.head.snippets.head.text == "How <b>are</b> you?") &&
+        assertTrue(queries.head.query == Some("are"))
       }
     },
     test("search single occurrence with padding") {

@@ -21,7 +21,8 @@ object Libraries {
 
   val typeDeps = Seq(
     "com.beachape" %% "enumeratum" % enumeratumVersion,
-    "io.circe" %% "circe-literal" % circeVersion
+    "io.circe" %% "circe-literal" % circeVersion,
+    "io.circe" %% "circe-generic" % circeVersion
   )
 
   val loggingDeps = Seq(

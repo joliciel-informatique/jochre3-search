@@ -2,12 +2,16 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, SearchQuery, Sort}
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
+import doobie.postgres.circe.jsonb.implicits._
+import io.circe.generic.auto._
 import zio._
 import zio.interop.catz._
+
+import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
   def insertDocument(ref: DocReference): Task[DocRev] =
@@ -45,6 +49,26 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .query[WordId]
       .unique
       .transact(transactor)
+
+  implicit val searchCriterionMeta: Meta[SearchCriterion] = new Meta(pgDecoderGet, pgEncoderPut)
+  implicit val sortMeta: Meta[Sort] = new Meta(pgDecoderGet, pgEncoderPut)
+  def insertQuery(
+      username: String,
+      criteria: SearchCriterion,
+      sort: Sort,
+      first: Int,
+      max: Int,
+      resultCount: Int
+  ): Task[QueryId] = {
+    val query = criteria.getContains().map(_.queryString)
+    sql"""INSERT INTO query(username, criteria, query, sort, first_result, max_result, result_count)
+         | values ($username, $criteria, $query, $sort, $first, $max, $resultCount)
+         | RETURNING id
+       """.stripMargin
+      .query[QueryId]
+      .unique
+      .transact(transactor)
+  }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
     sql"""SELECT rev, reference, created
@@ -196,6 +220,24 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
+  def getQuery(queryId: QueryId): Task[DbQuery] =
+    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+         | FROM query
+         | WHERE query.id = ${queryId.id}
+       """.stripMargin
+      .query[DbQuery]
+      .unique
+      .transact(transactor)
+
+  def getQueriesSince(since: Instant): Task[Seq[DbQuery]] =
+    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+         | FROM query
+         | WHERE query.executed >= $since
+       """.stripMargin
+      .query[DbQuery]
+      .to[Seq]
+      .transact(transactor)
+
   private val deleteAllWords: Task[Int] =
     sql"""DELETE FROM word""".update.run.transact(transactor)
 
@@ -208,8 +250,12 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   private val deleteAllDocuments: Task[Int] =
     sql"""DELETE FROM document""".update.run.transact(transactor)
 
+  private val deleteAllQueries: Task[Int] =
+    sql"""DELETE FROM query""".update.run.transact(transactor)
+
   private[service] val deleteAll: Task[Int] =
     for {
+      _ <- deleteAllQueries
       _ <- deleteAllWords
       _ <- deleteAllRows
       _ <- deleteAllPages
