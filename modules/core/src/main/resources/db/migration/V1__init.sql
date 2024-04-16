@@ -48,3 +48,15 @@ CREATE TABLE preferences (
   preference json NOT NULL,
   PRIMARY KEY(username, key)
 );
+
+CREATE TABLE query(
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  executed TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  criteria JSONB NOT NULL,
+  query TEXT NULL,
+  sort JSONB NOT NULL,
+  first_result INT NOT NULL,
+  max_result INT NOT NULL,
+  result_count INT NOT NULL
+);

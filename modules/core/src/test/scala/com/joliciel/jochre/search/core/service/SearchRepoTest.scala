@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, Sort}
 import zio.Scope
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -126,6 +126,32 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(dbRow1.map(_.id) == Some(rowId1)) &&
         assertTrue(dbRow3.map(_.id) == Some(rowId3)) &&
         assertTrue(rows.map(_.id) == Seq(rowId1, rowId2, rowId3))
+      }
+    },
+    test("insert query") {
+      val startTime = Instant.now()
+      val username = "jimi@hendrix.org"
+      val criteria = SearchCriterion.And(
+        SearchCriterion.Contains(IndexField.Text, "Hello"),
+        SearchCriterion.Not(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
+      )
+      val sort = Sort.Field(IndexField.PublicationYearAsNumber, ascending = true)
+      for {
+        searchRepo <- getSearchRepo()
+        queryId <- searchRepo.insertQuery(username, criteria, sort, 20, 42, 72)
+        query <- searchRepo.getQuery(queryId)
+        queries <- searchRepo.getQueriesSince(startTime)
+      } yield {
+        assertTrue(query.criteria == criteria) &&
+        assertTrue(query.sort == sort) &&
+        assertTrue(query.username == username) &&
+        assertTrue(query.first == 20) &&
+        assertTrue(query.max == 42) &&
+        assertTrue(query.resultCount == 72) &&
+        assertTrue(query.executed.toEpochMilli > startTime.toEpochMilli) &&
+        assertTrue(query.query == Some("Hello")) &&
+        assertTrue(queries.nonEmpty) &&
+        assertTrue(queries.head.id == queryId)
       }
     }
   ).provideLayer(searchRepoLayer) @@ TestAspect.sequential

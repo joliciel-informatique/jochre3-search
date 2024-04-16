@@ -530,6 +530,7 @@ private[service] case class SearchServiceImpl(
           searcher.search(query, sort, first, max, maxSnippets, rowPadding)
         }
       }
+      _ <- searchRepo.insertQuery(username, query.criterion, sort, first, max, initialResponse.totalCount.toInt)
       pages <- ZIO.foreach(initialResponse.results) { searchResult =>
         ZIO.foreach(searchResult.snippets) { snippet =>
           val page = searchRepo.getPageByWordOffset(searchResult.docRev, snippet.start)

@@ -101,6 +101,19 @@ package object service {
     val rect = Rectangle(left, top, width, height)
   }
 
+  private[service] case class QueryId(id: Long) extends AnyVal
+  private[service] case class DbQuery(
+      id: QueryId,
+      username: String,
+      executed: Instant,
+      criteria: SearchCriterion,
+      query: Option[String],
+      sort: Sort,
+      first: Int,
+      max: Int,
+      resultCount: Int
+  )
+
   trait MetadataReader {
     def read(fileContents: String): DocMetadata
   }
