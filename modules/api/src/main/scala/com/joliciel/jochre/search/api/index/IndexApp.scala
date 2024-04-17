@@ -1,9 +1,9 @@
 package com.joliciel.jochre.search.api.index
 
-import com.joliciel.jochre.search.api.HttpError.BadRequest
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
-import com.joliciel.jochre.search.api.{HttpError, Roles}
+import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
 import com.joliciel.jochre.search.core.CoreProtocol
 import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
@@ -52,11 +52,42 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
   private val postIndexHttp: ZServerEndpoint[Requirements, Any] =
     postIndexPdfEndpoint.serverLogic[Requirements](token => input => postIndexPdfLogic(token, input))
 
+  private val postWordSuggestionEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    WordSuggestionForm,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document reference not found"
+          )
+        )
+      )
+      .post
+      .in("suggest-word")
+      .in(
+        jsonBody[WordSuggestionForm]
+      )
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description("Make a suggestion for a given word that was OCR'd incorrectly.")
+
+  private val postWordSuggestionHttp: ZServerEndpoint[Requirements, Any] =
+    postWordSuggestionEndpoint.serverLogic[Requirements](token => input => postWordSuggestionLogic(token, input))
+
   val endpoints: List[AnyEndpoint] = List(
-    postIndexPdfEndpoint
+    postIndexPdfEndpoint,
+    postWordSuggestionEndpoint
   ).map(_.endpoint.tag("index"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
-    postIndexHttp
+    postIndexHttp,
+    postWordSuggestionHttp
   )
 }

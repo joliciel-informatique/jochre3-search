@@ -59,6 +59,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer.service[SearchRepo] ++ ZLayer.service[JochreIndex]
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer
+      .service[SearchRepo] ++ ZLayer.service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential
 }

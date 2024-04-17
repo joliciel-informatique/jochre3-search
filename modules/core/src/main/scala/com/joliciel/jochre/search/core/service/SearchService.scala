@@ -1,8 +1,18 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
-import com.joliciel.jochre.ocr.core.model.{Alto, Page, SpellingAlternative, SubsType, TextLine, Word}
-import com.joliciel.jochre.ocr.core.utils.ImageUtils
+import com.joliciel.jochre.ocr.core.model.{
+  Alto,
+  Hyphen,
+  Page,
+  SpellingAlternative,
+  SubsType,
+  TextLine,
+  Word,
+  WordOrSpace
+}
+import com.joliciel.jochre.ocr.core.utils.{ImageUtils, StringUtils}
+import com.joliciel.jochre.ocr.core.utils.StringUtils.stringToChars
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.joliciel.jochre.search.core.{
   AggregationBins,
@@ -14,6 +24,7 @@ import com.joliciel.jochre.search.core.{
   SearchQuery,
   Sort
 }
+import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -23,13 +34,13 @@ import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
-import java.io.{FileOutputStream, InputStream}
+import java.io.{BufferedWriter, File, FileInputStream, FileOutputStream, FileWriter, InputStream}
 import java.nio.charset.StandardCharsets
 import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 import javax.imageio.ImageIO
 import scala.io.Source
 import scala.util.Using
-import scala.xml.{PrettyPrinter, XML}
+import scala.xml.{Node, PrettyPrinter, XML}
 
 trait SearchService {
   def indexPdf(
@@ -85,15 +96,31 @@ trait SearchService {
   ): Task[BufferedImage]
 
   def getIndexSize(): Task[Int]
+
+  def suggestWord(
+      username: String,
+      docRef: DocReference,
+      wordOffset: Int,
+      suggestion: String
+  ): Task[Unit]
+
+  def reindex(
+      docRef: DocReference
+  ): Task[Int]
+
+  private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
 }
 
 private[service] case class SearchServiceImpl(
     jochreIndex: JochreIndex,
     searchRepo: SearchRepo,
+    suggestionRepo: SuggestionRepo,
     metadataReader: MetadataReader = MetadataReader.default
 ) extends SearchService
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
+  private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val hyphenRegex = config.getString("hyphen-regex").r
 
   override def indexPdf(
       ref: DocReference,
@@ -114,7 +141,15 @@ private[service] case class SearchServiceImpl(
         val providedMetadata = metadataStream.map { metadataFile =>
           try {
             val contents = Source.fromInputStream(metadataFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
-            metadataReader.read(contents)
+            val metadata = metadataReader.read(contents)
+
+            // Write the metadata to the content directory, so we can re-read it later
+            val metadataPath = ref.getMetadataPath()
+            Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+              bw.write(contents)
+            }
+
+            metadata
           } catch {
             case t: Throwable =>
               log.error("Unable to read metadata file", t)
@@ -129,7 +164,13 @@ private[service] case class SearchServiceImpl(
 
   override def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int] = {
     for {
-      documentData <- persistDocument(ref, alto)
+      suggestions <- suggestionRepo.getSuggestions(ref)
+      _ <- ZIO.attempt {
+        if (log.isDebugEnabled) {
+          log.debug(f"About to process Alto for document ${ref.ref}")
+        }
+      }
+      documentData <- persistDocument(ref, alto, suggestions)
       pageCount <- ZIO.attempt {
         val document = AltoDocument(ref, documentData.docRev, documentData.text, metadata)
         val docInfo =
@@ -140,6 +181,9 @@ private[service] case class SearchServiceImpl(
             documentData.alternativesAtOffset
           )
         jochreIndex.addDocumentInfo(ref, docInfo)
+        if (log.isDebugEnabled) {
+          log.debug(f"Finished processing Alto, about to index document ${ref.ref}")
+        }
         jochreIndex.indexer.indexDocument(document)
         val refreshed = jochreIndex.refresh
         if (log.isDebugEnabled) {
@@ -149,6 +193,7 @@ private[service] case class SearchServiceImpl(
       }
     } yield pageCount
   }
+
   private case class DocumentData(
       docRev: DocRev,
       pageCount: Int,
@@ -159,7 +204,7 @@ private[service] case class SearchServiceImpl(
       hyphenatedWordOffsets: Set[Int]
   )
 
-  private def persistDocument(ref: DocReference, alto: Alto): Task[DocumentData] = {
+  private def persistDocument(ref: DocReference, alto: Alto, suggestions: Seq[DbWordSuggestion]): Task[DocumentData] = {
     // We'll add the document reference at the start of the document text
     // This is because the Lucene Tokenizer is only aware of the text it is currently tokenizing,
     // and cannot be made aware of any context surrounding this text (e.g. the document reference).
@@ -174,11 +219,24 @@ private[service] case class SearchServiceImpl(
         .iterate(alto.pages -> Seq.empty[PageData])(
           cont = { case (p, _) => p.nonEmpty }
         ) { case (pages, pageDataSeq) =>
+          val pageSuggestionMap = suggestions.groupBy(_.pageIndex)
           pages match {
             case page +: tail =>
+              val pageWithDefaultLanguage = page.withDefaultLanguage
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
+              val pageSuggestions = pageSuggestionMap.get(page.physicalPageNumber).getOrElse(Seq.empty)
+              val horizontalScale = page.width.toDouble / 10000.0
+              val verticalScale = page.height.toDouble / 10000.0
+              val scaledSuggestions = pageSuggestions.map(s =>
+                s.copy(
+                  left = (s.left * horizontalScale).toInt,
+                  top = (s.top * verticalScale).toInt,
+                  width = (s.width * horizontalScale).toInt,
+                  height = (s.height * verticalScale).toInt
+                )
+              )
               for {
-                pageData <- persistPage(docRev, page, startOffset)
+                pageData <- persistPage(docRev, pageWithDefaultLanguage, startOffset, scaledSuggestions)
               } yield (tail, pageDataSeq :+ pageData)
           }
         }
@@ -218,14 +276,20 @@ private[service] case class SearchServiceImpl(
       hyphenatedWordOffsets: Set[Int]
   )
 
-  private def persistPage(docId: DocRev, page: Page, startOffset: Int): Task[PageData] = {
+  private def persistPage(
+      docId: DocRev,
+      page: Page,
+      startOffset: Int,
+      suggestions: Seq[DbWordSuggestion]
+  ): Task[PageData] = {
     for {
       pageId <- searchRepo.insertPage(docId, page, startOffset)
+      pageWithSuggestions <- ZIO.attempt { replaceSuggestions(page, suggestions) }
       textLineSeq <- ZIO.attempt {
-        if (page.textLinesWithRectangles.nonEmpty) {
-          page.textLinesWithRectangles
+        if (pageWithSuggestions.textLinesWithRectangles.nonEmpty) {
+          pageWithSuggestions.textLinesWithRectangles
             .zip(
-              page.allTextLines.tail.map(Some(_)) :+ None
+              pageWithSuggestions.allTextLines.tail.map(Some(_)) :+ None
             )
             .zipWithIndex
         } else {
@@ -242,7 +306,15 @@ private[service] case class SearchServiceImpl(
             case (((textLine, rect), nextTextLine), rowIndex) +: tail =>
               val currentStartOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
               for {
-                rowData <- persistRow(docId, pageId, textLine, nextTextLine, rowIndex, rect, currentStartOffset)
+                rowData <- persistRow(
+                  docId,
+                  pageId,
+                  textLine,
+                  nextTextLine,
+                  rowIndex,
+                  rect,
+                  currentStartOffset
+                )
               } yield (tail, rowDataSeq :+ rowData)
           }
         }
@@ -257,6 +329,102 @@ private[service] case class SearchServiceImpl(
           PageData(text, finalOffset, newlineOffsets, alternativesAtOffset, hyphenatedWordOffsets)
         }
     } yield pageData
+  }
+
+  private def replaceSuggestions(page: Page, suggestions: Seq[DbWordSuggestion]): Page = {
+    page.transform { case textLine: TextLine =>
+      replaceSuggestions(textLine, suggestions)
+    }
+  }
+
+  private def replaceSuggestions(textLine: TextLine, suggestions: Seq[DbWordSuggestion]): TextLine = {
+    if (textLine.wordsAndSpaces.isEmpty) {
+      return textLine
+    }
+    val rowRectangle = textLine.wordsAndSpaces.map(_.rectangle).reduceLeft(_.union(_))
+    val wordsAndSpaces = textLine.wordsAndSpaces
+    val rowSuggestions = suggestions.filter(suggestion => suggestion.rect.intersection(rowRectangle).isDefined)
+    val wordSuggestions = wordsAndSpaces.map { wordOrSpace =>
+      // Since suggestions are ordered from newest to oldest, we want the first one that we find intersecting this word
+      wordOrSpace -> rowSuggestions.find(suggestion =>
+        wordOrSpace.rectangle.percentageIntersection(suggestion.rect) > 0.75
+      )
+    }.toMap
+    val (withSuggestions, _) = wordsAndSpaces.foldLeft(Seq.empty[WordOrSpace] -> Option.empty[DbWordSuggestion]) {
+      case ((withSuggestions, lastSuggestion), wordOrSpace) =>
+        wordSuggestions.get(wordOrSpace).flatten match {
+          case suggestion @ Some(_) if suggestion == lastSuggestion =>
+            withSuggestions -> lastSuggestion
+          case None =>
+            (withSuggestions :+ wordOrSpace) -> None
+          case Some(suggestion) =>
+            val newWord = Word(
+              content = suggestion.suggestion,
+              rectangle = suggestion.rect,
+              glyphs = Seq.empty,
+              alternatives = Seq.empty,
+              confidence = 1.0
+            )
+            (withSuggestions :+ newWord) -> Some(suggestion)
+        }
+    }
+    val endOfRowSuggestion = wordsAndSpaces.lastOption.map(wordSuggestions.get(_)).flatten.flatten
+    val withHyphen = endOfRowSuggestion match {
+      case Some(_) =>
+        // A suggestion replaced the final word, we need to see if the suggestion ends in a hyphen
+        val word = withSuggestions.collect { case w: Word => w }.last
+        word.content match {
+          case hyphenRegex(contentBeforeHyphen, hyphenContent) =>
+            val contentChars = stringToChars(contentBeforeHyphen)
+            val totalChars = contentChars.length + 1
+            val width = word.rectangle.width
+            val widthHyphen = width / totalChars
+            val widthLetters = widthHyphen * (totalChars - 1)
+
+            val wordAndHyphen = if (StringUtils.isLeftToRight(textLine.defaultLanguage.get)) {
+              Seq(
+                word.copy(
+                  content = contentBeforeHyphen,
+                  rectangle = word.rectangle.copy(
+                    width = widthLetters
+                  )
+                ),
+                Hyphen(
+                  hyphenContent,
+                  Rectangle(
+                    word.rectangle.left + widthLetters,
+                    word.rectangle.height,
+                    widthHyphen,
+                    word.rectangle.top
+                  )
+                )
+              )
+            } else {
+              Seq(
+                word.copy(
+                  content = contentBeforeHyphen,
+                  rectangle = word.rectangle.copy(
+                    left = word.rectangle.left - widthHyphen,
+                    width = widthLetters
+                  )
+                ),
+                Hyphen(
+                  hyphenContent,
+                  Rectangle(
+                    word.rectangle.left,
+                    word.rectangle.height,
+                    widthHyphen,
+                    word.rectangle.top
+                  )
+                )
+              )
+            }
+            withSuggestions.init ++ wordAndHyphen
+          case _ => withSuggestions
+        }
+      case _ => withSuggestions
+    }
+    textLine.copy(wordsAndSpaces = withHyphen)
   }
 
   private case class RowData(
@@ -399,6 +567,18 @@ private[service] case class SearchServiceImpl(
     searchRepo.insertWord(docId, rowId, offset, hyphenatedOffset, word)
   }
 
+  private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit = {
+    // Store alto in content dir for future access
+    val prettyPrinter = new PrettyPrinter(120, 2)
+    val altoString = prettyPrinter.format(altoXml)
+    val altoFile = docRef.getAltoPath()
+    Using(new ZipOutputStream(new FileOutputStream(altoFile.toFile))) { zos =>
+      zos.putNextEntry(new ZipEntry(f"${docRef.ref}_alto4.xml"))
+      zos.write(altoString.getBytes(StandardCharsets.UTF_8))
+      zos.flush()
+    }.get
+  }
+
   private def getAlto(docRef: DocReference, altoStream: InputStream): Task[Alto] = {
     def acquire: Task[ZipInputStream] = ZIO
       .attempt { new ZipInputStream(altoStream) }
@@ -422,15 +602,7 @@ private[service] case class SearchServiceImpl(
         zipInputStream.getNextEntry
         val altoXml = XML.load(zipInputStream)
 
-        // Store alto in content dir for future access
-        val prettyPrinter = new PrettyPrinter(120, 2)
-        val altoString = prettyPrinter.format(altoXml)
-        val altoFile = docRef.getAltoPath()
-        Using(new ZipOutputStream(new FileOutputStream(altoFile.toFile))) { zos =>
-          zos.putNextEntry(new ZipEntry(f"${docRef.ref}_alto4.xml"))
-          zos.write(altoString.getBytes(StandardCharsets.UTF_8))
-          zos.flush()
-        }
+        storeAlto(docRef, altoXml)
 
         val alto = Alto.fromXML(altoXml)
         alto
@@ -843,14 +1015,93 @@ private[service] case class SearchServiceImpl(
       }
     } yield { image }
   }
+
+  override def suggestWord(username: String, docRef: DocReference, wordOffset: Int, suggestion: String): Task[Unit] = {
+    for {
+      luceneDoc <- ZIO.attempt {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+        }.get
+      }
+      wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
+        if (wordsInRow.isEmpty) { throw new WordOffsetNotFound(docRef, wordOffset) }
+        wordsInRow
+      }
+      row <- searchRepo.getRow(wordsInRow.head.rowId)
+      page <- searchRepo.getPage(row.pageId)
+      rectAndText <- ZIO.attempt {
+        val wordGroup = getWordGroup(wordsInRow, wordOffset)
+        val startRect = wordGroup.head.rect
+        val wordRect = wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_))
+        val horizontalScale = 10000 / page.width.toDouble
+        val verticalScale = 10000 / page.height.toDouble
+        val scaledRect = wordRect.copy(
+          left = (wordRect.left * horizontalScale).toInt,
+          top = (wordRect.top * verticalScale).toInt,
+          width = (wordRect.width * horizontalScale).toInt,
+          height = (wordRect.height * verticalScale).toInt
+        )
+        val startOffset = wordGroup.map(_.startOffset).min
+        val endOffset = wordGroup.map(_.endOffset).max
+
+        val previousText = Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getText(IndexField.Text)
+            .map(_.substring(startOffset, endOffset))
+            .getOrElse(throw new WordOffsetNotFound(docRef, wordOffset))
+        }.get
+
+        (scaledRect, previousText)
+      }
+      _ <- suggestionRepo.insertSuggestion(username, docRef, page.index, rectAndText._1, suggestion, rectAndText._2)
+    } yield ()
+  }
+
+  override def reindex(docRef: DocReference): Task[Int] = {
+    for {
+      altoStream <- ZIO.attempt {
+        val altoFile = docRef.getAltoPath()
+        new FileInputStream(altoFile.toFile)
+      }
+      alto <- getAlto(docRef, altoStream)
+      metadata <- ZIO.attempt {
+        getMetadata(docRef).getOrElse(DocMetadata())
+      }
+      pageCount <- indexAlto(docRef, alto, metadata)
+    } yield pageCount
+  }
+
+  private def getMetadata(docRef: DocReference): Option[DocMetadata] = {
+    val metadataFile = docRef.getMetadataPath()
+    val metadata = Option
+      .when(metadataFile.toFile.exists()) {
+        try {
+          val contents = Source.fromFile(metadataFile.toFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
+          val metadata = metadataReader.read(contents)
+
+          Some(metadata)
+        } catch {
+          case t: Throwable =>
+            log.error(f"Unable to read metadata file ${metadataFile.toFile.getPath}", t)
+            None
+        }
+      }
+      .flatten
+    metadata
+  }
 }
 
 object SearchService {
-  lazy val live: ZLayer[JochreIndex & SearchRepo, Nothing, SearchService] =
+  lazy val live: ZLayer[JochreIndex & SearchRepo & SuggestionRepo, Nothing, SearchService] =
     ZLayer {
       for {
         index <- ZIO.service[JochreIndex]
         searchRepo <- ZIO.service[SearchRepo]
-      } yield SearchServiceImpl(index, searchRepo)
+        suggestionRepo <- ZIO.service[SuggestionRepo]
+      } yield SearchServiceImpl(index, searchRepo, suggestionRepo)
     }
 }

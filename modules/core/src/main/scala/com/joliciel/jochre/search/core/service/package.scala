@@ -115,6 +115,24 @@ package object service {
       resultCount: Int
   )
 
+  private[service] case class WordSuggestionId(id: Long) extends AnyVal
+  private[service] case class DbWordSuggestion(
+      id: WordSuggestionId,
+      username: String,
+      created: Instant,
+      docRef: DocReference,
+      pageIndex: Int,
+      left: Int,
+      top: Int,
+      width: Int,
+      height: Int,
+      suggestion: String,
+      previousText: String,
+      ignore: Boolean
+  ) {
+    val rect = Rectangle(left, top, width, height)
+  }
+
   trait MetadataReader {
     def read(fileContents: String): DocMetadata
   }

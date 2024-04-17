@@ -61,3 +61,18 @@ CREATE TABLE query(
   max_result INT NOT NULL,
   result_count INT NOT NULL
 );
+
+CREATE TABLE word_suggestion(
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  created TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  doc_ref TEXT NOT NULL,
+  page_index SMALLINT NOT NULL,
+  lft SMALLINT NOT NULL,
+  top SMALLINT NOT NULL,
+  width SMALLINT NOT NULL,
+  height SMALLINT NOT NULL,
+  suggestion TEXT NOT NULL,
+  previous_text TEXT NOT NULL,
+  ignore BOOLEAN NOT NULL DEFAULT false
+);

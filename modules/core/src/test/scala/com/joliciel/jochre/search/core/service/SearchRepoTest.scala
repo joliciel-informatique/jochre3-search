@@ -98,10 +98,10 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(dbWord.width == 40) &&
         assertTrue(dbWord.height == 20) &&
         assertTrue(dbWord.startOffset == 10) &&
-        assertTrue(dbWord.hyphenatedOffset == None) &&
+        assertTrue(dbWord.hyphenatedOffset.isEmpty) &&
         assertTrue(dbWord == dbWordById) &&
-        assertTrue(hyphenatedWord.hyphenatedOffset == Some(26)) &&
-        assertTrue(wordPage.map(_.index) == Some(42)) &&
+        assertTrue(hyphenatedWord.hyphenatedOffset.contains(26)) &&
+        assertTrue(wordPage.map(_.index).contains(42)) &&
         assertTrue(wordsInRow.map(_.id) == Seq(wordId, hyphenatedWordId))
       }
     },
@@ -126,8 +126,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         dbRow3 <- searchRepo.getRowByEndOffset(docRev, 45)
         rows <- searchRepo.getRowsByStartAndEndOffset(docRev, 10, 45)
       } yield {
-        assertTrue(dbRow1.map(_.id) == Some(rowId1)) &&
-        assertTrue(dbRow3.map(_.id) == Some(rowId3)) &&
+        assertTrue(dbRow1.map(_.id).contains(rowId1)) &&
+        assertTrue(dbRow3.map(_.id).contains(rowId3)) &&
         assertTrue(rows.map(_.id) == Seq(rowId1, rowId2, rowId3))
       }
     },
@@ -152,7 +152,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(query.max == 42) &&
         assertTrue(query.resultCount == 72) &&
         assertTrue(query.executed.toEpochMilli > startTime.toEpochMilli) &&
-        assertTrue(query.query == Some("Hello")) &&
+        assertTrue(query.query.contains("Hello")) &&
         assertTrue(queries.nonEmpty) &&
         assertTrue(queries.head.id == queryId)
       }
