@@ -108,6 +108,12 @@ package object core {
       val altoFileName = f"${ref}_alto4.zip"
       bookDir.resolve(altoFileName)
     }
+
+    def getMetadataPath(): Path = {
+      val bookDir = this.getBookDir()
+      val metadataFileName = f"${ref}_meta.xml"
+      bookDir.resolve(metadataFileName)
+    }
   }
 
   case class DocMetadata(

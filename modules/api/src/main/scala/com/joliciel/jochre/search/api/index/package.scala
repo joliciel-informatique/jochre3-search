@@ -17,6 +17,12 @@ package object index {
       pages: Int
   )
 
+  case class WordSuggestionForm(
+    docRef: DocReference,
+    offset: Int,
+    suggestion: String
+  )
+
   object IndexHelper {
     val indexResponseExample: IndexResponse = IndexResponse(pages = 42)
   }

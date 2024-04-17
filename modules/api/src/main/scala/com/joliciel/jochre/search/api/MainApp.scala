@@ -10,7 +10,13 @@ import com.joliciel.jochre.search.api.users.UserApp
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.service.{PreferenceRepo, PreferenceService, SearchRepo, SearchService}
+import com.joliciel.jochre.search.core.service.{
+  PreferenceRepo,
+  PreferenceService,
+  SearchRepo,
+  SearchService,
+  SuggestionRepo
+}
 import com.typesafe.config.ConfigFactory
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder
@@ -112,6 +118,7 @@ object MainApp extends ZIOAppDefault {
         AppConfig.live,
         PostgresDatabase.transactorLive,
         SearchRepo.live,
+        SuggestionRepo.live,
         JochreIndex.live,
         SearchService.live,
         PreferenceRepo.live,
