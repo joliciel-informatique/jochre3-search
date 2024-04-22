@@ -22,6 +22,11 @@ trait IndexLogic extends HttpErrorMapper {
         new FileInputStream(pdfFileForm.altoFile.body),
         pdfFileForm.metadataFile.map(m => new FileInputStream(m.body))
       )
+      _ <- ZIO.attempt {
+        pdfFileForm.pdfFile.body.delete()
+        pdfFileForm.altoFile.body.delete()
+        pdfFileForm.metadataFile.foreach(_.body.delete())
+      }
     } yield IndexResponse(pageCount))
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to index pdf file", error))
       .mapError(mapToHttpError)
