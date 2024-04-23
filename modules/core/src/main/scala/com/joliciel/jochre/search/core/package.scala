@@ -1,13 +1,64 @@
 package com.joliciel.jochre.search
 
 import com.typesafe.config.ConfigFactory
-import enumeratum.{Enum, EnumEntry}
+import enumeratum.{DoobieEnum, Enum, EnumEntry}
 
 import java.nio.file.Path
 
 package object core {
   private val config = ConfigFactory.load().getConfig("jochre.search.index")
   private val contentDir = Path.of(config.getString("content-directory"))
+
+  sealed trait MetadataField extends EnumEntry {
+    def indexField: IndexField
+    def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata
+  }
+  object MetadataField extends Enum[MetadataField] with DoobieEnum[MetadataField] {
+    val values: IndexedSeq[MetadataField] = findValues
+
+    case object Author extends MetadataField {
+      override val indexField: IndexField = IndexField.Author
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(author = Some(value))
+    }
+    case object AuthorEnglish extends MetadataField {
+      override val indexField: IndexField = IndexField.AuthorEnglish
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(authorEnglish = Some(value))
+    }
+    case object Title extends MetadataField {
+      override val indexField: IndexField = IndexField.Title
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(title = Some(value))
+    }
+    case object TitleEnglish extends MetadataField {
+      override val indexField: IndexField = IndexField.TitleEnglish
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(titleEnglish = Some(value))
+    }
+    case object Volume extends MetadataField {
+      override val indexField: IndexField = IndexField.Volume
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(volume = Some(value))
+    }
+    case object Publisher extends MetadataField {
+      override val indexField: IndexField = IndexField.Publisher
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(publisher = Some(value))
+    }
+    case object PublicationYear extends MetadataField {
+      override val indexField: IndexField = IndexField.PublicationYear
+
+      override def applyToMetadata(metadata: DocMetadata, value: String): DocMetadata =
+        metadata.copy(publicationYear = Some(value))
+    }
+  }
 
   sealed trait FieldKind extends EnumEntry
   object FieldKind extends Enum[FieldKind] {

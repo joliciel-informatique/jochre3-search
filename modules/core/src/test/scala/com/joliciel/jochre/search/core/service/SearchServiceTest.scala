@@ -440,6 +440,37 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(resultsFineAfter.results.size == resultsFineBefore.results.size - 1) &&
         assertTrue(resultsGreat.results.head.snippets.head.text == "<b>Great</b>, thank you.")
       }
+    },
+    test("correct metadata") {
+      val joe = "joe"
+      for {
+        _ <- getSuggestionRepo()
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        _ <- ZIO.attempt {
+          docRef1.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef1, alto1.toXml)
+        }
+        _ <- ZIO.attempt {
+          docRef2.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef2, alto2.toXml)
+        }
+        _ <- ZIO.attempt {
+          docRef3.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef3, alto3.toXml)
+        }
+        _ <- searchService.correctMetadata(joe, docRef1, MetadataField.Author, "Joseph Schmozeph", true)
+        _ <- searchService.reindex(docRef1)
+        _ <- searchService.reindex(docRef3)
+        resultsSchmozeph <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joseph Schmozeph")))
+        )
+      } yield {
+        assertTrue(resultsSchmozeph.results.map(_.docRef) == Seq(docRef1, docRef3))
+      }
     }
   ).provideLayer(
     (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer

@@ -9,7 +9,7 @@
     <logger name="com.zaxxer.hikari" level="WARN" />
     <logger name="com.joliciel.jochre.search.core.db" level="INFO" />
     <logger name="com.joliciel.jochre.search.core.lucene" level="INFO" />
-    <logger name="com.joliciel.jochre.search.core.service" level="INFO" />
+    <logger name="com.joliciel.jochre.search.core.service" level="DEBUG" />
     <logger name="com.joliciel.jochre.search.core.lucene.highlight" level="INFO" />
     <logger name="com.joliciel" level="INFO" />
 

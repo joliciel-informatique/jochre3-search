@@ -133,6 +133,19 @@ package object service {
     val rect = Rectangle(left, top, width, height)
   }
 
+  private[service] case class MetadataCorrectionId(id: Long) extends AnyVal
+  private[service] case class DbMetadataCorrection(
+      id: MetadataCorrectionId,
+      username: String,
+      created: Instant,
+      field: MetadataField,
+      oldValue: Option[String],
+      newValue: String,
+      applyEverywhere: Boolean,
+      ignore: Boolean,
+      sent: Boolean
+  )
+
   trait MetadataReader {
     def read(fileContents: String): DocMetadata
   }

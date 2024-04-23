@@ -7,3 +7,4 @@ class UnknownFieldException(message: String) extends BadRequestException(message
 class WrongFieldTypeException(message: String) extends BadRequestException(message)
 class NoSearchCriteriaException(message: String) extends BadRequestException(message)
 class PreferenceNotFound(message: String) extends NotFoundException(message)
+class UnknownMetadataFieldException(field: String) extends BadRequestException(f"Unknown MetadataField: $field")

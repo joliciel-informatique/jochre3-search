@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
-import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, SearchQuery, Sort}
+import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, Sort}
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._

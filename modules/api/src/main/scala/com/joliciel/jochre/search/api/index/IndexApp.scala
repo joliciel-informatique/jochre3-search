@@ -4,7 +4,7 @@ import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
-import com.joliciel.jochre.search.core.CoreProtocol
+import com.joliciel.jochre.search.core.{CoreProtocol, DocReference, MetadataField}
 import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
@@ -81,13 +81,50 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
   private val postWordSuggestionHttp: ZServerEndpoint[Requirements, Any] =
     postWordSuggestionEndpoint.serverLogic[Requirements](token => input => postWordSuggestionLogic(token, input))
 
+  private val postMetadataCorrectionEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    MetadataCorrectionForm,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document reference not found"
+          )
+        )
+      )
+      .post
+      .in("correct-metadata")
+      .in(
+        jsonBody[MetadataCorrectionForm].example(
+          MetadataCorrectionForm(DocReference("nybc200089"), MetadataField.Author.entryName, "שלום עליכם", false)
+        )
+      )
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description(
+        f"Correct metadata for a given document reference. Field is one of ${MetadataField.values.map(_.entryName).mkString(", ")}"
+      )
+
+  private val postMetadataCorrectionHttp: ZServerEndpoint[Requirements, Any] =
+    postMetadataCorrectionEndpoint.serverLogic[Requirements](token =>
+      input => postMetadataCorrectionLogic(token, input)
+    )
+
   val endpoints: List[AnyEndpoint] = List(
     postIndexPdfEndpoint,
-    postWordSuggestionEndpoint
+    postWordSuggestionEndpoint,
+    postMetadataCorrectionEndpoint
   ).map(_.endpoint.tag("index"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     postIndexHttp,
-    postWordSuggestionHttp
+    postWordSuggestionHttp,
+    postMetadataCorrectionHttp
   )
 }

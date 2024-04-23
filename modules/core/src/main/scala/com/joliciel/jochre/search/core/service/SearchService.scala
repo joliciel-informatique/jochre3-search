@@ -1,29 +1,11 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
-import com.joliciel.jochre.ocr.core.model.{
-  Alto,
-  Hyphen,
-  Page,
-  SpellingAlternative,
-  SubsType,
-  TextLine,
-  Word,
-  WordOrSpace
-}
-import com.joliciel.jochre.ocr.core.utils.{ImageUtils, StringUtils}
+import com.joliciel.jochre.ocr.core.model._
 import com.joliciel.jochre.ocr.core.utils.StringUtils.stringToChars
+import com.joliciel.jochre.ocr.core.utils.{ImageUtils, StringUtils}
+import com.joliciel.jochre.search.core._
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
-import com.joliciel.jochre.search.core.{
-  AggregationBins,
-  AltoDocument,
-  DocMetadata,
-  DocReference,
-  IndexField,
-  SearchCriterion,
-  SearchQuery,
-  Sort
-}
 import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
@@ -34,7 +16,7 @@ import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
-import java.io.{BufferedWriter, File, FileInputStream, FileOutputStream, FileWriter, InputStream}
+import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream}
 import java.nio.charset.StandardCharsets
 import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 import javax.imageio.ImageIO
@@ -104,6 +86,14 @@ trait SearchService {
       suggestion: String
   ): Task[Unit]
 
+  def correctMetadata(
+      username: String,
+      docRef: DocReference,
+      field: MetadataField,
+      value: String,
+      applyEverywhere: Boolean
+  ): Task[Seq[DocReference]]
+
   def reindex(
       docRef: DocReference
   ): Task[Int]
@@ -170,9 +160,15 @@ private[service] case class SearchServiceImpl(
           log.debug(f"About to process Alto for document ${ref.ref}")
         }
       }
+      corrections <- suggestionRepo.getMetadataCorrections(ref)
       documentData <- persistDocument(ref, alto, suggestions)
       pageCount <- ZIO.attempt {
-        val document = AltoDocument(ref, documentData.docRev, documentData.text, metadata)
+        val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
+          log.debug(f"On doc ${ref.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
+          correction.field.applyToMetadata(metadata, correction.newValue)
+        }
+
+        val document = AltoDocument(ref, documentData.docRev, documentData.text, correctedMetadata)
         val docInfo =
           DocumentIndexInfo(
             documentData.pageOffsets,
@@ -224,7 +220,7 @@ private[service] case class SearchServiceImpl(
             case page +: tail =>
               val pageWithDefaultLanguage = page.withDefaultLanguage
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
-              val pageSuggestions = pageSuggestionMap.get(page.physicalPageNumber).getOrElse(Seq.empty)
+              val pageSuggestions = pageSuggestionMap.getOrElse(page.physicalPageNumber, Seq.empty)
               val horizontalScale = page.width.toDouble / 10000.0
               val verticalScale = page.height.toDouble / 10000.0
               val scaledSuggestions = pageSuggestions.map(s =>
@@ -368,7 +364,7 @@ private[service] case class SearchServiceImpl(
             (withSuggestions :+ newWord) -> Some(suggestion)
         }
     }
-    val endOfRowSuggestion = wordsAndSpaces.lastOption.map(wordSuggestions.get(_)).flatten.flatten
+    val endOfRowSuggestion = wordsAndSpaces.lastOption.flatMap(wordSuggestions.get).flatten
     val withHyphen = endOfRowSuggestion match {
       case Some(_) =>
         // A suggestion replaced the final word, we need to see if the suggestion ends in a hyphen
@@ -1092,6 +1088,52 @@ private[service] case class SearchServiceImpl(
       }
       .flatten
     metadata
+  }
+
+  override def correctMetadata(
+      username: String,
+      docRef: DocReference,
+      field: MetadataField,
+      value: String,
+      applyEverywhere: Boolean
+  ): Task[Seq[DocReference]] = {
+    for {
+      oldValue <- ZIO.attempt {
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          val luceneDoc = searcher
+            .getByDocRef(docRef)
+            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+
+          luceneDoc.getMetaValue(field)
+        }
+      }
+      documents <- ZIO
+        .attempt {
+          Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+            oldValue
+              .map(oldValue =>
+                Option
+                  .when(applyEverywhere) {
+                    val searchQuery = SearchQuery(SearchCriterion.ValueIn(field.indexField, Seq(oldValue)))
+                    searcher
+                      .findMatchingRefs(searchQuery)
+                      .toVector
+                  }
+              )
+              .flatten
+              .getOrElse(Vector.empty) :+ docRef
+          }
+        }
+        .mapAttempt(_.toSet[DocReference].toSeq.sortBy(_.ref))
+      _ <- suggestionRepo.insertMetadataCorrection(
+        username,
+        field,
+        oldValue,
+        value,
+        applyEverywhere,
+        documents
+      )
+    } yield documents
   }
 }
 

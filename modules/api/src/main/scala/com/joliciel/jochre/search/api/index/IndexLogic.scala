@@ -1,9 +1,9 @@
 package com.joliciel.jochre.search.api.index
 
-import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, OkResponse}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
-import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, OkResponse}
+import com.joliciel.jochre.search.core.{MetadataField, UnknownMetadataFieldException}
 import com.joliciel.jochre.search.core.service.SearchService
 import zio.ZIO
 
@@ -46,5 +46,28 @@ trait IndexLogic extends HttpErrorMapper {
       _ <- searchService.reindex(wordSuggestionForm.docRef).forkDaemon
     } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to make suggestion", error))
+      .mapError(mapToHttpError)
+
+  def postMetadataCorrectionLogic(
+      token: ValidToken,
+      metadataCorrectionForm: MetadataCorrectionForm
+  ): ZIO[Requirements, HttpError, OkResponse] =
+    (for {
+      metadataField <- ZIO.attempt(
+        MetadataField
+          .withNameOption(metadataCorrectionForm.field)
+          .getOrElse(throw new UnknownMetadataFieldException(metadataCorrectionForm.field))
+      )
+      searchService <- ZIO.service[SearchService]
+      docRefs <- searchService.correctMetadata(
+        token.username,
+        metadataCorrectionForm.docRef,
+        metadataField,
+        metadataCorrectionForm.value,
+        metadataCorrectionForm.applyEverywhere
+      )
+      _ <- ZIO.foreach(docRefs)(docRef => searchService.reindex(docRef)).forkDaemon
+    } yield OkResponse())
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to correct metadata", error))
       .mapError(mapToHttpError)
 }

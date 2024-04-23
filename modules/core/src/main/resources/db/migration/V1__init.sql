@@ -76,3 +76,22 @@ CREATE TABLE word_suggestion(
   previous_text TEXT NOT NULL,
   ignore BOOLEAN NOT NULL DEFAULT false
 );
+
+CREATE TABLE metadata_correction(
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL,
+  created TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  field TEXT NOT NULL,
+  old_value TEXT NULL,
+  new_value TEXT NOT NULL,
+  apply_everywhere BOOLEAN NOT NULL DEFAULT false,
+  ignore BOOLEAN NOT NULL DEFAULT false,
+  sent BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE TABLE metadata_correction_doc(
+  correction_id BIGINT NOT NULL,
+  doc_ref TEXT NOT NULL,
+  PRIMARY KEY(correction_id, doc_ref),
+  FOREIGN KEY(correction_id) REFERENCES metadata_correction(id) ON DELETE CASCADE
+)
