@@ -21,13 +21,16 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         doc <- searchRepo.getDocument(docRef)
         doc2 <- searchRepo.getDocument(docRev)
+        _ <- searchRepo.updateDocument(docRef, reindex = true)
+        docsToReindex <- searchRepo.getDocumentsToReindex()
       } yield {
         assertTrue(doc.rev == docRev) &&
         assertTrue(doc.ref == docRef) &&
         assertTrue(doc.username == joe) &&
         assertTrue(doc.ipAddress == joeIp) &&
         assertTrue(doc.created.toEpochMilli > startTime.toEpochMilli) &&
-        assertTrue(doc == doc2)
+        assertTrue(doc == doc2) &&
+        assertTrue(docsToReindex.map(_.rev) == Seq(docRev))
       }
     },
     test("insert page") {

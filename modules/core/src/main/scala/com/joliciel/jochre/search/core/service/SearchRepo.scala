@@ -23,6 +23,14 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
+  def updateDocument(docRef: DocReference, reindex: Boolean): Task[Int] = {
+    sql"""UPDATE document d1 SET reindex=$reindex
+         | WHERE d1.reference = ${docRef.ref}
+         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+       """.stripMargin.update.run
+      .transact(transactor)
+  }
+
   def insertPage(docRev: DocRev, page: Page, offset: Int): Task[PageId] =
     sql"""INSERT INTO page (doc_rev, index, width, height, start_offset)
         | VALUES (${docRev.rev}, ${page.physicalPageNumber}, ${page.width}, ${page.height}, $offset)
@@ -72,7 +80,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created
+    sql"""SELECT rev, reference, username, ip, created, reindex
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -82,12 +90,22 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created
+    sql"""SELECT rev, reference, username, ip, created, reindex
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
       .query[DbDocument]
       .unique
+      .transact(transactor)
+
+  def getDocumentsToReindex(): Task[Seq[DbDocument]] =
+    sql"""SELECT rev, reference, username, ip, created, reindex
+         | FROM document d1
+         | WHERE d1.reindex = ${true}
+         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+       """.stripMargin
+      .query[DbDocument]
+      .to[Seq]
       .transact(transactor)
 
   def getPage(docRev: DocRev, pageNumber: Int): Task[Option[DbPage]] =

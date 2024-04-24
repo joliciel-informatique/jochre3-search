@@ -4,7 +4,7 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, OkResponse}
 import com.joliciel.jochre.search.core.{MetadataField, UnknownMetadataFieldException}
-import com.joliciel.jochre.search.core.service.SearchService
+import com.joliciel.jochre.search.core.service.{MetadataCorrectionId, SearchService}
 import zio.ZIO
 
 import java.io.FileInputStream
@@ -48,7 +48,7 @@ trait IndexLogic extends HttpErrorMapper {
         wordSuggestionForm.offset,
         wordSuggestionForm.suggestion
       )
-      _ <- searchService.reindex(wordSuggestionForm.docRef).forkDaemon
+      _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to make suggestion", error))
       .mapError(mapToHttpError)
@@ -65,7 +65,7 @@ trait IndexLogic extends HttpErrorMapper {
           .getOrElse(throw new UnknownMetadataFieldException(metadataCorrectionForm.field))
       )
       searchService <- ZIO.service[SearchService]
-      docRefs <- searchService.correctMetadata(
+      _ <- searchService.correctMetadata(
         token.username,
         ipAddress,
         metadataCorrectionForm.docRef,
@@ -73,8 +73,26 @@ trait IndexLogic extends HttpErrorMapper {
         metadataCorrectionForm.value,
         metadataCorrectionForm.applyEverywhere
       )
-      _ <- ZIO.foreach(docRefs)(docRef => searchService.reindex(docRef)).forkDaemon
+      _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to correct metadata", error))
       .mapError(mapToHttpError)
+
+  def postUndoMetadataCorrectionLogic(
+      token: ValidToken,
+      metdataCorrectionId: MetadataCorrectionId
+  ): ZIO[Requirements, HttpError, OkResponse] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      _ <- searchService.undoMetadataCorrection(metdataCorrectionId)
+      _ <- searchService.reindexWhereRequired().forkDaemon
+    } yield OkResponse())
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to undo metadata correction", error))
+      .mapError(mapToHttpError)
+
+  def postReindexLogic(): ZIO[Requirements, HttpError, OkResponse] =
+    for {
+      searchService <- ZIO.service[SearchService]
+      _ <- searchService.reindexWhereRequired().forkDaemon
+    } yield OkResponse()
 }

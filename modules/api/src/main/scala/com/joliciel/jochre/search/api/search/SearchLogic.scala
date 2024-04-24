@@ -11,7 +11,7 @@ import com.joliciel.jochre.search.core.{
   NoSearchCriteriaException,
   SearchCriterion,
   SearchQuery,
-  UnknownFieldException
+  UnknownIndexFieldException
 }
 import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
@@ -99,7 +99,7 @@ trait SearchLogic extends HttpErrorMapper {
         try {
           IndexField.withName(field)
         } catch {
-          case ex: NoSuchElementException => throw new UnknownFieldException(ex.getMessage)
+          case ex: NoSuchElementException => throw new UnknownIndexFieldException(field)
         }
       }
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
@@ -203,7 +203,7 @@ trait SearchLogic extends HttpErrorMapper {
     ).flatten
 
     val criterion = if (criteria.isEmpty) {
-      throw new NoSearchCriteriaException(f"No search criteria")
+      throw new NoSearchCriteriaException
     } else if (criteria.length == 1) {
       criteria.head
     } else {

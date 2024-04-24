@@ -144,6 +144,13 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
        """.stripMargin.update.run
       .transact(transactor)
 
+  def markMetadataCorrectionAsSent(id: MetadataCorrectionId): Task[Int] =
+    sql"""UPDATE metadata_correction
+          SET sent=${true}
+          WHERE id=$id
+       """.stripMargin.update.run
+      .transact(transactor)
+
   private val deleteAllSuggestions: Task[Int] =
     sql"""DELETE FROM word_suggestion""".update.run.transact(transactor)
 

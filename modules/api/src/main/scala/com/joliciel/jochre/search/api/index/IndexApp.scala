@@ -4,6 +4,7 @@ import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
+import com.joliciel.jochre.search.core.service.MetadataCorrectionId
 import com.joliciel.jochre.search.core.{CoreProtocol, DocReference, MetadataField}
 import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
@@ -127,15 +128,78 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       input => (postMetadataCorrectionLogic _).tupled(token +: input)
     )
 
+  private val postReindexEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    Unit,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Not sure when this could happen"
+          )
+        )
+      )
+      .post
+      .in("reindex")
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description(
+        f"Re-index all documents requiring re-indexing"
+      )
+
+  private val postReindexHttp: ZServerEndpoint[Requirements, Any] =
+    postReindexEndpoint.serverLogic[Requirements](token => input => postReindexLogic())
+
+  private val postUndoMetadataCorrectionEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    MetadataCorrectionId,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Metadata correction not found for this id"
+          )
+        )
+      )
+      .post
+      .in("undo-correction")
+      .in(path[MetadataCorrectionId]("id"))
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description(
+        f"Unto metadata correction for the id provided"
+      )
+
+  private val postUndoMetadataCorrectionHttp: ZServerEndpoint[Requirements, Any] =
+    postUndoMetadataCorrectionEndpoint.serverLogic[Requirements](token =>
+      input => postUndoMetadataCorrectionLogic(token, input)
+    )
+
   val endpoints: List[AnyEndpoint] = List(
     postIndexPdfEndpoint,
     postWordSuggestionEndpoint,
-    postMetadataCorrectionEndpoint
+    postMetadataCorrectionEndpoint,
+    postUndoMetadataCorrectionEndpoint,
+    postReindexEndpoint
   ).map(_.endpoint.tag("index"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     postIndexHttp,
     postWordSuggestionHttp,
-    postMetadataCorrectionHttp
+    postMetadataCorrectionHttp,
+    postUndoMetadataCorrectionHttp,
+    postReindexHttp
   )
 }

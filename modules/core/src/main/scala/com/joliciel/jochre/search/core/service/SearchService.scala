@@ -5,6 +5,7 @@ import com.joliciel.jochre.ocr.core.model._
 import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core._
 import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -101,11 +102,17 @@ trait SearchService {
       field: MetadataField,
       value: String,
       applyEverywhere: Boolean
+  ): Task[MetadataCorrectionId]
+
+  def undoMetadataCorrection(
+      id: MetadataCorrectionId
   ): Task[Seq[DocReference]]
 
   def reindex(
       docRef: DocReference
   ): Task[Int]
+
+  def reindexWhereRequired(): Task[Unit]
 
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
 }
@@ -118,6 +125,7 @@ private[service] case class SearchServiceImpl(
 ) extends SearchService
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
+  private val config = ConfigFactory.load().getConfig("jochre.search")
 
   override def indexPdf(
       ref: DocReference,
@@ -686,10 +694,12 @@ private[service] case class SearchServiceImpl(
         suggestion,
         rectAndText._2
       )
+      _ <- searchRepo.updateDocument(docRef, reindex = true)
     } yield ()
   }
 
   override def reindex(docRef: DocReference): Task[Int] = {
+    log.info(f"Re-indexing ${docRef.ref}")
     for {
       altoStream <- ZIO.attempt {
         val altoFile = docRef.getAltoPath()
@@ -701,6 +711,7 @@ private[service] case class SearchServiceImpl(
       }
       currentDoc <- searchRepo.getDocument(docRef)
       pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata)
+      _ <- searchRepo.updateDocument(docRef, reindex = false)
     } yield pageCount
   }
 
@@ -709,6 +720,7 @@ private[service] case class SearchServiceImpl(
     val metadata = Option
       .when(metadataFile.toFile.exists()) {
         try {
+          log.debug(f"Found metadata file at ${metadataFile.toFile.getPath}")
           val contents = Source.fromFile(metadataFile.toFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
           val metadata = metadataReader.read(contents)
 
@@ -730,7 +742,9 @@ private[service] case class SearchServiceImpl(
       field: MetadataField,
       value: String,
       applyEverywhere: Boolean
-  ): Task[Seq[DocReference]] = {
+  ): Task[MetadataCorrectionId] = {
+    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value ${value}")
+    val shouldSendMail = config.getBoolean("corrections.send-mail")
     for {
       oldValue <- ZIO.attempt {
         Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -741,7 +755,7 @@ private[service] case class SearchServiceImpl(
           luceneDoc.getMetaValue(field)
         }
       }
-      documents <- ZIO
+      docRefs <- ZIO
         .attempt {
           Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
             oldValue
@@ -757,16 +771,56 @@ private[service] case class SearchServiceImpl(
           }
         }
         .mapAttempt(docRefs => docRefs.distinct.sortBy(_.ref))
-      _ <- suggestionRepo.insertMetadataCorrection(
+      correctionId <- suggestionRepo.insertMetadataCorrection(
         username,
         ipAddress,
         field,
         oldValue,
         value,
         applyEverywhere,
-        documents
+        docRefs
       )
-    } yield documents
+      correction <- suggestionRepo.getMetadataCorrection(correctionId)
+      _ <- ZIO.foreach(docRefs)(docRef => searchRepo.updateDocument(docRef, reindex = true))
+      _ <- ZIO.attempt {
+        if (shouldSendMail) {
+          CorrectionMailer.mailCorrection(correction, docRefs)
+        }
+      }
+      _ <-
+        if (shouldSendMail) {
+          suggestionRepo.markMetadataCorrectionAsSent(correctionId)
+        } else {
+          ZIO.succeed(())
+        }
+    } yield correctionId
+  }
+
+  override def undoMetadataCorrection(id: MetadataCorrectionId): Task[Seq[DocReference]] = {
+    log.info(f"Undo metadata correction ${id.id}")
+    for {
+      ignoreCount <- suggestionRepo.ignoreMetadataCorrection(id)
+      _ <- ZIO.attempt {
+        if (ignoreCount == 0) {
+          throw new UnknownMetadataCorrectionIdException(id)
+        }
+      }
+      docRefs <- suggestionRepo.getMetadataCorrectionDocs(id)
+      _ <- ZIO.foreach(docRefs) { docRef =>
+        log.debug(f"Undoing correction for document ${docRef.ref}, marking for re-index")
+        searchRepo.updateDocument(docRef, reindex = true)
+      }
+    } yield docRefs
+  }
+
+  override def reindexWhereRequired(): Task[Unit] = {
+    for {
+      docs <- searchRepo.getDocumentsToReindex()
+      _ <- ZIO.attempt {
+        log.info(f"Reindex requested, found ${docs.size} documents to re-index")
+      }
+      _ <- ZIO.foreach(docs) { doc => reindex(doc.ref) }
+    } yield ()
   }
 }
 

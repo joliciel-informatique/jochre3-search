@@ -45,7 +45,8 @@ lazy val core = project
       "org.apache.lucene" % "lucene-highlighter" % luceneVersion,
       "org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
       "org.apache.lucene" % "lucene-test-framework" % luceneVersion % "test",
-      "com.joliciel" %% "jochre3-ocr-core" % jochre3OcrVersion
+      "com.joliciel" %% "jochre3-ocr-core" % jochre3OcrVersion,
+      "com.sun.mail" % "jakarta.mail" % "2.0.1"
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,

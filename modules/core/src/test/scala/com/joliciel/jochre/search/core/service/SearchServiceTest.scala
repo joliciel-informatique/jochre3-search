@@ -6,6 +6,8 @@ import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
 
+import java.io.{BufferedWriter, FileWriter}
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scala.util.Using
 
@@ -417,7 +419,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           addOffsets = false
         )
         _ <- searchService.suggestWord(username, ipAddress, docRef2, wordOffset, "Great,")
-        _ <- searchService.reindex(docRef2)
+        _ <- searchService.reindexWhereRequired()
         resultsGreat <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "great")),
           Sort.Score,
@@ -455,16 +457,34 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- ZIO.attempt {
           docRef1.getBookDir().toFile.mkdirs()
           searchService.storeAlto(docRef1, alto1.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef1.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata1))
+          }
         }
         _ <- ZIO.attempt {
           docRef2.getBookDir().toFile.mkdirs()
           searchService.storeAlto(docRef2, alto2.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef2.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata2))
+          }
         }
         _ <- ZIO.attempt {
           docRef3.getBookDir().toFile.mkdirs()
           searchService.storeAlto(docRef3, alto3.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef3.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata3))
+          }
         }
-        _ <- searchService.correctMetadata(
+        correctionId <- searchService.correctMetadata(
           username,
           ipAddress,
           docRef1,
@@ -472,13 +492,22 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           "Joseph Schmozeph",
           applyEverywhere = true
         )
-        _ <- searchService.reindex(docRef1)
-        _ <- searchService.reindex(docRef3)
+        _ <- searchService.reindexWhereRequired()
         resultsSchmozeph <- searchService.search(
           SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joseph Schmozeph")))
         )
+        _ <- searchService.undoMetadataCorrection(correctionId)
+        _ <- searchService.reindexWhereRequired()
+        resultsSchmozephAfterUndo <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joseph Schmozeph")))
+        )
+        resultsSchmoeAfterUndo <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
+        )
       } yield {
-        assertTrue(resultsSchmozeph.results.map(_.docRef) == Seq(docRef1, docRef3))
+        assertTrue(resultsSchmozeph.results.map(_.docRef) == Seq(docRef1, docRef3)) &&
+        assertTrue(resultsSchmozephAfterUndo.results.map(_.docRef) == Seq()) &&
+        assertTrue(resultsSchmoeAfterUndo.results.map(_.docRef) == Seq(docRef1, docRef3))
       }
     }
   ).provideLayer(

@@ -17,11 +17,13 @@ object ValidToken {
   ): Either[Unauthorized, ValidToken] = {
     verifiedToken match {
       case token if token.username.isEmpty =>
+        log.warn(f"User has no username")
         Left(Unauthorized("Token without username"))
       case token if token.email.isEmpty =>
+        log.warn(f"User ${token.username.get} has no email")
         Left(Unauthorized("Token without email"))
       case token if !requiresRoles.map(_.name).subsetOf(token.roles) =>
-        log.warn(f"User ${verifiedToken.username} has roles ${verifiedToken.roles
+        log.warn(f"User ${token.username.get} has roles ${token.roles
           .mkString(",")}. Required: ${requiresRoles.map(_.name).mkString(",")}")
         Left(Unauthorized("Unauthorized user"))
       case token =>
