@@ -12,12 +12,15 @@ import java.io.FileInputStream
 trait IndexLogic extends HttpErrorMapper {
   def postIndexPdfLogic(
       token: ValidToken,
-      pdfFileForm: PdfFileForm
+      pdfFileForm: PdfFileForm,
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, IndexResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
       pageCount <- searchService.indexPdf(
         pdfFileForm.docReference,
+        token.username,
+        ipAddress,
         new FileInputStream(pdfFileForm.pdfFile.body),
         new FileInputStream(pdfFileForm.altoFile.body),
         pdfFileForm.metadataFile.map(m => new FileInputStream(m.body))
@@ -33,12 +36,14 @@ trait IndexLogic extends HttpErrorMapper {
 
   def postWordSuggestionLogic(
       token: ValidToken,
-      wordSuggestionForm: WordSuggestionForm
+      wordSuggestionForm: WordSuggestionForm,
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, OkResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
       _ <- searchService.suggestWord(
         token.username,
+        ipAddress,
         wordSuggestionForm.docRef,
         wordSuggestionForm.offset,
         wordSuggestionForm.suggestion
@@ -50,7 +55,8 @@ trait IndexLogic extends HttpErrorMapper {
 
   def postMetadataCorrectionLogic(
       token: ValidToken,
-      metadataCorrectionForm: MetadataCorrectionForm
+      metadataCorrectionForm: MetadataCorrectionForm,
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, OkResponse] =
     (for {
       metadataField <- ZIO.attempt(
@@ -61,6 +67,7 @@ trait IndexLogic extends HttpErrorMapper {
       searchService <- ZIO.service[SearchService]
       docRefs <- searchService.correctMetadata(
         token.username,
+        ipAddress,
         metadataCorrectionForm.docRef,
         metadataField,
         metadataCorrectionForm.value,

@@ -27,12 +27,20 @@ import scala.xml.{Node, PrettyPrinter, XML}
 trait SearchService {
   def indexPdf(
       ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
       pdfFile: InputStream,
       altoFile: InputStream,
       metadataFile: Option[InputStream]
   ): Task[Int]
 
-  def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int]
+  def indexAlto(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      metadata: DocMetadata
+  ): Task[Int]
 
   def search(
       query: SearchQuery,
@@ -42,6 +50,7 @@ trait SearchService {
       maxSnippets: Option[Int] = None,
       rowPadding: Option[Int] = None,
       username: String = "unknown",
+      ipAddress: Option[String] = None,
       addOffsets: Boolean = true
   ): Task[SearchResponse]
 
@@ -81,6 +90,7 @@ trait SearchService {
 
   def suggestWord(
       username: String,
+      ipAddress: Option[String],
       docRef: DocReference,
       wordOffset: Int,
       suggestion: String
@@ -88,6 +98,7 @@ trait SearchService {
 
   def correctMetadata(
       username: String,
+      ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
       value: String,
@@ -114,6 +125,8 @@ private[service] case class SearchServiceImpl(
 
   override def indexPdf(
       ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
       pdfStream: InputStream,
       altoStream: InputStream,
       metadataStream: Option[InputStream]
@@ -148,11 +161,17 @@ private[service] case class SearchServiceImpl(
         }
         providedMetadata.getOrElse(pdfMetadata)
       }
-      pageCount <- indexAlto(ref, alto, metadata)
+      pageCount <- indexAlto(ref, username, ipAddress, alto, metadata)
     } yield pageCount
   }
 
-  override def indexAlto(ref: DocReference, alto: Alto, metadata: DocMetadata): Task[Int] = {
+  override def indexAlto(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      metadata: DocMetadata
+  ): Task[Int] = {
     for {
       suggestions <- suggestionRepo.getSuggestions(ref)
       _ <- ZIO.attempt {
@@ -161,7 +180,7 @@ private[service] case class SearchServiceImpl(
         }
       }
       corrections <- suggestionRepo.getMetadataCorrections(ref)
-      documentData <- persistDocument(ref, alto, suggestions)
+      documentData <- persistDocument(ref, username, ipAddress, alto, suggestions)
       pageCount <- ZIO.attempt {
         val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
           log.debug(f"On doc ${ref.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
@@ -200,7 +219,13 @@ private[service] case class SearchServiceImpl(
       hyphenatedWordOffsets: Set[Int]
   )
 
-  private def persistDocument(ref: DocReference, alto: Alto, suggestions: Seq[DbWordSuggestion]): Task[DocumentData] = {
+  private def persistDocument(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      suggestions: Seq[DbWordSuggestion]
+  ): Task[DocumentData] = {
     // We'll add the document reference at the start of the document text
     // This is because the Lucene Tokenizer is only aware of the text it is currently tokenizing,
     // and cannot be made aware of any context surrounding this text (e.g. the document reference).
@@ -210,7 +235,7 @@ private[service] case class SearchServiceImpl(
     // The tokenizer knows which synonyms to add via the document reference.
     val initialOffset = ref.ref.length + 1 // 1 for the newline
     for {
-      docRev <- searchRepo.insertDocument(ref)
+      docRev <- searchRepo.insertDocument(ref, username, ipAddress)
       documentData <- ZIO
         .iterate(alto.pages -> Seq.empty[PageData])(
           cont = { case (p, _) => p.nonEmpty }
@@ -702,6 +727,7 @@ private[service] case class SearchServiceImpl(
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       username: String,
+      ipAddress: Option[String],
       addOffsets: Boolean
   ): Task[SearchResponse] = {
     for {
@@ -710,7 +736,15 @@ private[service] case class SearchServiceImpl(
           searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
         }
       }
-      _ <- searchRepo.insertQuery(username, query.criterion, sort, first, max, initialResponse.totalCount.toInt)
+      _ <- searchRepo.insertQuery(
+        username,
+        ipAddress,
+        query.criterion,
+        sort,
+        first,
+        max,
+        initialResponse.totalCount.toInt
+      )
       pages <- ZIO.foreach(initialResponse.results) { searchResult =>
         ZIO.foreach(searchResult.snippets) { snippet =>
           val page = searchRepo.getPageByWordOffset(searchResult.docRev, snippet.start)
@@ -1012,7 +1046,13 @@ private[service] case class SearchServiceImpl(
     } yield { image }
   }
 
-  override def suggestWord(username: String, docRef: DocReference, wordOffset: Int, suggestion: String): Task[Unit] = {
+  override def suggestWord(
+      username: String,
+      ipAddress: Option[String],
+      docRef: DocReference,
+      wordOffset: Int,
+      suggestion: String
+  ): Task[Unit] = {
     for {
       luceneDoc <- ZIO.attempt {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -1053,7 +1093,15 @@ private[service] case class SearchServiceImpl(
 
         (scaledRect, previousText)
       }
-      _ <- suggestionRepo.insertSuggestion(username, docRef, page.index, rectAndText._1, suggestion, rectAndText._2)
+      _ <- suggestionRepo.insertSuggestion(
+        username,
+        ipAddress,
+        docRef,
+        page.index,
+        rectAndText._1,
+        suggestion,
+        rectAndText._2
+      )
     } yield ()
   }
 
@@ -1067,7 +1115,8 @@ private[service] case class SearchServiceImpl(
       metadata <- ZIO.attempt {
         getMetadata(docRef).getOrElse(DocMetadata())
       }
-      pageCount <- indexAlto(docRef, alto, metadata)
+      currentDoc <- searchRepo.getDocument(docRef)
+      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata)
     } yield pageCount
   }
 
@@ -1092,6 +1141,7 @@ private[service] case class SearchServiceImpl(
 
   override def correctMetadata(
       username: String,
+      ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
       value: String,
@@ -1111,22 +1161,21 @@ private[service] case class SearchServiceImpl(
         .attempt {
           Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
             oldValue
-              .map(oldValue =>
+              .flatMap(oldValue =>
                 Option
                   .when(applyEverywhere) {
                     val searchQuery = SearchQuery(SearchCriterion.ValueIn(field.indexField, Seq(oldValue)))
                     searcher
                       .findMatchingRefs(searchQuery)
-                      .toVector
                   }
               )
-              .flatten
               .getOrElse(Vector.empty) :+ docRef
           }
         }
-        .mapAttempt(_.toSet[DocReference].toSeq.sortBy(_.ref))
+        .mapAttempt(docRefs => docRefs.distinct.sortBy(_.ref))
       _ <- suggestionRepo.insertMetadataCorrection(
         username,
+        ipAddress,
         field,
         oldValue,
         value,

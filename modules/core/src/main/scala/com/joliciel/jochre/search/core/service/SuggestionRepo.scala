@@ -12,14 +12,15 @@ import zio.{Task, ZIO, ZLayer}
 private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   def insertSuggestion(
       username: String,
+      ipAddress: Option[String],
       docRef: DocReference,
       pageIndex: Int,
       rectangle: Rectangle,
       suggestion: String,
       previousText: String
   ): Task[WordSuggestionId] =
-    sql"""INSERT INTO word_suggestion (username, doc_ref, page_index, lft, top, width, height, suggestion, previous_text)
-         | VALUES ($username, ${docRef.ref}, $pageIndex, ${rectangle.left}, ${rectangle.top}, ${rectangle.width}, ${rectangle.height}, $suggestion, $previousText)
+    sql"""INSERT INTO word_suggestion (username, ip, doc_ref, page_index, lft, top, width, height, suggestion, previous_text)
+         | VALUES ($username, $ipAddress, ${docRef.ref}, $pageIndex, ${rectangle.left}, ${rectangle.top}, ${rectangle.width}, ${rectangle.height}, $suggestion, $previousText)
          | RETURNING id
        """.stripMargin
       .query[WordSuggestionId]
@@ -27,7 +28,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getSuggestion(id: WordSuggestionId): Task[DbWordSuggestion] =
-    sql"""SELECT id, username, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
+    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
          | FROM word_suggestion
          | WHERE id = ${id.id}
        """.stripMargin
@@ -38,7 +39,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   /** Get suggestions for a given document from newest to oldest.
     */
   def getSuggestions(docRef: DocReference): Task[Seq[DbWordSuggestion]] = {
-    sql"""SELECT id, username, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
+    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
          | FROM word_suggestion
          | WHERE doc_ref = ${docRef.ref}
          | AND ignore = ${false}
@@ -58,6 +59,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
 
   def insertMetadataCorrection(
       username: String,
+      ipAddress: Option[String],
       field: MetadataField,
       oldValue: Option[String],
       newValue: String,
@@ -65,20 +67,21 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       docRefs: Seq[DocReference]
   ): Task[MetadataCorrectionId] = {
     (for {
-      correctionId <- insertMetadataCorrection(username, field, oldValue, newValue, applyEverywhere)
+      correctionId <- insertMetadataCorrection(username, ipAddress, field, oldValue, newValue, applyEverywhere)
       _ <- insertMetadataCorrectionDocuments(correctionId, docRefs)
     } yield correctionId).transact(transactor)
   }
 
   private def insertMetadataCorrection(
       username: String,
+      ipAddress: Option[String],
       field: MetadataField,
       oldValue: Option[String],
       newValue: String,
       applyEverywhere: Boolean
   ) = {
-    sql"""INSERT INTO metadata_correction (username, field, old_value, new_value, apply_everywhere)
-         | VALUES ($username, $field, $oldValue, $newValue, $applyEverywhere)
+    sql"""INSERT INTO metadata_correction (username, ip, field, old_value, new_value, apply_everywhere)
+         | VALUES ($username, $ipAddress, $field, $oldValue, $newValue, $applyEverywhere)
          | RETURNING id
        """.stripMargin
       .query[MetadataCorrectionId]
@@ -95,7 +98,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   }
 
   def getMetadataCorrection(id: MetadataCorrectionId): Task[DbMetadataCorrection] =
-    sql"""SELECT id, username, created, field, old_value, new_value, apply_everywhere, ignore, sent
+    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent
          | FROM metadata_correction
          | WHERE id = ${id.id}
        """.stripMargin
@@ -113,7 +116,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   /** Get most recent corrections for a given document.
     */
   def getMetadataCorrections(docRef: DocReference): Task[Seq[DbMetadataCorrection]] = {
-    sql"""SELECT id, username, created, field, old_value, new_value, apply_everywhere, ignore, sent
+    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent
          | FROM metadata_correction m1
          | INNER JOIN metadata_correction_doc d1 ON m1.id = d1.correction_id
          | WHERE d1.doc_ref = ${docRef.ref}

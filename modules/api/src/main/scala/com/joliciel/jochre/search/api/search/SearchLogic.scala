@@ -34,14 +34,15 @@ trait SearchLogic extends HttpErrorMapper {
       max: Int,
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
-      sort: Option[String]
+      sort: Option[String],
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, SearchResponse] = {
     for {
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
       searchService <- ZIO.service[SearchService]
       parsedSort <- ZIO.attempt {
         try {
-          sort.map(SortKind.withName(_)).getOrElse(SortKind.Score).toSort
+          sort.map(SortKind.withName).getOrElse(SortKind.Score).toSort
         } catch {
           case nsee: NoSuchElementException => throw new UnknownSortException(nsee.getMessage)
         }
@@ -53,7 +54,8 @@ trait SearchLogic extends HttpErrorMapper {
         max,
         maxSnippets,
         rowPadding,
-        token.username
+        token.username,
+        ipAddress
       )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
@@ -200,10 +202,10 @@ trait SearchLogic extends HttpErrorMapper {
       toYear.map(SearchCriterion.LessThanOrEqualTo(IndexField.PublicationYearAsNumber, _))
     ).flatten
 
-    val criterion = if (criteria.length == 0) {
+    val criterion = if (criteria.isEmpty) {
       throw new NoSearchCriteriaException(f"No search criteria")
     } else if (criteria.length == 1) {
-      criteria(0)
+      criteria.head
     } else {
       SearchCriterion.And(criteria: _*)
     }

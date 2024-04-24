@@ -14,9 +14,9 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
-  def insertDocument(ref: DocReference): Task[DocRev] =
-    sql"""INSERT INTO document (reference)
-         | VALUES (${ref.ref})
+  def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] =
+    sql"""INSERT INTO document (reference, username, ip)
+         | VALUES (${ref.ref}, $username, $ipAddress)
          | RETURNING rev
          | """.stripMargin
       .query[DocRev]
@@ -54,6 +54,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   implicit val sortMeta: Meta[Sort] = new Meta(pgDecoderGet, pgEncoderPut)
   def insertQuery(
       username: String,
+      ipAddress: Option[String],
       criteria: SearchCriterion,
       sort: Sort,
       first: Int,
@@ -61,8 +62,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       resultCount: Int
   ): Task[QueryId] = {
     val query = criteria.getContains().map(_.queryString)
-    sql"""INSERT INTO query(username, criteria, query, sort, first_result, max_result, result_count)
-         | values ($username, $criteria, $query, $sort, $first, $max, $resultCount)
+    sql"""INSERT INTO query(username, ip, criteria, query, sort, first_result, max_result, result_count)
+         | values ($username, $ipAddress, $criteria, $query, $sort, $first, $max, $resultCount)
          | RETURNING id
        """.stripMargin
       .query[QueryId]
@@ -71,7 +72,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, created
+    sql"""SELECT rev, reference, username, ip, created
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -81,7 +82,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, created
+    sql"""SELECT rev, reference, username, ip, created
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -235,7 +236,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getQuery(queryId: QueryId): Task[DbQuery] =
-    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+    sql"""SELECT query.id, username, ip, executed, criteria, query, sort, first_result, max_result, result_count
          | FROM query
          | WHERE query.id = ${queryId.id}
        """.stripMargin
@@ -244,7 +245,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getQueriesSince(since: Instant): Task[Seq[DbQuery]] =
-    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+    sql"""SELECT query.id, username, ip, executed, criteria, query, sort, first_result, max_result, result_count
          | FROM query
          | WHERE query.executed >= $since
        """.stripMargin

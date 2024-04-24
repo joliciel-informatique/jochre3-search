@@ -68,7 +68,13 @@ package object service {
 
   private[core] case class DocRev(rev: Long) extends AnyVal
 
-  private[service] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
+  private[service] case class DbDocument(
+      rev: DocRev,
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      created: Instant
+  )
 
   private[service] case class PageId(id: Long) extends AnyVal
   private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
@@ -106,6 +112,7 @@ package object service {
   private[service] case class DbQuery(
       id: QueryId,
       username: String,
+      ipAddress: Option[String],
       executed: Instant,
       criteria: SearchCriterion,
       query: Option[String],
@@ -119,6 +126,7 @@ package object service {
   private[service] case class DbWordSuggestion(
       id: WordSuggestionId,
       username: String,
+      ipAddress: Option[String],
       created: Instant,
       docRef: DocReference,
       pageIndex: Int,
@@ -137,6 +145,7 @@ package object service {
   private[service] case class DbMetadataCorrection(
       id: MetadataCorrectionId,
       username: String,
+      ipAddress: Option[String],
       created: Instant,
       field: MetadataField,
       oldValue: Option[String],

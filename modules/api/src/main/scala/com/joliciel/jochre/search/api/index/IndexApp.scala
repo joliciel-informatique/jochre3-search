@@ -12,6 +12,7 @@ import sttp.tapir.AnyEndpoint
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
+import shapeless.syntax.std.tuple._
 
 import scala.concurrent.ExecutionContext
 
@@ -26,7 +27,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Requirements,
     String,
     ValidToken,
-    PdfFileForm,
+    (PdfFileForm, Option[String]),
     HttpError,
     IndexResponse,
     Any
@@ -46,17 +47,18 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .in(
         multipartBody[PdfFileForm]
       )
+      .in(clientIp)
       .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
       .description("Post an image file for analysis and return xml result.")
 
   private val postIndexHttp: ZServerEndpoint[Requirements, Any] =
-    postIndexPdfEndpoint.serverLogic[Requirements](token => input => postIndexPdfLogic(token, input))
+    postIndexPdfEndpoint.serverLogic[Requirements](token => input => (postIndexPdfLogic _).tupled(token +: input))
 
   private val postWordSuggestionEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
-    WordSuggestionForm,
+    (WordSuggestionForm, Option[String]),
     HttpError,
     OkResponse,
     Any
@@ -75,17 +77,20 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .in(
         jsonBody[WordSuggestionForm]
       )
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description("Make a suggestion for a given word that was OCR'd incorrectly.")
 
   private val postWordSuggestionHttp: ZServerEndpoint[Requirements, Any] =
-    postWordSuggestionEndpoint.serverLogic[Requirements](token => input => postWordSuggestionLogic(token, input))
+    postWordSuggestionEndpoint.serverLogic[Requirements](token =>
+      input => (postWordSuggestionLogic _).tupled(token +: input)
+    )
 
   private val postMetadataCorrectionEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
-    MetadataCorrectionForm,
+    (MetadataCorrectionForm, Option[String]),
     HttpError,
     OkResponse,
     Any
@@ -103,9 +108,15 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .in("correct-metadata")
       .in(
         jsonBody[MetadataCorrectionForm].example(
-          MetadataCorrectionForm(DocReference("nybc200089"), MetadataField.Author.entryName, "שלום עליכם", false)
+          MetadataCorrectionForm(
+            DocReference("nybc200089"),
+            MetadataField.Author.entryName,
+            "שלום עליכם",
+            applyEverywhere = false
+          )
         )
       )
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description(
         f"Correct metadata for a given document reference. Field is one of ${MetadataField.values.map(_.entryName).mkString(", ")}"
@@ -113,7 +124,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
 
   private val postMetadataCorrectionHttp: ZServerEndpoint[Requirements, Any] =
     postMetadataCorrectionEndpoint.serverLogic[Requirements](token =>
-      input => postMetadataCorrectionLogic(token, input)
+      input => (postMetadataCorrectionLogic _).tupled(token +: input)
     )
 
   val endpoints: List[AnyEndpoint] = List(

@@ -43,6 +43,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Int,
         Option[Int],
         Option[Int],
+        Option[String],
         Option[String]
     ),
     HttpError,
@@ -92,6 +93,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
           .example(None)
       )
+      .in(clientIp)
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index.")
 

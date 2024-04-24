@@ -13,22 +13,25 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     test("insert suggestion") {
       val startTime = Instant.now()
       val joe = "joe"
+      val joeIp = Some("127.0.0.1")
       val jim = "jim"
+      val jimIp = None
       val docRef = DocReference("doc1")
       val rectangle1 = Rectangle(10, 12, 100, 20)
       val rectangle2 = Rectangle(10, 30, 70, 20)
       val docRef2 = DocReference("doc2")
       for {
         suggestionRepo <- getSuggestionRepo()
-        suggestionId1 <- suggestionRepo.insertSuggestion(joe, docRef, 42, rectangle1, "Hello", "Hi")
-        suggestionId2 <- suggestionRepo.insertSuggestion(jim, docRef, 43, rectangle2, "World", "Universe")
-        _ <- suggestionRepo.insertSuggestion(joe, docRef2, 44, rectangle1, "Bye", "Goodbye")
+        suggestionId1 <- suggestionRepo.insertSuggestion(joe, joeIp, docRef, 42, rectangle1, "Hello", "Hi")
+        suggestionId2 <- suggestionRepo.insertSuggestion(jim, jimIp, docRef, 43, rectangle2, "World", "Universe")
+        _ <- suggestionRepo.insertSuggestion(joe, joeIp, docRef2, 44, rectangle1, "Bye", "Goodbye")
         suggestion1 <- suggestionRepo.getSuggestion(suggestionId1)
         suggestions <- suggestionRepo.getSuggestions(docRef)
         _ <- suggestionRepo.ignoreSuggestions(joe)
         suggestionsAfterIgnore <- suggestionRepo.getSuggestions(docRef)
       } yield {
         assertTrue(suggestion1.username == joe) &&
+        assertTrue(suggestion1.ipAddress == joeIp) &&
         assertTrue(suggestion1.pageIndex == 42) &&
         assertTrue(suggestion1.left == 10) &&
         assertTrue(suggestion1.top == 12) &&
@@ -37,7 +40,7 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(suggestion1.suggestion == "Hello") &&
         assertTrue(suggestion1.previousText == "Hi") &&
         assertTrue(suggestion1.created.toEpochMilli > startTime.toEpochMilli) &&
-        assertTrue(suggestion1.ignore == false) &&
+        assertTrue(!suggestion1.ignore) &&
         assertTrue(suggestions.map(_.id) == Seq(suggestionId2, suggestionId1)) &&
         assertTrue(suggestionsAfterIgnore.map(_.id) == Seq(suggestionId2))
       }
@@ -45,25 +48,29 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     test("insert metadata correction") {
       val startTime = Instant.now()
       val joe = "joe"
+      val joeIp = Some("127.0.0.1")
       val jim = "jim"
+      val jimIp = None
       val docRef = DocReference("doc1")
       val docRef2 = DocReference("doc2")
       for {
         suggestionRepo <- getSuggestionRepo()
         correctionId1 <- suggestionRepo.insertMetadataCorrection(
           joe,
+          joeIp,
           MetadataField.Author,
           Some("Joe Schmoe"),
           "Joseph Schmozeph",
-          true,
+          applyEverywhere = true,
           Seq(docRef, docRef2)
         )
         correctionId2 <- suggestionRepo.insertMetadataCorrection(
           jim,
+          jimIp,
           MetadataField.Publisher,
           None,
           "Schmoe Editions Ltd",
-          false,
+          applyEverywhere = false,
           Seq(docRef)
         )
         correction1 <- suggestionRepo.getMetadataCorrection(correctionId1)
@@ -71,10 +78,11 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         corrections <- suggestionRepo.getMetadataCorrections(docRef)
         correctionId3 <- suggestionRepo.insertMetadataCorrection(
           joe,
+          joeIp,
           MetadataField.Author,
           Some("Joseph Schmozeph"),
           "Joe Schmoe",
-          false,
+          applyEverywhere = false,
           Seq(docRef)
         )
         correctionsAfterUpdate <- suggestionRepo.getMetadataCorrections(docRef)
@@ -84,8 +92,9 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         correctionsAfterIgnoreMore <- suggestionRepo.getMetadataCorrections(docRef)
       } yield {
         assertTrue(correction1.username == joe) &&
+        assertTrue(correction1.ipAddress == joeIp) &&
         assertTrue(correction1.field == MetadataField.Author) &&
-        assertTrue(correction1.oldValue == Some("Joe Schmoe")) &&
+        assertTrue(correction1.oldValue.contains("Joe Schmoe")) &&
         assertTrue(correction1.newValue == "Joseph Schmozeph") &&
         assertTrue(correction1.created.toEpochMilli > startTime.toEpochMilli) &&
         assertTrue(correction1.applyEverywhere) &&
