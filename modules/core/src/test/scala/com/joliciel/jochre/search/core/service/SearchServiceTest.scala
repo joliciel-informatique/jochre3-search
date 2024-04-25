@@ -6,6 +6,8 @@ import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
 
+import java.io.{BufferedWriter, FileWriter}
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scala.util.Using
 
@@ -66,14 +68,17 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     alternativeMap
   )
 
+  private val username = "jimi@hendrix.org"
+  private val ipAddress = Some("127.0.0.1")
+
   override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceTest")(
     test("index alto file") {
       for {
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        pageCount1 <- searchService.indexAlto(docRef1, alto1, metadata1)
-        pageCount2 <- searchService.indexAlto(docRef2, alto2, metadata2)
+        pageCount1 <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        pageCount2 <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         index <- ZIO.service[JochreIndex]
         refsWorld <- ZIO.attempt {
           val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "world"))
@@ -111,8 +116,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         searchRepo <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         resultAre <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "are")),
           Sort.Score,
@@ -134,8 +139,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         resultArePadding <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "are")),
           Sort.Score,
@@ -174,8 +179,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         resultAre <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "today")),
           Sort.Score,
@@ -200,8 +205,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         phraseResult <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"will rain tomorrow\"")),
           Sort.Score,
@@ -247,8 +252,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         resultsThink <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "think")),
           Sort.Score,
@@ -274,8 +279,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         resultsThinkPadding <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "think")),
           Sort.Score,
@@ -303,9 +308,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, username, ipAddress, alto3, metadata3)
         titleContainsWorld <- searchService.search(
           SearchQuery(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), "world", strict = false))
         )
@@ -348,9 +353,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, username, ipAddress, alto3, metadata3)
         binsHello <- searchService.aggregate(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello")),
           IndexField.Author,
@@ -373,9 +378,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
-        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, username, ipAddress, alto3, metadata3)
         binsJ <- searchService.getTopAuthors("J", 5)
         binsJo <- searchService.getTopAuthors("Jo", 5)
         binsJ1 <- searchService.getTopAuthors("J", 1)
@@ -396,13 +401,13 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- getSuggestionRepo()
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
-        _ <- searchService.indexAlto(docRef1, alto1, metadata1)
-        _ <- searchService.indexAlto(docRef2, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         _ <- ZIO.attempt {
           docRef2.getBookDir().toFile.mkdirs()
           searchService.storeAlto(docRef2, alto2.toXml)
         }
-        _ <- searchService.indexAlto(docRef3, alto3, metadata3)
+        _ <- searchService.indexAlto(docRef3, username, ipAddress, alto3, metadata3)
         resultsFineBefore <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "fine")),
           Sort.Score,
@@ -413,8 +418,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           "joe",
           addOffsets = false
         )
-        _ <- searchService.suggestWord("joe", docRef2, wordOffset, "Great,")
-        _ <- searchService.reindex(docRef2)
+        _ <- searchService.suggestWord(username, ipAddress, docRef2, wordOffset, "Great,")
+        _ <- searchService.reindexWhereRequired()
         resultsGreat <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "great")),
           Sort.Score,
@@ -439,6 +444,70 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(resultsGreat.results.size == 1) &&
         assertTrue(resultsFineAfter.results.size == resultsFineBefore.results.size - 1) &&
         assertTrue(resultsGreat.results.head.snippets.head.text == "<b>Great</b>, thank you.")
+      }
+    },
+    test("correct metadata") {
+      for {
+        _ <- getSuggestionRepo()
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.indexAlto(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
+        _ <- searchService.indexAlto(docRef3, username, ipAddress, alto3, metadata3)
+        _ <- ZIO.attempt {
+          docRef1.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef1, alto1.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef1.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata1))
+          }
+        }
+        _ <- ZIO.attempt {
+          docRef2.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef2, alto2.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef2.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata2))
+          }
+        }
+        _ <- ZIO.attempt {
+          docRef3.getBookDir().toFile.mkdirs()
+          searchService.storeAlto(docRef3, alto3.toXml)
+
+          // Write the metadata to the content directory, so we can re-read it later
+          val metadataPath = docRef3.getMetadataPath()
+          Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+            bw.write(MetadataReader.default.write(metadata3))
+          }
+        }
+        correctionId <- searchService.correctMetadata(
+          username,
+          ipAddress,
+          docRef1,
+          MetadataField.Author,
+          "Joseph Schmozeph",
+          applyEverywhere = true
+        )
+        _ <- searchService.reindexWhereRequired()
+        resultsSchmozeph <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joseph Schmozeph")))
+        )
+        _ <- searchService.undoMetadataCorrection(correctionId)
+        _ <- searchService.reindexWhereRequired()
+        resultsSchmozephAfterUndo <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joseph Schmozeph")))
+        )
+        resultsSchmoeAfterUndo <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
+        )
+      } yield {
+        assertTrue(resultsSchmozeph.results.map(_.docRef) == Seq(docRef1, docRef3)) &&
+        assertTrue(resultsSchmozephAfterUndo.results.map(_.docRef) == Seq()) &&
+        assertTrue(resultsSchmoeAfterUndo.results.map(_.docRef) == Seq(docRef1, docRef3))
       }
     }
   ).provideLayer(

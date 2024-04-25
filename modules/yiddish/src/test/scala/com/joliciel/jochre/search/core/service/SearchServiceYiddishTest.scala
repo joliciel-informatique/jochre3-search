@@ -13,6 +13,9 @@ import javax.imageio.ImageIO
 object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
   private val log = LoggerFactory.getLogger(getClass)
 
+  private val username = "jimi@hendrix.org"
+  private val ipAddress = Some("127.0.0.1")
+
   override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceYiddishTest")(
     test("upload real pdf and get image snippets") {
       val docRef = DocReference("nybc200089")
@@ -25,15 +28,16 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
       for {
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
-        pageCount <- searchService.indexPdf(docRef, pdfStream, altoStream, Some(metadataStream))
+        pageCount <- searchService.indexPdf(docRef, username, ipAddress, pdfStream, altoStream, Some(metadataStream))
         searchResults <- searchService.search(
-          SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn", strict = false)),
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn")),
           Sort.Score,
           0,
           10,
           Some(20),
           Some(1),
-          "test",
+          username,
+          ipAddress,
           addOffsets = false
         )
         topResult <- ZIO.attempt(searchResults.results.head)

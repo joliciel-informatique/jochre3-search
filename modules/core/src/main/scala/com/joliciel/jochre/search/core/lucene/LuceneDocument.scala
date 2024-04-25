@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField}
+import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField, MetadataField}
 import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
 import com.joliciel.jochre.search.core.service.{DocRev, Highlight, Snippet}
 import com.typesafe.config.ConfigFactory
@@ -45,6 +45,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
       Option(TokenSources.getTermVectorTokenStreamOrNull(field.entryName, termVector, maxStartOffset))
     }
   }
+
+  def getMetaValue(field: MetadataField): Option[String] = Option(doc.get(field.indexField.entryName))
 
   def getText(field: IndexField): Option[String] = Option(doc.get(field.entryName))
 

@@ -5,7 +5,7 @@ import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import java.io.StringReader
 import java.time.Instant
 import scala.util.Using
-import scala.xml.XML
+import scala.xml.{PrettyPrinter, XML}
 
 package object service {
   case class SearchResponse(results: Seq[SearchResult], totalCount: Long)
@@ -68,7 +68,14 @@ package object service {
 
   private[core] case class DocRev(rev: Long) extends AnyVal
 
-  private[service] case class DbDocument(rev: DocRev, ref: DocReference, created: Instant)
+  private[service] case class DbDocument(
+      rev: DocRev,
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      created: Instant,
+      reindex: Boolean
+  )
 
   private[service] case class PageId(id: Long) extends AnyVal
   private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
@@ -106,6 +113,7 @@ package object service {
   private[service] case class DbQuery(
       id: QueryId,
       username: String,
+      ipAddress: Option[String],
       executed: Instant,
       criteria: SearchCriterion,
       query: Option[String],
@@ -119,6 +127,7 @@ package object service {
   private[service] case class DbWordSuggestion(
       id: WordSuggestionId,
       username: String,
+      ipAddress: Option[String],
       created: Instant,
       docRef: DocReference,
       pageIndex: Int,
@@ -133,35 +142,70 @@ package object service {
     val rect = Rectangle(left, top, width, height)
   }
 
+  case class MetadataCorrectionId(id: Long) extends AnyVal
+  private[service] case class DbMetadataCorrection(
+      id: MetadataCorrectionId,
+      username: String,
+      ipAddress: Option[String],
+      created: Instant,
+      field: MetadataField,
+      oldValue: Option[String],
+      newValue: String,
+      applyEverywhere: Boolean,
+      ignore: Boolean,
+      sent: Boolean
+  )
+
   trait MetadataReader {
     def read(fileContents: String): DocMetadata
+
+    def write(metadata: DocMetadata): String
   }
 
   object MetadataReader {
-    val default: MetadataReader = (fileContents: String) => {
-      import com.joliciel.jochre.ocr.core.utils.XmlImplicits._
+    val default: MetadataReader = new MetadataReader {
 
-      Using(new StringReader(fileContents)) { reader =>
-        val fileXml = XML.load(reader)
-        val title = (fileXml \\ "title-alt-script").headOption.map(_.textContent)
-        val titleEnglish = (fileXml \\ "title").headOption.map(_.textContent)
-        val author = (fileXml \\ "creator-alt-script").headOption.map(_.textContent)
-        val authorEnglish = (fileXml \\ "creator").headOption.map(_.textContent)
-        val date = (fileXml \\ "date").headOption.map(_.textContent)
-        val publisher = (fileXml \\ "publisher").headOption.map(_.textContent)
-        val volume = (fileXml \\ "volume").headOption.map(_.textContent)
-        val url = (fileXml \\ "identifier-access").headOption.map(_.textContent)
-        DocMetadata(
-          title = title,
-          titleEnglish = titleEnglish,
-          author = author,
-          authorEnglish = authorEnglish,
-          publicationYear = date,
-          publisher = publisher,
-          volume = volume,
-          url = url
-        )
-      }.get
+      override def read(fileContents: String): DocMetadata = {
+        import com.joliciel.jochre.ocr.core.utils.XmlImplicits._
+
+        Using(new StringReader(fileContents)) { reader =>
+          val fileXml = XML.load(reader)
+          val title = (fileXml \\ "title-alt-script").headOption.map(_.textContent)
+          val titleEnglish = (fileXml \\ "title").headOption.map(_.textContent)
+          val author = (fileXml \\ "creator-alt-script").headOption.map(_.textContent)
+          val authorEnglish = (fileXml \\ "creator").headOption.map(_.textContent)
+          val date = (fileXml \\ "date").headOption.map(_.textContent)
+          val publisher = (fileXml \\ "publisher").headOption.map(_.textContent)
+          val volume = (fileXml \\ "volume").headOption.map(_.textContent)
+          val url = (fileXml \\ "identifier-access").headOption.map(_.textContent)
+          DocMetadata(
+            title = title,
+            titleEnglish = titleEnglish,
+            author = author,
+            authorEnglish = authorEnglish,
+            publicationYear = date,
+            publisher = publisher,
+            volume = volume,
+            url = url
+          )
+        }.get
+      }
+
+      override def write(metadata: DocMetadata): String = {
+        val xml = <metadata>
+          {metadata.volume.map(value => <volume>{value}</volume>).orNull}
+          {metadata.titleEnglish.map(value => <title>{value}</title>).orNull}
+          {metadata.authorEnglish.map(value => <creator>{value}</creator>).orNull}
+          {metadata.publisher.map(value => <publisher>{value}</publisher>).orNull}
+          {metadata.publicationYear.map(value => <date>{value}</date>).orNull}
+          {metadata.title.map(value => <title-alt-script>{value}</title-alt-script>).orNull}
+          {metadata.author.map(value => <creator-alt-script>{value}</creator-alt-script>).orNull}
+          {metadata.url.map(value => <identifier-access>{value}</identifier-access>).orNull}
+        </metadata>
+
+        val prettyPrinter = new PrettyPrinter(120, 2)
+        prettyPrinter.format(xml)
+      }
     }
   }
 }

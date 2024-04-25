@@ -13,26 +13,35 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
   override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchRepoTest")(
     test("insert document") {
       val docRef = DocReference("doc1")
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val startTime = Instant.now()
       for {
         searchRepo <- getSearchRepo()
-        docRev <- searchRepo.insertDocument(docRef)
+        docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         doc <- searchRepo.getDocument(docRef)
         doc2 <- searchRepo.getDocument(docRev)
+        _ <- searchRepo.updateDocument(docRef, reindex = true)
+        docsToReindex <- searchRepo.getDocumentsToReindex()
       } yield {
         assertTrue(doc.rev == docRev) &&
         assertTrue(doc.ref == docRef) &&
+        assertTrue(doc.username == joe) &&
+        assertTrue(doc.ipAddress == joeIp) &&
         assertTrue(doc.created.toEpochMilli > startTime.toEpochMilli) &&
-        assertTrue(doc == doc2)
+        assertTrue(doc == doc2) &&
+        assertTrue(docsToReindex.map(_.rev) == Seq(docRev))
       }
     },
     test("insert page") {
       val docRef = DocReference("doc1")
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val pageToInsert = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val page2ToInsert = Page("page_2", 200, 100, 43, 0.17, "yi", 0.9, Seq.empty)
       for {
         searchRepo <- getSearchRepo()
-        docRev <- searchRepo.insertDocument(docRef)
+        docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         pageId <- searchRepo.insertPage(docRev, pageToInsert, 10)
         page <- searchRepo.getPage(docRev, 42).map(_.get)
         pageById <- searchRepo.getPage(pageId)
@@ -51,11 +60,13 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     },
     test("insert row") {
       val docRef = DocReference("doc1")
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val page = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val rectangle = Rectangle(10, 13, 90, 20)
       for {
         searchRepo <- getSearchRepo()
-        docRev <- searchRepo.insertDocument(docRef)
+        docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         pageId <- searchRepo.insertPage(docRev, page, 100)
         rowId <- searchRepo.insertRow(pageId, 12, rectangle)
         row <- searchRepo.getRow(docRev, 42, 12).map(_.get)
@@ -73,13 +84,15 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     },
     test("insert word") {
       val docRef = DocReference("doc1")
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val page = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val rectangle = Rectangle(10, 13, 90, 20)
       val word = Word("hello", Rectangle(20, 13, 40, 20), Seq.empty, Seq.empty, 0.80)
       val word2 = Word("uni-", Rectangle(70, 13, 100, 20), Seq.empty, Seq.empty, 0.90)
       for {
         searchRepo <- getSearchRepo()
-        docRev <- searchRepo.insertDocument(docRef)
+        docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         pageId <- searchRepo.insertPage(docRev, page, 10)
         rowId <- searchRepo.insertRow(pageId, 12, rectangle)
         wordId <- searchRepo.insertWord(docRev, rowId, 10, None, word)
@@ -107,6 +120,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     },
     test("retrieve sequential rows by offset") {
       val docRef = DocReference("doc1")
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val page = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val rect1 = Rectangle(10, 10, 90, 20)
       val word1 = Word("hello", Rectangle(20, 10, 40, 20), Seq.empty, Seq.empty, 0.80)
@@ -115,7 +130,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val word3 = Word("word", Rectangle(15, 30, 50, 40), Seq.empty, Seq.empty, 0.90)
       for {
         searchRepo <- getSearchRepo()
-        docRev <- searchRepo.insertDocument(docRef)
+        docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         pageId <- searchRepo.insertPage(docRev, page, 10)
         rowId1 <- searchRepo.insertRow(pageId, 12, rect1)
         _ <- searchRepo.insertWord(docRev, rowId1, 10, None, word1)
@@ -133,7 +148,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
     },
     test("insert query") {
       val startTime = Instant.now()
-      val username = "jimi@hendrix.org"
+      val joe = "Joe"
+      val joeIp = Some("127.0.0.1")
       val criteria = SearchCriterion.And(
         SearchCriterion.Contains(IndexField.Text, "Hello"),
         SearchCriterion.Not(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
@@ -141,13 +157,14 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val sort = Sort.Field(IndexField.PublicationYearAsNumber, ascending = true)
       for {
         searchRepo <- getSearchRepo()
-        queryId <- searchRepo.insertQuery(username, criteria, sort, 20, 42, 72)
+        queryId <- searchRepo.insertQuery(joe, joeIp, criteria, sort, 20, 42, 72)
         query <- searchRepo.getQuery(queryId)
         queries <- searchRepo.getQueriesSince(startTime)
       } yield {
         assertTrue(query.criteria == criteria) &&
         assertTrue(query.sort == sort) &&
-        assertTrue(query.username == username) &&
+        assertTrue(query.username == joe) &&
+        assertTrue(query.ipAddress == joeIp) &&
         assertTrue(query.first == 20) &&
         assertTrue(query.max == 42) &&
         assertTrue(query.resultCount == 72) &&

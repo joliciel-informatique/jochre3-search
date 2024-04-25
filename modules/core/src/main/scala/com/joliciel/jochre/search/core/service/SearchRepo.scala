@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
-import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, SearchQuery, Sort}
+import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, Sort}
 import doobie._
 import doobie.implicits._
 import doobie.postgres.implicits._
@@ -14,14 +14,22 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
-  def insertDocument(ref: DocReference): Task[DocRev] =
-    sql"""INSERT INTO document (reference)
-         | VALUES (${ref.ref})
+  def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] =
+    sql"""INSERT INTO document (reference, username, ip)
+         | VALUES (${ref.ref}, $username, $ipAddress)
          | RETURNING rev
          | """.stripMargin
       .query[DocRev]
       .unique
       .transact(transactor)
+
+  def updateDocument(docRef: DocReference, reindex: Boolean): Task[Int] = {
+    sql"""UPDATE document d1 SET reindex=$reindex
+         | WHERE d1.reference = ${docRef.ref}
+         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+       """.stripMargin.update.run
+      .transact(transactor)
+  }
 
   def insertPage(docRev: DocRev, page: Page, offset: Int): Task[PageId] =
     sql"""INSERT INTO page (doc_rev, index, width, height, start_offset)
@@ -54,6 +62,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   implicit val sortMeta: Meta[Sort] = new Meta(pgDecoderGet, pgEncoderPut)
   def insertQuery(
       username: String,
+      ipAddress: Option[String],
       criteria: SearchCriterion,
       sort: Sort,
       first: Int,
@@ -61,8 +70,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       resultCount: Int
   ): Task[QueryId] = {
     val query = criteria.getContains().map(_.queryString)
-    sql"""INSERT INTO query(username, criteria, query, sort, first_result, max_result, result_count)
-         | values ($username, $criteria, $query, $sort, $first, $max, $resultCount)
+    sql"""INSERT INTO query(username, ip, criteria, query, sort, first_result, max_result, result_count)
+         | values ($username, $ipAddress, $criteria, $query, $sort, $first, $max, $resultCount)
          | RETURNING id
        """.stripMargin
       .query[QueryId]
@@ -71,7 +80,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, created
+    sql"""SELECT rev, reference, username, ip, created, reindex
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -81,12 +90,22 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, created
+    sql"""SELECT rev, reference, username, ip, created, reindex
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
       .query[DbDocument]
       .unique
+      .transact(transactor)
+
+  def getDocumentsToReindex(): Task[Seq[DbDocument]] =
+    sql"""SELECT rev, reference, username, ip, created, reindex
+         | FROM document d1
+         | WHERE d1.reindex = ${true}
+         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+       """.stripMargin
+      .query[DbDocument]
+      .to[Seq]
       .transact(transactor)
 
   def getPage(docRev: DocRev, pageNumber: Int): Task[Option[DbPage]] =
@@ -235,7 +254,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getQuery(queryId: QueryId): Task[DbQuery] =
-    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+    sql"""SELECT query.id, username, ip, executed, criteria, query, sort, first_result, max_result, result_count
          | FROM query
          | WHERE query.id = ${queryId.id}
        """.stripMargin
@@ -244,7 +263,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getQueriesSince(since: Instant): Task[Seq[DbQuery]] =
-    sql"""SELECT query.id, username, executed, criteria, query, sort, first_result, max_result, result_count
+    sql"""SELECT query.id, username, ip, executed, criteria, query, sort, first_result, max_result, result_count
          | FROM query
          | WHERE query.executed >= $since
        """.stripMargin
