@@ -183,8 +183,14 @@ trait SearchLogic extends HttpErrorMapper {
     val effectiveStrict = strict.getOrElse(false)
     val effectiveAuthorInclude = authorInclude.getOrElse(true)
     val criteria = Seq(
-      query.map(SearchCriterion.Contains(IndexField.Text, _, strict = effectiveStrict)),
-      title.map(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), _, strict = effectiveStrict)),
+      query.flatMap(v =>
+        Option.when(v.nonEmpty)(SearchCriterion.Contains(IndexField.Text, v, strict = effectiveStrict))
+      ),
+      title.flatMap(v =>
+        Option.when(v.nonEmpty)(
+          SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), v, strict = effectiveStrict)
+        )
+      ),
       Option.when(authors.nonEmpty) {
         val authorCriterion = SearchCriterion.ValueIn(IndexField.Author, authors)
         val authorEnglishCriterion = SearchCriterion.ValueIn(IndexField.AuthorEnglish, authors)
