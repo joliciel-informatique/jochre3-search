@@ -4,7 +4,7 @@ volumes:
     name: pgdata_jochre
 services:
   postgres:
-    image: postgres:15.3-alpine
+    image: postgres:16.2-alpine
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
@@ -17,7 +17,7 @@ services:
         max-size: "5m"
         max-file: "10"
   postgres-test:
-    image: postgres:15.3-alpine
+    image: postgres:16.2-alpine
     environment:
       POSTGRES_USER: jochre
       POSTGRES_PASSWORD: password

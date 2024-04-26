@@ -1,7 +1,16 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
-import com.joliciel.jochre.ocr.core.model.{Alto, Hyphen, Page, SpellingAlternative, SubsType, TextLine, Word, WordOrSpace}
+import com.joliciel.jochre.ocr.core.model.{
+  Alto,
+  Hyphen,
+  Page,
+  SpellingAlternative,
+  SubsType,
+  TextLine,
+  Word,
+  WordOrSpace
+}
 import com.joliciel.jochre.ocr.core.utils.StringUtils
 import com.joliciel.jochre.ocr.core.utils.StringUtils.stringToChars
 import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
@@ -10,19 +19,17 @@ import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import zio.{Task, ZIO}
 
-case class AltoIndexer (jochreIndex: JochreIndex,
-  searchRepo: SearchRepo,
-  suggestionRepo: SuggestionRepo) {
+case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggestionRepo: SuggestionRepo) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val hyphenRegex = config.getString("hyphen-regex").r
 
   def index(
-    ref: DocReference,
-    username: String,
-    ipAddress: Option[String],
-    alto: Alto,
-    metadata: DocMetadata
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      metadata: DocMetadata
   ): Task[Int] = {
     for {
       suggestions <- suggestionRepo.getSuggestions(ref)
@@ -62,21 +69,21 @@ case class AltoIndexer (jochreIndex: JochreIndex,
   }
 
   private case class DocumentData(
-    docRev: DocRev,
-    pageCount: Int,
-    text: String,
-    pageOffsets: Set[Int],
-    newlineOffsets: Set[Int],
-    alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
-    hyphenatedWordOffsets: Set[Int]
+      docRev: DocRev,
+      pageCount: Int,
+      text: String,
+      pageOffsets: Set[Int],
+      newlineOffsets: Set[Int],
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
+      hyphenatedWordOffsets: Set[Int]
   )
 
   private def persistDocument(
-    ref: DocReference,
-    username: String,
-    ipAddress: Option[String],
-    alto: Alto,
-    suggestions: Seq[DbWordSuggestion]
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      suggestions: Seq[DbWordSuggestion]
   ): Task[DocumentData] = {
     // We'll add the document reference at the start of the document text
     // This is because the Lucene Tokenizer is only aware of the text it is currently tokenizing,
@@ -95,6 +102,7 @@ case class AltoIndexer (jochreIndex: JochreIndex,
           val pageSuggestionMap = suggestions.groupBy(_.pageIndex)
           pages match {
             case page +: tail =>
+              log.info(f"For doc ${ref.ref}, extracting page ${page.physicalPageNumber}")
               val pageWithDefaultLanguage = page.withDefaultLanguage
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
               val pageSuggestions = pageSuggestionMap.getOrElse(page.physicalPageNumber, Seq.empty)
@@ -142,18 +150,18 @@ case class AltoIndexer (jochreIndex: JochreIndex,
   }
 
   private case class PageData(
-    text: String,
-    endOffset: Int,
-    newlineOffsets: Set[Int],
-    alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
-    hyphenatedWordOffsets: Set[Int]
+      text: String,
+      endOffset: Int,
+      newlineOffsets: Set[Int],
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
+      hyphenatedWordOffsets: Set[Int]
   )
 
   private def persistPage(
-    docId: DocRev,
-    page: Page,
-    startOffset: Int,
-    suggestions: Seq[DbWordSuggestion]
+      docId: DocRev,
+      page: Page,
+      startOffset: Int,
+      suggestions: Seq[DbWordSuggestion]
   ): Task[PageData] = {
     for {
       pageId <- searchRepo.insertPage(docId, page, startOffset)
@@ -301,20 +309,20 @@ case class AltoIndexer (jochreIndex: JochreIndex,
   }
 
   private case class RowData(
-    text: String,
-    endOffset: Int,
-    alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
-    hyphenatedWordOffset: Option[Int]
+      text: String,
+      endOffset: Int,
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
+      hyphenatedWordOffset: Option[Int]
   )
 
   private def persistRow(
-    docId: DocRev,
-    pageId: PageId,
-    textLine: TextLine,
-    nextTextLine: Option[TextLine],
-    rowIndex: Int,
-    rectangle: Rectangle,
-    startOffset: Int
+      docId: DocRev,
+      pageId: PageId,
+      textLine: TextLine,
+      nextTextLine: Option[TextLine],
+      rowIndex: Int,
+      rectangle: Rectangle,
+      startOffset: Int
   ): Task[RowData] = {
     for {
       rowRectangle <- ZIO.attempt {
@@ -395,7 +403,7 @@ case class AltoIndexer (jochreIndex: JochreIndex,
           cont = { case (w, _, _, _, _) => w.nonEmpty }
         ) { case (wordsAndSpaces, text, offset, hyphenatedWordOffset, alternativeSeq) =>
           wordsAndSpaces match {
-            case (word: Word) +: tail =>
+            case (word: Word) +: tail if word.content.nonEmpty =>
               val hyphenatedOffset = word.subsType match {
                 case Some(SubsType.HypPart1) =>
                   // At this point we know that any word with this attribute is the first word of a soft-hyphen compound

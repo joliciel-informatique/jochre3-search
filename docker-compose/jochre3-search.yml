@@ -16,12 +16,7 @@ services:
       options:
         max-size: "5m"
         max-file: "10"
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+    restart: on-failure
   jochre3-search:
     image: registry.gitlab.com/jochre/jochre3-search:${JOCHRE3_SEARCH_VERSION:-0.0.1-SNAPSHOT}
     command: -Dconfig.file=/opt/docker/etc/jochre.conf
@@ -39,9 +34,4 @@ services:
       options:
         max-size: "5m"
         max-file: "10"
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+    restart: on-failure

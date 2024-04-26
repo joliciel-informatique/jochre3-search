@@ -31,6 +31,10 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
   }
 
+  def deleteDocument(docRev: DocRev): Task[Int] =
+    sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
+      .transact(transactor)
+
   def insertPage(docRev: DocRev, page: Page, offset: Int): Task[PageId] =
     sql"""INSERT INTO page (doc_rev, index, width, height, start_offset)
         | VALUES (${docRev.rev}, ${page.physicalPageNumber}, ${page.width}, ${page.height}, $offset)
