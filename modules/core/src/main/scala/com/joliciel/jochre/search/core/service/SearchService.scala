@@ -212,9 +212,12 @@ private[service] case class SearchServiceImpl(
           log.debug(f"Index refreshed after delete? $refreshed")
         }
         val bookDir = ref.getBookDir()
-        bookDir.toFile.list().foreach { fileName =>
-          val currentFile = bookDir.resolve(fileName).toFile
-          currentFile.delete()
+        if (bookDir.toFile.exists() && bookDir.toFile.isDirectory) {
+          val files = Option(bookDir.toFile.list()).getOrElse(Array.empty)
+          files.foreach { fileName =>
+            val currentFile = bookDir.resolve(fileName).toFile
+            currentFile.delete()
+          }
         }
         bookDir.toFile.delete()
       }
