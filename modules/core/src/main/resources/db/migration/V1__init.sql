@@ -14,7 +14,7 @@ CREATE TABLE page(
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
   start_offset INT NOT NULL,
-  FOREIGN KEY(doc_rev) REFERENCES document(rev),
+  FOREIGN KEY(doc_rev) REFERENCES document(rev) ON DELETE CASCADE,
   CONSTRAINT uk_page UNIQUE (doc_rev, index)
 );
 
@@ -26,7 +26,7 @@ CREATE TABLE row(
   top SMALLINT NOT NULL,
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
-  FOREIGN KEY(page_id) REFERENCES page(id),
+  FOREIGN KEY(page_id) REFERENCES page(id) ON DELETE CASCADE,
   CONSTRAINT uk_row UNIQUE (page_id, index)
 );
 
@@ -41,8 +41,8 @@ CREATE TABLE word(
   width SMALLINT NOT NULL,
   height SMALLINT NOT NULL,
   hyphenated_offset INT NULL,
-  FOREIGN KEY(doc_rev) REFERENCES document(rev),
-  FOREIGN KEY(row_id) REFERENCES row(id),
+  FOREIGN KEY(doc_rev) REFERENCES document(rev) ON DELETE CASCADE,
+  FOREIGN KEY(row_id) REFERENCES row(id) ON DELETE CASCADE,
   CONSTRAINT uk_word UNIQUE (doc_rev, start_offset)
 );
 

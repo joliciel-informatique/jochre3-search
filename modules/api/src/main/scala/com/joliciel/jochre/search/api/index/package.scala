@@ -13,6 +13,23 @@ package object index {
       metadataFile: Option[Part[File]]
   )
 
+  case class ImageZipFileForm(
+      docReference: DocReference,
+      imageZipFile: Part[File],
+      altoFile: Part[File],
+      metadataFile: Option[Part[File]]
+  )
+
+  case class AltoFileForm(
+      docReference: DocReference,
+      altoFile: Part[File]
+  )
+
+  case class MetadataFileForm(
+      docReference: DocReference,
+      metadataFile: Part[File]
+  )
+
   case class IndexResponse(
       pages: Int
   )

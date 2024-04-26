@@ -24,13 +24,37 @@ import scala.util.Using
 import scala.xml.{Node, PrettyPrinter, XML}
 
 trait SearchService {
-  def indexPdf(
+
+  def addNewDocumentAsPdf(
       ref: DocReference,
       username: String,
       ipAddress: Option[String],
-      pdfFile: InputStream,
-      altoFile: InputStream,
-      metadataFile: Option[InputStream]
+      pdfStream: InputStream,
+      altoStream: InputStream,
+      metadataStream: Option[InputStream]
+  ): Task[Int]
+
+  def addNewDocumentAsImages(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      imagesZipStream: InputStream,
+      altoStream: InputStream,
+      metadataStream: Option[InputStream]
+  ): Task[Int]
+
+  def removeDocument(
+      ref: DocReference
+  ): Task[Unit]
+
+  def updateAlto(
+      ref: DocReference,
+      altoStream: InputStream
+  ): Task[Int]
+
+  def updateMetadata(
+      ref: DocReference,
+      metadataStream: InputStream
   ): Task[Int]
 
   def indexAlto(
@@ -127,7 +151,7 @@ private[service] case class SearchServiceImpl(
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
 
-  override def indexPdf(
+  override def addNewDocumentAsPdf(
       ref: DocReference,
       username: String,
       ipAddress: Option[String],
@@ -141,31 +165,81 @@ private[service] case class SearchServiceImpl(
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
       }
-      alto <- getAlto(ref, altoStream)
-      pdfInfo <- getPdfInfo(ref, pdfStream)
-      pdfMetadata = getMetadata(pdfInfo)
+      alto <- readAndStoreAlto(ref, altoStream)
+      pdfInfo <- readPdfInfo(ref, pdfStream)
       metadata <- ZIO.attempt {
-        val providedMetadata = metadataStream.map { metadataFile =>
-          try {
-            val contents = Source.fromInputStream(metadataFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
-            val metadata = metadataReader.read(contents)
-
-            // Write the metadata to the content directory, so we can re-read it later
-            val metadataPath = ref.getMetadataPath()
-            Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
-              bw.write(contents)
-            }
-
-            metadata
-          } catch {
-            case t: Throwable =>
-              log.error("Unable to read metadata file", t)
-              throw new BadMetadataFileFormat(t.getMessage)
-          }
-        }
-        providedMetadata.getOrElse(pdfMetadata)
+        metadataStream
+          .map(readAndStoreMetadata(ref, _))
+          .getOrElse(pdfInfo.metadata)
       }
       pageCount <- indexAlto(ref, username, ipAddress, alto, metadata)
+    } yield pageCount
+  }
+
+  def addNewDocumentAsImages(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      imagesZipStream: InputStream,
+      altoStream: InputStream,
+      metadataStream: Option[InputStream]
+  ): Task[Int] = {
+    for {
+      _ <- ZIO.attempt {
+        // Create the directory to store the images and Alto
+        val bookDir = ref.getBookDir()
+        bookDir.toFile.mkdirs()
+      }
+      alto <- readAndStoreAlto(ref, altoStream)
+      _ <- extractImages(ref, imagesZipStream)
+      metadata <- ZIO.attempt {
+        metadataStream
+          .map(readAndStoreMetadata(ref, _))
+          .getOrElse(DocMetadata())
+      }
+      pageCount <- indexAlto(ref, username, ipAddress, alto, metadata)
+    } yield pageCount
+  }
+
+  def removeDocument(
+      ref: DocReference
+  ): Task[Unit] = {
+    for {
+      _ <- ZIO.attempt {
+        jochreIndex.deleteDocument(ref)
+        val refreshed = jochreIndex.refresh
+        if (log.isDebugEnabled) {
+          log.debug(f"Index refreshed after delete? $refreshed")
+        }
+        val bookDir = ref.getBookDir()
+        bookDir.toFile.list().foreach { fileName =>
+          val currentFile = bookDir.resolve(fileName).toFile
+          currentFile.delete()
+        }
+        bookDir.toFile.delete()
+      }
+      dbDoc <- searchRepo.getDocument(ref)
+      _ <- searchRepo.deleteDocument(dbDoc.rev)
+    } yield ()
+  }
+
+  override def updateAlto(
+      ref: DocReference,
+      altoStream: InputStream
+  ): Task[Int] = {
+    for {
+      _ <- readAndStoreAlto(ref, altoStream)
+      pageCount <- reindex(ref)
+    } yield pageCount
+  }
+
+  override def updateMetadata(
+      ref: DocReference,
+      metadataStream: InputStream
+  ): Task[Int] = {
+    for {
+      _ <- ZIO.attempt(readAndStoreMetadata(ref, metadataStream))
+      pageCount <- reindex(ref)
     } yield pageCount
   }
 
@@ -180,6 +254,24 @@ private[service] case class SearchServiceImpl(
     altoIndexer.index(ref, username, ipAddress, alto, metadata)
   }
 
+  private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): DocMetadata =
+    try {
+      val contents = Source.fromInputStream(metadataStream, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
+      val metadata = metadataReader.read(contents)
+
+      // Write the metadata to the content directory, so we can re-read it later
+      val metadataPath = ref.getMetadataPath()
+      Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+        bw.write(contents)
+      }
+
+      metadata
+    } catch {
+      case t: Throwable =>
+        log.error("Unable to read metadata file", t)
+        throw new BadMetadataFileFormat(t.getMessage)
+    }
+
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit = {
     // Store alto in content dir for future access
     val prettyPrinter = new PrettyPrinter(120, 2)
@@ -192,7 +284,7 @@ private[service] case class SearchServiceImpl(
     }.get
   }
 
-  private def getAlto(docRef: DocReference, altoStream: InputStream): Task[Alto] = {
+  private def readAndStoreAlto(docRef: DocReference, altoStream: InputStream): Task[Alto] = {
     def acquire: Task[ZipInputStream] = ZIO
       .attempt { new ZipInputStream(altoStream) }
       .foldZIO(
@@ -238,15 +330,14 @@ private[service] case class SearchServiceImpl(
       subject: Option[String],
       keywords: Option[String],
       creator: Option[String]
-  )
-
-  private def getMetadata(pdfInfo: PdfInfo): DocMetadata = {
-    DocMetadata(
-      title = pdfInfo.title,
-      author = pdfInfo.author
+  ) {
+    val metadata: DocMetadata = DocMetadata(
+      title = title,
+      author = author
     )
   }
-  private def getPdfInfo(docRef: DocReference, pdfStream: InputStream): Task[PdfInfo] = {
+
+  private def readPdfInfo(docRef: DocReference, pdfStream: InputStream): Task[PdfInfo] = {
     def acquire: Task[(InputStream, PDDocument)] = ZIO
       .attempt {
         val pdfBuffer = new RandomAccessReadBuffer(pdfStream)
@@ -281,7 +372,7 @@ private[service] case class SearchServiceImpl(
           val pageCount = pdf.getNumberOfPages
 
           (1 to pageCount).foreach { i =>
-            log.info(f"Extracting PDF page $i")
+            log.info(f"Extracting PDF page $i of $pageCount")
             val image = pdfRenderer.renderImageWithDPI(
               i - 1,
               300.toFloat,
@@ -309,6 +400,51 @@ private[service] case class SearchServiceImpl(
     }
 
     ZIO.acquireReleaseWith(acquire)(release)(readPdf)
+  }
+
+  private def extractImages(docRef: DocReference, imagesZipStream: InputStream): Task[Unit] = {
+    def acquire: Task[ZipInputStream] = ZIO
+      .attempt { new ZipInputStream(imagesZipStream) }
+      .foldZIO(
+        error => {
+          log.error("Unable to open zip file of images", error)
+          ZIO.fail(new BadImageZipFileFormat(error.getMessage))
+        },
+        success => ZIO.succeed(success)
+      )
+
+    def release(zipInputStream: ZipInputStream): URIO[Any, Unit] = ZIO
+      .attempt(zipInputStream.close())
+      .orDieWith { ex =>
+        log.error("Cannot close zip input stream of images", ex)
+        ex
+      }
+
+    def readImages(zipInputStream: ZipInputStream): Task[Unit] = ZIO
+      .attempt {
+        val bookDir = docRef.getBookDir()
+        log.info(f"About to read image zip file for ${docRef.ref}")
+        Iterator
+          .continually(Option(zipInputStream.getNextEntry))
+          .takeWhile(_.isDefined)
+          .foreach {
+            case Some(zipEntry) =>
+              val image = ImageIO.read(zipInputStream)
+              val imageFile = bookDir.resolve(zipEntry.getName).toFile
+              log.info(f"Writing ${imageFile.getName}")
+              ImageIO.write(image, "png", imageFile)
+            case None => // Can never happen
+          }
+      }
+      .foldZIO(
+        error => {
+          log.error("Unable to read image zip file", error)
+          ZIO.fail(new BadImageZipFileFormat(error.getMessage))
+        },
+        _ => ZIO.succeed(())
+      )
+
+    ZIO.acquireReleaseWith(acquire)(release)(readImages)
   }
 
   override def search(
@@ -705,7 +841,7 @@ private[service] case class SearchServiceImpl(
         val altoFile = docRef.getAltoPath()
         new FileInputStream(altoFile.toFile)
       }
-      alto <- getAlto(docRef, altoStream)
+      alto <- readAndStoreAlto(docRef, altoStream)
       metadata <- ZIO.attempt {
         getMetadata(docRef).getOrElse(DocMetadata())
       }
@@ -743,7 +879,7 @@ private[service] case class SearchServiceImpl(
       value: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId] = {
-    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value ${value}")
+    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $value")
     val shouldSendMail = config.getBoolean("corrections.send-mail")
     for {
       oldValue <- ZIO.attempt {

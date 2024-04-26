@@ -102,6 +102,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         hyphenatedWord <- searchRepo.getWord(docRev, 20).map(_.get)
         wordPage <- searchRepo.getPageByWordOffset(docRev, 10)
         wordsInRow <- searchRepo.getWordsInRow(docRev, 10)
+        _ <- searchRepo.deleteDocument(docRev)
+        dbWordAfterDelete <- searchRepo.getWord(docRev, 10)
       } yield {
         assertTrue(dbWord.id == wordId) &&
         assertTrue(dbWord.docRev == docRev) &&
@@ -115,7 +117,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(dbWord == dbWordById) &&
         assertTrue(hyphenatedWord.hyphenatedOffset.contains(26)) &&
         assertTrue(wordPage.map(_.index).contains(42)) &&
-        assertTrue(wordsInRow.map(_.id) == Seq(wordId, hyphenatedWordId))
+        assertTrue(wordsInRow.map(_.id) == Seq(wordId, hyphenatedWordId)) &&
+        assertTrue(dbWordAfterDelete.isEmpty)
       }
     },
     test("retrieve sequential rows by offset") {

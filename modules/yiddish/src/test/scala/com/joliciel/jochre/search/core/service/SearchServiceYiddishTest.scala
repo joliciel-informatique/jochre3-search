@@ -28,7 +28,14 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
       for {
         _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
-        pageCount <- searchService.indexPdf(docRef, username, ipAddress, pdfStream, altoStream, Some(metadataStream))
+        pageCount <- searchService.addNewDocumentAsPdf(
+          docRef,
+          username,
+          ipAddress,
+          pdfStream,
+          altoStream,
+          Some(metadataStream)
+        )
         searchResults <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn")),
           Sort.Score,
@@ -47,6 +54,60 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           topResult.snippets.head.end,
           topResult.snippets.head.highlights
         )
+        _ <- searchService.removeDocument(docRef)
+      } yield {
+        val tempFile = File.createTempFile("jochre-snippet", ".png")
+        ImageIO.write(imageSnippet, "png", tempFile)
+        log.info(f"Wrote snippet to ${tempFile.getPath}")
+        assertTrue(searchResults.totalCount == 1) &&
+        assertTrue(pageCount == 2) &&
+        assertTrue(
+          topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+            "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
+            "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
+        ) &&
+        assertTrue(topResult.snippets.head.page == 2)
+      }
+    },
+    test("upload real image zip and get image snippets") {
+      val docRef = DocReference("nybc200089")
+      val imageZipStream = getClass.getResourceAsStream("/nybc200089-11-12.zip")
+
+      val altoStream = getClass.getResourceAsStream("/nybc200089-11-12_alto4.zip")
+
+      val metadataStream = getClass.getResourceAsStream("/nybc200089_meta.xml")
+
+      for {
+        _ <- getSearchRepo()
+        searchService <- ZIO.service[SearchService]
+        pageCount <- searchService.addNewDocumentAsImages(
+          docRef,
+          username,
+          ipAddress,
+          imageZipStream,
+          altoStream,
+          Some(metadataStream)
+        )
+        searchResults <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn")),
+          Sort.Score,
+          0,
+          10,
+          Some(20),
+          Some(1),
+          username,
+          ipAddress,
+          addOffsets = false
+        )
+        topResult <- ZIO.attempt(searchResults.results.head)
+        imageSnippet <- searchService.getImageSnippet(
+          topResult.docRef,
+          topResult.snippets.head.start,
+          topResult.snippets.head.end,
+          topResult.snippets.head.highlights
+        )
+        _ <- searchService.removeDocument(docRef)
       } yield {
         val tempFile = File.createTempFile("jochre-snippet", ".png")
         ImageIO.write(imageSnippet, "png", tempFile)

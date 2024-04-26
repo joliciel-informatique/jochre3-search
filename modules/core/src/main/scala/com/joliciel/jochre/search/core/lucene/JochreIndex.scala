@@ -7,13 +7,13 @@ import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper
 import org.apache.lucene.index.IndexWriterConfig.OpenMode
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
+import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, Term}
+import org.apache.lucene.search.TermQuery
 import org.apache.lucene.store.{Directory, FSDirectory, SingleInstanceLockFactory}
 import org.slf4j.LoggerFactory
 import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
-
 import scala.jdk.CollectionConverters._
 
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
@@ -35,6 +35,9 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
   val searcherManager: JochreSearcherManager = new JochreSearcherManager(indexWriter, analyzerGroup)
 
   def refresh: Boolean = searcherManager.refreshIndex()
+
+  def deleteDocument(docRef: DocReference): Unit =
+    indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)))
 
   def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter)
 

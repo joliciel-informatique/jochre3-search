@@ -4,6 +4,7 @@ import com.joliciel.jochre.search.core.{BadRequestException, DocReference, NotFo
 
 class BadPdfFileFormat(message: String) extends BadRequestException(message)
 class BadAltoFileFormat(message: String) extends BadRequestException(message)
+class BadImageZipFileFormat(message: String) extends BadRequestException(message)
 class BadMetadataFileFormat(message: String) extends BadRequestException(message)
 class DocumentNotFoundInIndex(docRef: DocReference) extends NotFoundException(f"Document ${docRef.ref} not found in index")
 class BadOffsetForImageSnippet(message: String) extends BadRequestException(message)

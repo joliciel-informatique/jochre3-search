@@ -99,6 +99,13 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           }.get
         }
         textWithHtml <- searchService.getTextAsHtml(docRef2)
+        _ <- searchService.removeDocument(docRef1)
+        refsHelloAfterRemove <- ZIO.attempt {
+          val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello"))
+          Using(index.searcherManager.acquire()) { searcher =>
+            searcher.findMatchingRefs(query)
+          }.get
+        }
       } yield {
         assertTrue(pageCount1 == 1) &&
         assertTrue(pageCount2 == 3) &&
@@ -107,7 +114,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(refsHello.toSet == Set(docRef1, docRef2)) &&
         assertTrue(
           textWithHtml.replaceAll("<(.+?)>", "") == f"${metadata2.title.get}${text2.replaceAll("\n", "")}"
-        )
+        ) &&
+        assertTrue(refsHelloAfterRemove == Seq(docRef2))
       }
     },
     test("search single occurrence without padding") {

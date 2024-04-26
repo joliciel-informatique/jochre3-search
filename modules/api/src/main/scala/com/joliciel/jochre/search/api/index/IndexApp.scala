@@ -24,7 +24,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     with CoreProtocol {
   implicit val ec: ExecutionContext = executionContext
 
-  private val postIndexPdfEndpoint: ZPartialServerEndpoint[
+  private val putPdfEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
@@ -42,7 +42,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
-      .post
+      .put
       .in("index")
       .in("pdf")
       .in(
@@ -50,10 +50,137 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       )
       .in(clientIp)
       .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
-      .description("Post an image file for analysis and return xml result.")
+      .description("Add a new document defined by a PDF, zipped Alto XML, and optionally metadata")
 
-  private val postIndexHttp: ZServerEndpoint[Requirements, Any] =
-    postIndexPdfEndpoint.serverLogic[Requirements](token => input => (postIndexPdfLogic _).tupled(token +: input))
+  private val putPdfHttp: ZServerEndpoint[Requirements, Any] =
+    putPdfEndpoint.serverLogic[Requirements](token => input => (putPdfLogic _).tupled(token +: input))
+
+  private val putImageZipEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (ImageZipFileForm, Option[String]),
+    HttpError,
+    IndexResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Image zip file is not a valid zip file, or Alto file is not a zip file containing Alto XML"
+          )
+        )
+      )
+      .put
+      .in("index")
+      .in("image-zip")
+      .in(
+        multipartBody[ImageZipFileForm]
+      )
+      .in(clientIp)
+      .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
+      .description(
+        "Add a new document defined by a zip of image files, zipped Alto XML, and optionally metadata." +
+          "Image files must be named [ref]_0001.png etc."
+      )
+
+  private val putImageZipHttp: ZServerEndpoint[Requirements, Any] =
+    putImageZipEndpoint.serverLogic[Requirements](token => input => (putImageZipLogic _).tupled(token +: input))
+
+  private val postAltoEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (AltoFileForm, Option[String]),
+    HttpError,
+    IndexResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Alto file is not a zip file containing Alto XML"
+          )
+        )
+      )
+      .post
+      .in("index")
+      .in("alto")
+      .in(
+        multipartBody[AltoFileForm]
+      )
+      .in(clientIp)
+      .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
+      .description("Replace alto OCR layer for an existing document.")
+
+  private val postAltoHttp: ZServerEndpoint[Requirements, Any] =
+    postAltoEndpoint.serverLogic[Requirements](token => input => (postAltoLogic _).tupled(token +: input))
+
+  private val postMetadataEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (MetadataFileForm, Option[String]),
+    HttpError,
+    IndexResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Metadata file is wrong format"
+          )
+        )
+      )
+      .post
+      .in("index")
+      .in("metadata")
+      .in(
+        multipartBody[MetadataFileForm]
+      )
+      .in(clientIp)
+      .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
+      .description("Replace metdata for an existing document.")
+
+  private val postMetadataHttp: ZServerEndpoint[Requirements, Any] =
+    postMetadataEndpoint.serverLogic[Requirements](token => input => (postMetadataLogic _).tupled(token +: input))
+
+  private val deleteDocumentEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (DocReference, Option[String]),
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document not found in index"
+          )
+        )
+      )
+      .delete
+      .in("index")
+      .in("document")
+      .in(
+        jsonBody[DocReference]
+      )
+      .in(clientIp)
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description("Remove an existing document")
+
+  private val deleteDocumentHttp: ZServerEndpoint[Requirements, Any] =
+    deleteDocumentEndpoint.serverLogic[Requirements](token => input => (deleteDocumentLogic _).tupled(token +: input))
 
   private val postWordSuggestionEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -188,7 +315,11 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     )
 
   val endpoints: List[AnyEndpoint] = List(
-    postIndexPdfEndpoint,
+    putPdfEndpoint,
+    putImageZipEndpoint,
+    postAltoEndpoint,
+    postMetadataEndpoint,
+    deleteDocumentEndpoint,
     postWordSuggestionEndpoint,
     postMetadataCorrectionEndpoint,
     postUndoMetadataCorrectionEndpoint,
@@ -196,7 +327,11 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
   ).map(_.endpoint.tag("index"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
-    postIndexHttp,
+    putPdfHttp,
+    putImageZipHttp,
+    postAltoHttp,
+    postMetadataHttp,
+    deleteDocumentHttp,
     postWordSuggestionHttp,
     postMetadataCorrectionHttp,
     postUndoMetadataCorrectionHttp,
