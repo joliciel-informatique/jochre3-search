@@ -208,7 +208,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
-    test("search phrase containing word with or without hyphen") {
+    test("search phrase containing word with or without hyphen and wildcard") {
       for {
         _ <- getSearchRepo()
         _ <- getSuggestionRepo()
@@ -217,6 +217,16 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.indexAlto(docRef2, username, ipAddress, alto2, metadata2)
         phraseResult <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"will rain tomorrow\"")),
+          Sort.Score,
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
+        phraseResultWithWildcard <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"will * tomorrow\"")),
           Sort.Score,
           0,
           100,
@@ -238,6 +248,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           phraseResult.results.head.snippets.head.text == "Think it <b>will</b> <b>rain</b><br>" +
+            "<b>tomorrow</b>? Oh no, I<br>" +
+            "don't think so."
+        ) &&
+        assertTrue(
+          phraseResultWithWildcard.results.head.snippets.head.text == "Think it <b>will</b> rain<br>" +
             "<b>tomorrow</b>? Oh no, I<br>" +
             "don't think so."
         ) &&

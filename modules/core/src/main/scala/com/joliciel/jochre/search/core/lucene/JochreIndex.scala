@@ -56,12 +56,12 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
 
 object JochreIndex {
   private val config = ConfigFactory.load().getConfig("jochre.search.index")
-  def fromConfig: JochreIndex = {
+  def fromConfig(languageSpecificFilters: LanguageSpecificFilters): JochreIndex = {
     val indexPath = Path.of(config.getString("directory"))
     val indexDirectory = FSDirectory.open(indexPath, new SingleInstanceLockFactory)
-    val analyzerGroup = AnalyzerGroup.generic
+    val analyzerGroup = AnalyzerGroup.generic(Some(languageSpecificFilters))
     JochreIndex(indexDirectory, analyzerGroup)
   }
 
-  val live: ZLayer[Any, Throwable, JochreIndex] = ZLayer.fromZIO(ZIO.attempt { fromConfig })
+  val live: ZLayer[LanguageSpecificFilters, Throwable, JochreIndex] = ZLayer.fromFunction(fromConfig(_))
 }

@@ -58,6 +58,7 @@ lazy val yiddish = project
   .settings(projectSettings: _*)
   .settings(
     libraryDependencies ++= commonDeps ++ httpClientDeps ++ Seq(
+      "com.joliciel" %% "jochre3-ocr-yiddish" % jochre3OcrVersion
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
