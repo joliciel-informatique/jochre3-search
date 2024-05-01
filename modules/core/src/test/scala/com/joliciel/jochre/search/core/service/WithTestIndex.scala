@@ -7,7 +7,7 @@ import zio.ZLayer
 import java.io.File
 
 trait WithTestIndex {
-  val analyzerGroup: AnalyzerGroup = AnalyzerGroup.generic
+  val analyzerGroup: AnalyzerGroup = AnalyzerGroup.generic(languageSpecificFilters = None)
 
   val indexLayer: ZLayer[Any, Nothing, JochreIndex] =
     ZLayer.succeed {

@@ -18,13 +18,16 @@ private[search] object AnalyzerGroup {
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val locale: Locale = Locale.forLanguageTag(config.getString("locale"))
 
-  val generic: AnalyzerGroup =
+  def generic(languageSpecificFilters: Option[LanguageSpecificFilters]): AnalyzerGroup =
     AnalyzerGroup(
       forIndexing = new JochreAnalyzerForIndex(locale),
       forIndexingFields = new JochreAnalyzerForIndexFields(locale),
-      forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = true),
-      forSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = true),
-      forStrictSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = false),
-      forStrictSearchPhrases = new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false)
+      forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = true, languageSpecificFilters),
+      forSearchPhrases =
+        new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = true, languageSpecificFilters),
+      forStrictSearch =
+        new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = false, languageSpecificFilters),
+      forStrictSearchPhrases =
+        new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false, languageSpecificFilters)
     )
 }

@@ -17,6 +17,7 @@ import com.joliciel.jochre.search.core.service.{
   SearchService,
   SuggestionRepo
 }
+import com.joliciel.jochre.search.yiddish.lucene.tokenizer.YiddishFilters
 import com.typesafe.config.ConfigFactory
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder
@@ -119,6 +120,7 @@ object MainApp extends ZIOAppDefault {
         PostgresDatabase.transactorLive,
         SearchRepo.live,
         SuggestionRepo.live,
+        YiddishFilters.live,
         JochreIndex.live,
         SearchService.live,
         PreferenceRepo.live,
