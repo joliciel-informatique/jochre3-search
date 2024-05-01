@@ -43,6 +43,14 @@ trait SearchService {
       metadataStream: Option[InputStream]
   ): Task[Int]
 
+  private[service] def addFakeDocument(
+      ref: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      metadata: DocMetadata
+  ): Task[Int]
+
   def removeDocument(
       ref: DocReference
   ): Task[Unit]
@@ -55,14 +63,6 @@ trait SearchService {
   def updateMetadata(
       ref: DocReference,
       metadataStream: InputStream
-  ): Task[Int]
-
-  def indexAlto(
-      ref: DocReference,
-      username: String,
-      ipAddress: Option[String],
-      alto: Alto,
-      metadata: DocMetadata
   ): Task[Int]
 
   def search(
@@ -246,15 +246,35 @@ private[service] case class SearchServiceImpl(
     } yield pageCount
   }
 
-  override def indexAlto(
+  override def addFakeDocument(
       ref: DocReference,
       username: String,
       ipAddress: Option[String],
       alto: Alto,
       metadata: DocMetadata
+  ): Task[Int] =
+    for {
+      _ <- ZIO.attempt {
+        ref.getBookDir().toFile.mkdirs()
+        storeAlto(ref, alto.toXml)
+        storeMetadata(ref, metadata)
+      }
+      pages <- indexAlto(ref, username, ipAddress, alto, metadata)
+      _ <- searchRepo.updateDocument(ref, IndexStatus.Indexed)
+    } yield pages
+
+  private def indexAlto(
+      docRef: DocReference,
+      username: String,
+      ipAddress: Option[String],
+      alto: Alto,
+      metadata: DocMetadata,
+      altoUpdated: Boolean = true
   ): Task[Int] = {
-    val altoIndexer = AltoIndexer(jochreIndex, searchRepo, suggestionRepo)
-    altoIndexer.index(ref, username, ipAddress, alto, metadata)
+    log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
+    val altoIndexer =
+      AltoIndexer(jochreIndex, searchRepo, suggestionRepo, docRef, username, ipAddress, alto, metadata, altoUpdated)
+    altoIndexer.index()
   }
 
   private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): DocMetadata =
@@ -262,11 +282,7 @@ private[service] case class SearchServiceImpl(
       val contents = Source.fromInputStream(metadataStream, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
       val metadata = metadataReader.read(contents)
 
-      // Write the metadata to the content directory, so we can re-read it later
-      val metadataPath = ref.getMetadataPath()
-      Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
-        bw.write(contents)
-      }
+      storeMetadata(ref, contents)
 
       metadata
     } catch {
@@ -274,6 +290,18 @@ private[service] case class SearchServiceImpl(
         log.error("Unable to read metadata file", t)
         throw new BadMetadataFileFormat(t.getMessage)
     }
+
+  private def storeMetadata(ref: DocReference, metadata: DocMetadata): Unit = {
+    storeMetadata(ref, metadataReader.write(metadata))
+  }
+
+  private def storeMetadata(ref: DocReference, metadata: String): Unit = {
+    // Write the metadata to the content directory, so we can re-read it later
+    val metadataPath = ref.getMetadataPath()
+    Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
+      bw.write(metadata)
+    }.get
+  }
 
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit = {
     // Store alto in content dir for future access
@@ -833,12 +861,16 @@ private[service] case class SearchServiceImpl(
         suggestion,
         rectAndText._2
       )
-      _ <- searchRepo.updateDocument(docRef, reindex = true)
+      currentDoc <- searchRepo
+        .getDocument(docRef)
+        .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewSuggestion(wordOffset)))
+      _ <- currentDoc
+        .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
+        .getOrElse(ZIO.succeed(()))
     } yield ()
   }
 
   override def reindex(docRef: DocReference): Task[Int] = {
-    log.info(f"Re-indexing ${docRef.ref}")
     for {
       altoStream <- ZIO.attempt {
         val altoFile = docRef.getAltoPath()
@@ -849,8 +881,11 @@ private[service] case class SearchServiceImpl(
         getMetadata(docRef).getOrElse(DocMetadata())
       }
       currentDoc <- searchRepo.getDocument(docRef)
-      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata)
-      _ <- searchRepo.updateDocument(docRef, reindex = false)
+      altoUpdated =
+        currentDoc.indexStatusCode == IndexStatusCode.Unindexed || currentDoc.indexStatusCode == IndexStatusCode.NewSuggestion
+      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, altoUpdated)
+      _ <- searchRepo.deleteOldRevs(docRef)
+      _ <- searchRepo.updateDocument(docRef, IndexStatus.Indexed)
     } yield pageCount
   }
 
@@ -920,7 +955,17 @@ private[service] case class SearchServiceImpl(
         docRefs
       )
       correction <- suggestionRepo.getMetadataCorrection(correctionId)
-      _ <- ZIO.foreach(docRefs)(docRef => searchRepo.updateDocument(docRef, reindex = true))
+      _ <- ZIO.foreach(docRefs) { docRef =>
+        log.debug(f"After correction for ${docRef.ref}, marking for re-index")
+        for {
+          currentDoc <- searchRepo
+            .getDocument(docRef)
+            .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewMetadata))
+          _ <- currentDoc
+            .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
+            .getOrElse(ZIO.succeed(()))
+        } yield ()
+      }
       _ <- ZIO.attempt {
         if (shouldSendMail) {
           CorrectionMailer.mailCorrection(correction, docRefs)
@@ -947,7 +992,14 @@ private[service] case class SearchServiceImpl(
       docRefs <- suggestionRepo.getMetadataCorrectionDocs(id)
       _ <- ZIO.foreach(docRefs) { docRef =>
         log.debug(f"Undoing correction for document ${docRef.ref}, marking for re-index")
-        searchRepo.updateDocument(docRef, reindex = true)
+        for {
+          currentDoc <- searchRepo
+            .getDocument(docRef)
+            .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewMetadata))
+          _ <- currentDoc
+            .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
+            .getOrElse(ZIO.succeed(()))
+        } yield ()
       }
     } yield docRefs
   }

@@ -13,40 +13,50 @@ import com.joliciel.jochre.ocr.core.model.{
 }
 import com.joliciel.jochre.ocr.core.utils.StringUtils
 import com.joliciel.jochre.ocr.core.utils.StringUtils.stringToChars
-import com.joliciel.jochre.search.core.{AltoDocument, DocMetadata, DocReference}
+import com.joliciel.jochre.search.core.{
+  AltoDocument,
+  DocMetadata,
+  DocReference,
+  PageNotFoundException,
+  RowNotFoundException
+}
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
 import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import zio.{Task, ZIO}
 
-case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggestionRepo: SuggestionRepo) {
+case class AltoIndexer(
+    jochreIndex: JochreIndex,
+    searchRepo: SearchRepo,
+    suggestionRepo: SuggestionRepo,
+    docRef: DocReference,
+    username: String,
+    ipAddress: Option[String],
+    alto: Alto,
+    metadata: DocMetadata,
+    altoUpdated: Boolean = true
+) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val hyphenRegex = config.getString("hyphen-regex").r
 
-  def index(
-      ref: DocReference,
-      username: String,
-      ipAddress: Option[String],
-      alto: Alto,
-      metadata: DocMetadata
-  ): Task[Int] = {
+  def index(): Task[Int] = {
     for {
-      suggestions <- suggestionRepo.getSuggestions(ref)
+      suggestions <- suggestionRepo.getSuggestions(docRef)
       _ <- ZIO.attempt {
         if (log.isDebugEnabled) {
-          log.debug(f"About to process Alto for document ${ref.ref}")
+          log.debug(f"About to process Alto for document ${docRef.ref}")
         }
       }
-      corrections <- suggestionRepo.getMetadataCorrections(ref)
-      documentData <- persistDocument(ref, username, ipAddress, alto, suggestions)
+      corrections <- suggestionRepo.getMetadataCorrections(docRef)
+      documentData <- persistDocument(suggestions)
       pageCount <- ZIO.attempt {
         val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
-          log.debug(f"On doc ${ref.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
+          log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
           correction.field.applyToMetadata(metadata, correction.newValue)
         }
 
-        val document = AltoDocument(ref, documentData.docRev, documentData.text, correctedMetadata)
+        val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata)
         val docInfo =
           DocumentIndexInfo(
             documentData.pageOffsets,
@@ -54,9 +64,9 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
             documentData.hyphenatedWordOffsets,
             documentData.alternativesAtOffset
           )
-        jochreIndex.addDocumentInfo(ref, docInfo)
+        jochreIndex.addDocumentInfo(docRef, docInfo)
         if (log.isDebugEnabled) {
-          log.debug(f"Finished processing Alto, about to index document ${ref.ref}")
+          log.debug(f"Finished processing Alto, about to index document ${docRef.ref}")
         }
         jochreIndex.indexer.indexDocument(document)
         val refreshed = jochreIndex.refresh
@@ -79,10 +89,6 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
   )
 
   private def persistDocument(
-      ref: DocReference,
-      username: String,
-      ipAddress: Option[String],
-      alto: Alto,
       suggestions: Seq[DbWordSuggestion]
   ): Task[DocumentData] = {
     // We'll add the document reference at the start of the document text
@@ -92,9 +98,14 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
     // to add at a given offset (Alto ALTERNATIVE tags).
     // This map then needs to be used during tokenization to add the synonyms.
     // The tokenizer knows which synonyms to add via the document reference.
-    val initialOffset = ref.ref.length + 1 // 1 for the newline
+    val initialOffset = docRef.ref.length + 1 // 1 for the newline
     for {
-      docRev <- searchRepo.insertDocument(ref, username, ipAddress)
+      docRev <-
+        if (altoUpdated) {
+          searchRepo.insertDocument(docRef, username, ipAddress)
+        } else {
+          searchRepo.getDocument(docRef).mapAttempt(_.rev)
+        }
       documentData <- ZIO
         .iterate(alto.pages -> Seq.empty[PageData])(
           cont = { case (p, _) => p.nonEmpty }
@@ -102,7 +113,7 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
           val pageSuggestionMap = suggestions.groupBy(_.pageIndex)
           pages match {
             case page +: tail =>
-              log.info(f"For doc ${ref.ref}, extracting page ${page.physicalPageNumber}")
+              log.info(f"For doc ${docRef.ref}, extracting page ${page.physicalPageNumber}")
               val pageWithDefaultLanguage = page.withDefaultLanguage
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
               val pageSuggestions = pageSuggestionMap.getOrElse(page.physicalPageNumber, Seq.empty)
@@ -135,7 +146,7 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
             hyphenatedWordOffsets ++ pageData.hyphenatedWordOffsets
           }
           // As explained above, we add the document reference at the start of the text.
-          val text = f"${ref.ref}\n${pageDataSeq.map(_.text).mkString}"
+          val text = f"${docRef.ref}\n${pageDataSeq.map(_.text).mkString}"
           DocumentData(
             docRev,
             pageDataSeq.size,
@@ -158,13 +169,22 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
   )
 
   private def persistPage(
-      docId: DocRev,
+      docRev: DocRev,
       page: Page,
       startOffset: Int,
       suggestions: Seq[DbWordSuggestion]
   ): Task[PageData] = {
     for {
-      pageId <- searchRepo.insertPage(docId, page, startOffset)
+      pageId <-
+        if (altoUpdated) {
+          searchRepo.insertPage(docRev, page, startOffset)
+        } else {
+          searchRepo
+            .getPage(docRev, page.physicalPageNumber)
+            .mapAttempt(
+              _.map(_.id).getOrElse(throw new PageNotFoundException(docRef, pageNumber = page.physicalPageNumber))
+            )
+        }
       pageWithSuggestions <- ZIO.attempt { replaceSuggestions(page, suggestions) }
       textLineSeq <- ZIO.attempt {
         if (pageWithSuggestions.textLinesWithRectangles.nonEmpty) {
@@ -188,8 +208,9 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
               val currentStartOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
               for {
                 rowData <- persistRow(
-                  docId,
+                  docRev,
                   pageId,
+                  page.physicalPageNumber,
                   textLine,
                   nextTextLine,
                   rowIndex,
@@ -316,8 +337,9 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
   )
 
   private def persistRow(
-      docId: DocRev,
+      docRev: DocRev,
       pageId: PageId,
+      pageNumber: Int,
       textLine: TextLine,
       nextTextLine: Option[TextLine],
       rowIndex: Int,
@@ -333,7 +355,14 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
           textLine.wordsAndSpaces.map(_.rectangle).reduceLeft(_.union(_))
         }
       }
-      rowId <- searchRepo.insertRow(pageId, rowIndex, rowRectangle)
+      rowId <-
+        if (altoUpdated) {
+          searchRepo.insertRow(pageId, rowIndex, rowRectangle)
+        } else {
+          searchRepo
+            .getRow(docRev, pageNumber, rowIndex)
+            .mapAttempt(_.map(_.id).getOrElse(throw new RowNotFoundException(docRef, pageNumber, rowIndex)))
+        }
       wordsAndSpaces <- ZIO.attempt {
         (textLine.hyphen, nextTextLine.flatMap(_.words.headOption)) match {
           case (Some(hyphen), Some(nextWord)) =>
@@ -411,7 +440,12 @@ case class AltoIndexer(jochreIndex: JochreIndex, searchRepo: SearchRepo, suggest
                 case _ => None
               }
               for {
-                _ <- persistWord(docId, rowId, word, offset, hyphenatedOffset)
+                _ <-
+                  if (altoUpdated) {
+                    persistWord(docRev, rowId, word, offset, hyphenatedOffset)
+                  } else {
+                    ZIO.succeed(())
+                  }
               } yield (
                 tail,
                 text + word.content,
