@@ -1,35 +1,11 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.service.{SearchResponse, SearchResult}
-import com.joliciel.jochre.search.core.{
-  AggregationBin,
-  DocReference,
-  FieldKind,
-  IndexField,
-  SearchCriterion,
-  SearchQuery,
-  Sort
-}
+import com.joliciel.jochre.search.core.{AggregationBin, DocReference, FieldKind, IndexField, SearchQuery, Sort}
 import org.apache.lucene.facet.FacetsCollector
 import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
-import org.apache.lucene.search.BooleanClause.Occur
-import org.apache.lucene.search.{
-  BooleanQuery,
-  IndexSearcher,
-  MatchAllDocsQuery,
-  PrefixQuery,
-  Query,
-  SortField,
-  SortedNumericSortField,
-  SortedSetSortField,
-  TermQuery,
-  TopDocs,
-  TopFieldCollector,
-  TopFieldCollectorManager,
-  TopScoreDocCollectorManager,
-  Sort => LuceneSort
-}
+import org.apache.lucene.search.{Collector, CollectorManager, IndexSearcher, MatchAllDocsQuery, Query, SortField, SortedNumericSortField, SortedSetSortField, TermQuery, TopDocs, TopFieldCollectorManager, TopScoreDocCollectorManager, Sort => LuceneSort}
 import org.slf4j.LoggerFactory
 
 import scala.collection.compat.immutable.ArraySeq
@@ -71,20 +47,9 @@ private[lucene] class JochreSearcher(
     luceneDocs.map(_.ref)
   }
 
-  def search(
-      query: SearchQuery,
-      sort: Sort,
-      first: Int,
-      max: Int,
-      maxSnippets: Option[Int],
-      rowPadding: Option[Int],
-      addOffsets: Boolean = true
-  ): SearchResponse = {
-    val luceneQuery = toLuceneQuery(query)
-    if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
+  private def getCollectorManager(sort: Sort, first: Int, max: Int): CollectorManager[_ <: Collector, _ <: TopDocs] = {
     val maxCount = Math.max(1, indexSize)
-
-    val docCollectorManager = sort match {
+    sort match {
       case Sort.Score => new TopScoreDocCollectorManager(first + max, maxCount)
       case Sort.Field(field, ascending) =>
         if (!field.sortable) {
@@ -108,6 +73,20 @@ private[lucene] class JochreSearcher(
         val collector = new TopFieldCollectorManager(new LuceneSort(sortField), first + max, maxCount)
         collector
     }
+  }
+
+  def search(
+      query: SearchQuery,
+      sort: Sort,
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      addOffsets: Boolean = true
+  ): SearchResponse = {
+    val luceneQuery = toLuceneQuery(query)
+    if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
+    val docCollectorManager = getCollectorManager(sort, first, max)
 
     val topDocs = this.search(luceneQuery, docCollectorManager)
     if (log.isDebugEnabled) log.debug(f"Found ${topDocs.totalHits} results")

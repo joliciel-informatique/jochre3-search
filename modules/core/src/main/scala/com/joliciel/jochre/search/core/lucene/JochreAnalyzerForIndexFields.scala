@@ -14,7 +14,7 @@ class JochreAnalyzerForIndexFields(locale: Locale) extends JochreAnalyzerBase(lo
   override def finalFilter(tokens: TokenStream): TokenStream = (textNormalizingFilter(_))
     .andThen(regexTokenizerFilter)
     .andThen(lowercaseFilter)
-    .andThen(skipPunctuationFilter)
+    .andThen(ignorePunctuationFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 }

@@ -1,6 +1,7 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.lucene.tokenizer.{
+  IgnorePunctuationFilter,
   RegexTokenizerFilter,
   SkipPunctuationFilter,
   TapFilter,
@@ -29,6 +30,7 @@ private[lucene] abstract case class JochreAnalyzerBase(locale: Locale) extends A
 
   protected def lowercaseFilter(tokens: TokenStream): TokenStream = new LowerCaseFilter(tokens)
   protected def skipPunctuationFilter(tokens: TokenStream): TokenStream = new SkipPunctuationFilter(tokens)
+  protected def ignorePunctuationFilter(tokens: TokenStream): TokenStream = new IgnorePunctuationFilter(tokens)
   protected def textNormalizingFilter(tokens: TokenStream): TokenStream =
     new TextNormalizingFilter(tokens, TextNormalizer(locale))
 }

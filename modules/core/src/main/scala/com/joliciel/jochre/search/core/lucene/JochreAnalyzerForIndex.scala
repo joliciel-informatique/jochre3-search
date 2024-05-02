@@ -26,7 +26,7 @@ class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) 
     .andThen(addNewlineMarkerFilter)
     .andThen(hyphenationFilter)
     .andThen(addAlternativesFilter)
-    .andThen(skipPunctuationFilter)
+    .andThen(ignorePunctuationFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 
