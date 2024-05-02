@@ -305,6 +305,28 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
+    test("correctly highlight synonyms if both are matched") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
+        phraseResult <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "hello hi")),
+          Sort.Score,
+          0,
+          100,
+          Some(100),
+          Some(0),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "<b>Hello</b> everyone"
+        )
+      }
+    },
     test("search multiple occurrence without padding") {
       for {
         _ <- getSearchRepo()

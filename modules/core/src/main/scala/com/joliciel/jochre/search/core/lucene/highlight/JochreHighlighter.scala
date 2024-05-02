@@ -294,6 +294,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       }
 
     val mergedFragments = mergeOverlappingFragments(bestFragments)
+      .map(_.mergeOverlappingTokens)
     mergedFragments
   }
 }
