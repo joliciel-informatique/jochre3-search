@@ -5,19 +5,68 @@ import com.joliciel.jochre.search.core.lucene.{NEWLINE_TOKEN, PAGE_TOKEN, Token}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute}
-import org.apache.lucene.search.Query
+import org.apache.lucene.queries.spans.{SpanNearQuery, SpanOrQuery, SpanQuery, SpanTermQuery}
+import org.apache.lucene.search.BooleanClause.Occur
 import org.apache.lucene.search.highlight.{Highlighter, QueryScorer, SimpleHTMLFormatter, TextFragment}
+import org.apache.lucene.search.{BooleanQuery, MatchNoDocsQuery, PhraseQuery, Query, TermQuery}
 import org.apache.lucene.util.PriorityQueue
 import org.slf4j.LoggerFactory
 
 import scala.collection.immutable.ArraySeq
+import scala.jdk.CollectionConverters._
 
 case class JochreHighlighter(query: Query, field: IndexField) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search.highlighter")
   protected val formatter =
     new SimpleHTMLFormatter(config.getString("formatter-pre-tag"), config.getString("formatter-post-tag"))
-  val scorer = new QueryScorer(query, field.entryName)
+
+  private val highlightQuery = toSpanQuery(query).getOrElse(new MatchNoDocsQuery())
+
+  // Highlighter only works correctly with span queries, especially in the case of PhraseQuery with wildcards
+  private def toSpanQuery(query: Query): Option[SpanQuery] = query match {
+    case query: SpanQuery => Some(query)
+    case query: PhraseQuery =>
+      Option.when(query.getField == field.entryName) {
+        val builder = new SpanNearQuery.Builder(field.entryName, true)
+        builder.setSlop(query.getSlop)
+        val termsAndPositions = query.getTerms.zip(query.getPositions)
+        termsAndPositions.foldLeft(0) { case (currentPos, (term, position)) =>
+          if (position > currentPos) {
+            builder.addGap(position - currentPos)
+          }
+          builder.addClause(new SpanTermQuery(term))
+          position + 1
+        }
+        builder.build()
+      }
+    case query: TermQuery =>
+      Option.when(query.getTerm.field() == field.entryName) {
+        new SpanTermQuery(query.getTerm)
+      }
+    case query: BooleanQuery =>
+      val allClauses = query.clauses().asScala
+      val positiveClauses = allClauses
+        .filter(clause => clause.getOccur == Occur.SHOULD || clause.getOccur == Occur.MUST)
+        .flatMap(clause => toSpanQuery(clause.getQuery))
+
+      Option.when(positiveClauses.nonEmpty) {
+        if (positiveClauses.length == 1) {
+          positiveClauses.head
+        } else {
+          new SpanOrQuery(positiveClauses.toArray: _*)
+        }
+      }
+    case other =>
+      log.info(f"Cannot convert $other to span query")
+      None
+  }
+
+  val scorer = {
+    val scorer = new QueryScorer(highlightQuery, field.entryName)
+    scorer.setExpandMultiTermQuery(true)
+    scorer
+  }
 
   private val highlighter: Highlighter = {
     val highlighter: Highlighter = new Highlighter(formatter, scorer)

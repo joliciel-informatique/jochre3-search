@@ -68,6 +68,17 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     alternativeMap
   )
 
+  private val docRef4 = DocReference("doc4")
+  private val metadata4 =
+    DocMetadata(title = Some("With great pleasure"), author = Some("Joe Schmoe"), publicationYear = Some("1937"))
+  private val alto4 = textToAlto(
+    "doc4",
+    "With pleasure.\n" +
+      "With great pleasure.\n" +
+      "Really.",
+    alternativeMap
+  )
+
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
@@ -267,6 +278,30 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         ) &&
         assertTrue(
           phraseWithHyphenResult.results.head.snippets.head.page == 0
+        )
+      }
+    },
+    test("search phrase wildcard should only highlight phrase if wildcard is matched") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef4, username, ipAddress, alto4, metadata4)
+        phraseResult <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"With * pleasure\"")),
+          Sort.Score,
+          0,
+          100,
+          Some(100),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "With pleasure.<br>" +
+            "<b>With</b> great <b>pleasure</b>.<br>" +
+            "Really."
         )
       }
     },
