@@ -14,6 +14,9 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
+  implicit val doobieMappingForIndexStatus: Meta[IndexStatusCode] =
+    pgEnumStringOpt("index_status", IndexStatusCode.fromEnum, IndexStatusCode.toEnum)
+
   def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] =
     sql"""INSERT INTO document (reference, username, ip)
          | VALUES (${ref.ref}, $username, $ipAddress)
@@ -23,8 +26,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def updateDocument(docRef: DocReference, reindex: Boolean): Task[Int] = {
-    sql"""UPDATE document d1 SET reindex=$reindex
+  def updateDocument(docRef: DocReference, indexStatus: IndexStatus): Task[Int] = {
+    sql"""UPDATE document d1 SET status=${indexStatus.code}, new_suggestion_offset=${indexStatus.newSuggestionOffset}
          | WHERE d1.reference = ${docRef.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
        """.stripMargin.update.run
@@ -33,6 +36,13 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
 
   def deleteDocument(docRev: DocRev): Task[Int] =
     sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
+      .transact(transactor)
+
+  def deleteOldRevs(docRef: DocReference): Task[Int] =
+    sql"""DELETE FROM document
+         | WHERE reference = ${docRef.ref}
+         | AND rev < (SELECT MAX(rev) FROM document d2 WHERE d2.reference = ${docRef.ref})
+       """.stripMargin.update.run
       .transact(transactor)
 
   def insertPage(docRev: DocRev, page: Page, offset: Int): Task[PageId] =
@@ -84,7 +94,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, reindex
+    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -94,7 +104,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, reindex
+    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -102,15 +112,17 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def getDocumentsToReindex(): Task[Seq[DbDocument]] =
-    sql"""SELECT rev, reference, username, ip, created, reindex
+  def getDocumentsToReindex(): Task[Seq[DbDocument]] = {
+    val indexed: IndexStatusCode = IndexStatusCode.Indexed
+    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
          | FROM document d1
-         | WHERE d1.reindex = ${true}
+         | WHERE d1.status != $indexed
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
        """.stripMargin
       .query[DbDocument]
       .to[Seq]
       .transact(transactor)
+  }
 
   def getPage(docRev: DocRev, pageNumber: Int): Task[Option[DbPage]] =
     sql"""SELECT page.id, doc_rev, index, width, height, start_offset

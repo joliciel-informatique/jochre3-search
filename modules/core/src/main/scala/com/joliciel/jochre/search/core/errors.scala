@@ -13,3 +13,8 @@ class PreferenceNotFound(username: String, key: String)
 class UnknownMetadataFieldException(field: String) extends BadRequestException(f"Unknown MetadataField: $field")
 class UnknownMetadataCorrectionIdException(id: MetadataCorrectionId)
     extends NotFoundException(f"Unknown metadata correction: $id")
+
+class PageNotFoundException(docRef: DocReference, pageNumber: Int)
+    extends Exception(f"In document ${docRef.ref}, page $pageNumber not found in database")
+class RowNotFoundException(docRef: DocReference, pageNumber: Int, rowIndex: Int)
+    extends Exception(f"In document ${docRef.ref}, page $pageNumber, row $rowIndex not found in database")

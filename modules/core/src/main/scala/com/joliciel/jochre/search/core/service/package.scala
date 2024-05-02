@@ -1,6 +1,8 @@
 package com.joliciel.jochre.search.core
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
+import com.joliciel.jochre.search.core.service.IndexStatusCode.values
+import enumeratum.{DoobieEnum, Enum, EnumEntry}
 
 import java.io.StringReader
 import java.time.Instant
@@ -66,6 +68,57 @@ package object service {
     )
   }
 
+  sealed trait IndexStatusCode extends EnumEntry
+
+  object IndexStatusCode extends Enum[IndexStatusCode] with DoobieEnum[IndexStatusCode] {
+    val values = findValues
+
+    case object Unindexed extends IndexStatusCode
+    case object NewSuggestion extends IndexStatusCode
+    case object NewMetadata extends IndexStatusCode
+    case object Indexed extends IndexStatusCode
+
+    def toEnum(code: IndexStatusCode): String = code.entryName
+
+    def fromEnum(s: String): Option[IndexStatusCode] = IndexStatusCode.withNameOption(s)
+
+    object MyOrdering extends Ordering[IndexStatusCode] {
+      def compare(x: IndexStatusCode, y: IndexStatusCode): Int =
+        (x, y) match {
+          // assuming that the ordering is Unindexed < NewSuggestion < NewMetadata < Indexed...
+          case (_, _) if (x eq y) => 0
+          case (Unindexed, _) => -1
+          case (_, Unindexed) => 1
+          case (NewSuggestion, _) => -1
+          case (_, NewSuggestion) => 1
+          case (NewMetadata, _) => -1
+          case (_, NewMetadata) => 1
+          case _ => 0 // (Indexed, Indexed)
+        }
+    }
+  }
+
+  sealed trait IndexStatus {
+    def code: IndexStatusCode
+    val newSuggestionOffset: Option[Int] = None
+  }
+
+  object IndexStatus {
+    case object Unindexed extends IndexStatus {
+      override val code = IndexStatusCode.Unindexed
+    }
+    case class NewSuggestion(offset: Int) extends IndexStatus {
+      override val code = IndexStatusCode.NewSuggestion
+      override val newSuggestionOffset: Option[Int] = Some(offset)
+    }
+    case object NewMetadata extends IndexStatus {
+      override val code = IndexStatusCode.NewMetadata
+    }
+    case object Indexed extends IndexStatus {
+      override val code = IndexStatusCode.Indexed
+    }
+  }
+
   private[core] case class DocRev(rev: Long) extends AnyVal
 
   private[service] case class DbDocument(
@@ -74,8 +127,32 @@ package object service {
       username: String,
       ipAddress: Option[String],
       created: Instant,
-      reindex: Boolean
-  )
+      indexStatusCode: IndexStatusCode,
+      newSuggestionOffset: Option[Int]
+  ) {
+    lazy val indexStatus: IndexStatus = (indexStatusCode, newSuggestionOffset) match {
+      case (IndexStatusCode.Unindexed, None)             => IndexStatus.Unindexed
+      case (IndexStatusCode.NewSuggestion, Some(offset)) => IndexStatus.NewSuggestion(offset)
+      case (IndexStatusCode.NewMetadata, None)           => IndexStatus.NewMetadata
+      case (IndexStatusCode.Indexed, None)               => IndexStatus.Indexed
+      case (code, offset) => throw new Exception(f"Impossible index status: ${code.entryName}, $offset")
+    }
+    def updateIndexStatusIfLessRestrictive(
+        indexStatus: IndexStatus
+    ): Option[DbDocument] = {
+      val earlierSuggestion = (this.indexStatus, indexStatus) match {
+        case (IndexStatus.NewSuggestion(myOffset), IndexStatus.NewSuggestion(yourOffset)) =>
+          yourOffset < myOffset
+        case _ => false
+      }
+      import IndexStatusCode.MyOrdering.mkOrderingOps
+      Option.when(
+        indexStatus.code < this.indexStatusCode || earlierSuggestion
+      ) {
+        this.copy(indexStatusCode = indexStatus.code, newSuggestionOffset = indexStatus.newSuggestionOffset)
+      }
+    }
+  }
 
   private[service] case class PageId(id: Long) extends AnyVal
   private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
