@@ -8,7 +8,7 @@ import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttr
 import org.apache.lucene.queries.spans.{SpanNearQuery, SpanOrQuery, SpanQuery, SpanTermQuery}
 import org.apache.lucene.search.BooleanClause.Occur
 import org.apache.lucene.search.highlight.{Highlighter, QueryScorer, SimpleHTMLFormatter, TextFragment}
-import org.apache.lucene.search.{BooleanQuery, MatchNoDocsQuery, PhraseQuery, Query, TermQuery}
+import org.apache.lucene.search.{BooleanQuery, MatchNoDocsQuery, PhraseQuery, Query, SynonymQuery, TermQuery}
 import org.apache.lucene.util.PriorityQueue
 import org.slf4j.LoggerFactory
 
@@ -43,6 +43,11 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     case query: TermQuery =>
       Option.when(query.getTerm.field() == field.entryName) {
         new SpanTermQuery(query.getTerm)
+      }
+    case query: SynonymQuery =>
+      Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.entryName) {
+        val termQueries = query.getTerms.asScala.map(term => new SpanTermQuery(term))
+        new SpanOrQuery(termQueries.toArray: _*)
       }
     case query: BooleanQuery =>
       val allClauses = query.clauses().asScala
