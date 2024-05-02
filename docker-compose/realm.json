@@ -73,7 +73,8 @@
       ],
       "clientRoles": {
         "jochre": [
-          "index"
+          "index",
+          "maintenance"
         ]
       }
     },
@@ -141,6 +142,14 @@
         {
           "id": "fc85a3f2-a403-43a6-b783-0f1a8a569806",
           "name": "index",
+          "composite": false,
+          "clientRole": true,
+          "containerId": "bdc00e06-17dd-4853-b782-8487767a03b3",
+          "attributes": {}
+        },
+        {
+          "id": "fc85a3f2-a403-43a6-b783-0f1a8a569807",
+          "name": "maintenance",
           "composite": false,
           "clientRole": true,
           "containerId": "bdc00e06-17dd-4853-b782-8487767a03b3",

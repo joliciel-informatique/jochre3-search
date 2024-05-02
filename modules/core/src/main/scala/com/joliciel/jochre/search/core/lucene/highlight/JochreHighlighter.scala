@@ -58,7 +58,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
         }
       }
     case other =>
-      log.info(f"Cannot convert $other to span query")
+      if (log.isDebugEnabled) log.debug(f"Cannot convert $other to span query")
       None
   }
 

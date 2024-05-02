@@ -7,6 +7,7 @@ import sttp.tapir.CodecFormat
 package object api {
   object Roles {
     val index = RoleName("index")
+    val maintenance = RoleName("maintenance")
   }
 
   val PngCodecFormat: CodecFormat = new CodecFormat {

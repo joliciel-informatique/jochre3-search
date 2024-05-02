@@ -14,10 +14,13 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
   private val log = LoggerFactory.getLogger(getClass)
 
   def indexDocument(doc: AltoDocument): Unit = {
+    log.info(f"Indexing ${doc.ref.ref}")
     val docTerm = new Term(IndexField.Reference.entryName, doc.ref.ref)
     val fields = toLuceneDoc(doc)
     indexWriter.updateDocument(docTerm, fields)
+    log.info(f"Indexed ${doc.ref.ref}")
     commit()
+    log.info(f"Index commited for ${doc.ref.ref}")
   }
 
   def commit(): Unit = {

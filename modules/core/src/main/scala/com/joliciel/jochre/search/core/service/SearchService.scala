@@ -403,7 +403,7 @@ private[service] case class SearchServiceImpl(
           val pageCount = pdf.getNumberOfPages
 
           (1 to pageCount).foreach { i =>
-            log.info(f"Extracting PDF page $i of $pageCount")
+            log.info(f"Extracting PDF page $i of $pageCount for ${docRef.ref}")
             val image = pdfRenderer.renderImageWithDPI(
               i - 1,
               300.toFloat,

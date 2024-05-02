@@ -65,14 +65,10 @@ case class AltoIndexer(
             documentData.alternativesAtOffset
           )
         jochreIndex.addDocumentInfo(docRef, docInfo)
-        if (log.isDebugEnabled) {
-          log.debug(f"Finished processing Alto, about to index document ${docRef.ref}")
-        }
+        log.info(f"Finished processing Alto, about to index document ${docRef.ref}")
         jochreIndex.indexer.indexDocument(document)
         val refreshed = jochreIndex.refresh
-        if (log.isDebugEnabled) {
-          log.debug(f"Index refreshed? $refreshed")
-        }
+        log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
         documentData.pageCount
       }
     } yield pageCount
