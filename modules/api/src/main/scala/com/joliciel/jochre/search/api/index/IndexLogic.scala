@@ -62,17 +62,17 @@ trait IndexLogic extends HttpErrorMapper {
       token: ValidToken,
       altoFileForm: AltoFileForm,
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, IndexResponse] =
+  ): ZIO[Requirements, HttpError, OkResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
-      pageCount <- searchService.updateAlto(
+      _ <- searchService.updateAlto(
         altoFileForm.docReference,
         new FileInputStream(altoFileForm.altoFile.body)
       )
       _ <- ZIO.attempt {
         altoFileForm.altoFile.body.delete()
       }
-    } yield IndexResponse(pageCount))
+    } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to update alto for existing document", error))
       .mapError(mapToHttpError)
 
@@ -80,17 +80,17 @@ trait IndexLogic extends HttpErrorMapper {
       token: ValidToken,
       metadataFileForm: MetadataFileForm,
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, IndexResponse] =
+  ): ZIO[Requirements, HttpError, OkResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
-      pageCount <- searchService.updateMetadata(
+      _ <- searchService.updateMetadata(
         metadataFileForm.docReference,
         new FileInputStream(metadataFileForm.metadataFile.body)
       )
       _ <- ZIO.attempt {
         metadataFileForm.metadataFile.body.delete()
       }
-    } yield IndexResponse(pageCount))
+    } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to update metadata for existing document", error))
       .mapError(mapToHttpError)
 
@@ -122,7 +122,6 @@ trait IndexLogic extends HttpErrorMapper {
         wordSuggestionForm.offset,
         wordSuggestionForm.suggestion
       )
-      _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to make suggestion", error))
       .mapError(mapToHttpError)
@@ -147,7 +146,6 @@ trait IndexLogic extends HttpErrorMapper {
         metadataCorrectionForm.value,
         metadataCorrectionForm.applyEverywhere
       )
-      _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse())
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to correct metadata", error))
       .mapError(mapToHttpError)

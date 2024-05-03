@@ -22,9 +22,9 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val docRef2 = DocReference("doc2")
       for {
         suggestionRepo <- getSuggestionRepo()
-        suggestionId1 <- suggestionRepo.insertSuggestion(joe, joeIp, docRef, 42, rectangle1, "Hello", "Hi")
-        suggestionId2 <- suggestionRepo.insertSuggestion(jim, jimIp, docRef, 43, rectangle2, "World", "Universe")
-        _ <- suggestionRepo.insertSuggestion(joe, joeIp, docRef2, 44, rectangle1, "Bye", "Goodbye")
+        suggestionId1 <- suggestionRepo.insertSuggestion(joe, joeIp, docRef, 42, rectangle1, "Hello", "Hi", 10)
+        suggestionId2 <- suggestionRepo.insertSuggestion(jim, jimIp, docRef, 43, rectangle2, "World", "Universe", 20)
+        _ <- suggestionRepo.insertSuggestion(joe, joeIp, docRef2, 44, rectangle1, "Bye", "Goodbye", 30)
         suggestion1 <- suggestionRepo.getSuggestion(suggestionId1)
         suggestions <- suggestionRepo.getSuggestions(docRef)
         _ <- suggestionRepo.ignoreSuggestions(joe)
@@ -41,6 +41,8 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(suggestion1.previousText == "Hi") &&
         assertTrue(suggestion1.created.toEpochMilli > startTime.toEpochMilli) &&
         assertTrue(!suggestion1.ignore) &&
+        assertTrue(suggestion1.offset == 10) &&
+        assertTrue(suggestion1.rev.rev > 0) &&
         assertTrue(suggestions.map(_.id) == Seq(suggestionId2, suggestionId1)) &&
         assertTrue(suggestionsAfterIgnore.map(_.id) == Seq(suggestionId2))
       }
@@ -100,6 +102,7 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(correction1.applyEverywhere) &&
         assertTrue(!correction1.ignore) &&
         assertTrue(!correction1.sent) &&
+        assertTrue(correction1.rev.rev > 0) &&
         assertTrue(docs == Seq(docRef, docRef2)) &&
         assertTrue(corrections.map(_.id) == Seq(correctionId2, correctionId1)) &&
         assertTrue(correctionsAfterUpdate.map(_.id) == Seq(correctionId3, correctionId2)) &&

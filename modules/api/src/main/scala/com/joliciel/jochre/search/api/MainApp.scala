@@ -29,9 +29,10 @@ import org.http4s.server.middleware.{CORS, Logger}
 import org.slf4j.LoggerFactory
 import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
-import zio._
+import zio.{Duration => ZIODuration, _}
 import zio.config.typesafe.TypesafeConfigProvider
 import zio.interop.catz._
+import zio.stream.{ZSink, ZStream}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -39,6 +40,7 @@ import scala.jdk.CollectionConverters._
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val pollInterval: java.time.Duration = config.getDuration("index.poll-interval")
 
   override val bootstrap: ZLayer[ZIOAppArgs, Throwable, Any] =
     Runtime.setConfigProvider(TypesafeConfigProvider.fromTypesafeConfig(config))
@@ -116,7 +118,20 @@ object MainApp extends ZIOAppDefault {
       .allocated
       .map(_._1) *> ZIO.never
 
-    server
+    val startup = for {
+      searchService <- ZIO.service[SearchService]
+      startup <- ZStream
+        .tick(pollInterval)
+        .mapZIO(_ => searchService.reindexWhereRequired())
+        .run(ZSink.foreach { reIndexed =>
+          ZIO.logDebug(f"Ran re-index? $reIndexed")
+        })
+    } yield startup
+
+    val serverWithStartup =
+      startup.zipPar(server)
+
+    serverWithStartup
       .provide(
         Scope.default,
         AppConfig.live,

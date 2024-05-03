@@ -17,10 +17,12 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       pageIndex: Int,
       rectangle: Rectangle,
       suggestion: String,
-      previousText: String
+      previousText: String,
+      offset: Int
   ): Task[WordSuggestionId] =
-    sql"""INSERT INTO word_suggestion (username, ip, doc_ref, page_index, lft, top, width, height, suggestion, previous_text)
-         | VALUES ($username, $ipAddress, ${docRef.ref}, $pageIndex, ${rectangle.left}, ${rectangle.top}, ${rectangle.width}, ${rectangle.height}, $suggestion, $previousText)
+    sql"""INSERT INTO word_suggestion (username, ip, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, start_offset)
+         | VALUES ($username, $ipAddress, ${docRef.ref}, $pageIndex, ${rectangle.left}, ${rectangle.top},
+         |   ${rectangle.width}, ${rectangle.height}, $suggestion, $previousText, $offset)
          | RETURNING id
        """.stripMargin
       .query[WordSuggestionId]
@@ -28,7 +30,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getSuggestion(id: WordSuggestionId): Task[DbWordSuggestion] =
-    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
+    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore, start_offset, rev
          | FROM word_suggestion
          | WHERE id = ${id.id}
        """.stripMargin
@@ -39,7 +41,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   /** Get suggestions for a given document from newest to oldest.
     */
   def getSuggestions(docRef: DocReference): Task[Seq[DbWordSuggestion]] = {
-    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore
+    sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore, start_offset, rev
          | FROM word_suggestion
          | WHERE doc_ref = ${docRef.ref}
          | AND ignore = ${false}
@@ -52,7 +54,8 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
 
   def ignoreSuggestions(username: String): Task[Int] =
     sql"""UPDATE word_suggestion
-          SET ignore=${true}
+          SET ignore=${true},
+          rev=nextval('word_suggestion_rev_seq'::regclass)
           WHERE username=$username
        """.stripMargin.update.run
       .transact(transactor)
@@ -98,7 +101,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   }
 
   def getMetadataCorrection(id: MetadataCorrectionId): Task[DbMetadataCorrection] =
-    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent
+    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent, rev
          | FROM metadata_correction
          | WHERE id = ${id.id}
        """.stripMargin
@@ -116,7 +119,7 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
   /** Get most recent corrections for a given document.
     */
   def getMetadataCorrections(docRef: DocReference): Task[Seq[DbMetadataCorrection]] = {
-    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent
+    sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent, rev
          | FROM metadata_correction m1
          | INNER JOIN metadata_correction_doc d1 ON m1.id = d1.correction_id
          | WHERE d1.doc_ref = ${docRef.ref}
@@ -132,14 +135,16 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
 
   def ignoreMetadataCorrections(username: String): Task[Int] =
     sql"""UPDATE metadata_correction
-          SET ignore=${true}
+          SET ignore=${true},
+          rev=nextval('metadata_correction_rev_seq'::regclass)
           WHERE username=$username
        """.stripMargin.update.run
       .transact(transactor)
 
   def ignoreMetadataCorrection(id: MetadataCorrectionId): Task[Int] =
     sql"""UPDATE metadata_correction
-          SET ignore=${true}
+          SET ignore=${true},
+          rev=nextval('metadata_correction_rev_seq'::regclass)
           WHERE id=$id
        """.stripMargin.update.run
       .transact(transactor)

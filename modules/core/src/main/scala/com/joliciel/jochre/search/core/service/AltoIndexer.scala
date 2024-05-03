@@ -34,13 +34,20 @@ case class AltoIndexer(
     ipAddress: Option[String],
     alto: Alto,
     metadata: DocMetadata,
-    altoUpdated: Boolean = true
+    contentUpdated: Boolean = true
 ) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val hyphenRegex = config.getString("hyphen-regex").r
 
-  def index(): Task[Int] = {
+  case class IndexData(
+      docRev: DocRev,
+      wordSuggestionRev: Option[WordSuggestionRev],
+      metadataCorrectionRev: Option[MetadataCorrectionRev],
+      pageCount: Int
+  )
+
+  def index(): Task[IndexData] = {
     for {
       suggestions <- suggestionRepo.getSuggestions(docRef)
       _ <- ZIO.attempt {
@@ -71,7 +78,12 @@ case class AltoIndexer(
         log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
         documentData.pageCount
       }
-    } yield pageCount
+    } yield IndexData(
+      docRev = documentData.docRev,
+      wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
+      metadataCorrectionRev = corrections.map(_.rev).maxOption(MetadataCorrectionRev.ordering),
+      pageCount = pageCount
+    )
   }
 
   private case class DocumentData(
@@ -97,7 +109,7 @@ case class AltoIndexer(
     val initialOffset = docRef.ref.length + 1 // 1 for the newline
     for {
       docRev <-
-        if (altoUpdated) {
+        if (contentUpdated) {
           searchRepo.insertDocument(docRef, username, ipAddress)
         } else {
           searchRepo.getDocument(docRef).mapAttempt(_.rev)
@@ -172,7 +184,7 @@ case class AltoIndexer(
   ): Task[PageData] = {
     for {
       pageId <-
-        if (altoUpdated) {
+        if (contentUpdated) {
           searchRepo.insertPage(docRev, page, startOffset)
         } else {
           searchRepo
@@ -352,7 +364,7 @@ case class AltoIndexer(
         }
       }
       rowId <-
-        if (altoUpdated) {
+        if (contentUpdated) {
           searchRepo.insertRow(pageId, rowIndex, rowRectangle)
         } else {
           searchRepo
@@ -437,7 +449,7 @@ case class AltoIndexer(
               }
               for {
                 _ <-
-                  if (altoUpdated) {
+                  if (contentUpdated) {
                     persistWord(docRev, rowId, word, offset, hyphenatedOffset)
                   } else {
                     ZIO.succeed(())
