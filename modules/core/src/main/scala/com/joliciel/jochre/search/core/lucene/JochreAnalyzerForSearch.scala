@@ -28,16 +28,19 @@ class JochreAnalyzerForSearch(
     maybePostTokenizationFilter.map(_(tokens)).getOrElse(tokens)
   }
 
-
   override def finalFilter(tokens: TokenStream): TokenStream = {
     (textNormalizingFilter(_))
       .andThen(regexTokenizerFilter)
-      .andThenIf(forPhrases)(skipWildcardFilter)
-      .andThen(postTokenizationFilter)
-      .andThenIf(!forPhrases)(stopWordFilter)
       .andThen(lowercaseFilter)
-      .andThen(skipPunctuationFilter)
+      .andThen(postTokenizationFilter)
+      .andThenIf(log.isTraceEnabled)(tapFilter(log, "postTokenizationFilter") _)
+      .andThenIf(!forPhrases)(stopWordFilter)
+      .andThenIf(log.isTraceEnabled)(tapFilter(log, "stopWordFilter") _)
       .andThenIf(addSynonyms)(synonymFilter)
+      .andThenIf(log.isTraceEnabled)(tapFilter(log, "synonymFilter") _)
+      .andThenIf(forPhrases)(skipWildcardFilter)
+      .andThenIf(log.isTraceEnabled)(tapFilter(log, "skipWildcardFilter") _)
+      .andThen(skipPunctuationFilter)
       .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
       .apply(tokens)
   }

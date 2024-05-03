@@ -9,11 +9,17 @@ private[lucene] class IgnorePunctuationFilter(input: TokenStream) extends TokenF
 
   private val posIncAttr = addAttribute(classOf[PositionIncrementAttribute])
 
+  // We cannot set the initial position increment to zero (if the field starts with punctuation)
+  private var punctuationPositionIncrement = 1
+
   final override def incrementToken: Boolean = {
     if (input.incrementToken()) {
       val buffer = new String(charTerm.buffer()).subSequence(0, charTerm.length())
       if (punctuationRegex.matches(buffer)) {
-        posIncAttr.setPositionIncrement(0)
+        posIncAttr.setPositionIncrement(punctuationPositionIncrement)
+      }
+      if (punctuationPositionIncrement > 0) {
+        punctuationPositionIncrement = 0
       }
       true
     } else {

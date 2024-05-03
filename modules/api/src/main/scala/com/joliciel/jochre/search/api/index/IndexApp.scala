@@ -314,6 +314,37 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       input => postUndoMetadataCorrectionLogic(token, input)
     )
 
+  private val getTermsEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    DocReference,
+    HttpError,
+    GetTermsResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document not found in index"
+          )
+        )
+      )
+      .get
+      .in("index")
+      .in("document")
+      .in(
+        path[DocReference]("docRef")
+      )
+      .in("terms")
+      .out(jsonBody[GetTermsResponse])
+      .description("List terms for a document")
+
+  private val getTermsHttp: ZServerEndpoint[Requirements, Any] =
+    getTermsEndpoint.serverLogic[Requirements](_ => input => getTermsLogic(input))
+
   val endpoints: List[AnyEndpoint] = List(
     putPdfEndpoint,
     putImageZipEndpoint,
@@ -323,7 +354,8 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     postWordSuggestionEndpoint,
     postMetadataCorrectionEndpoint,
     postUndoMetadataCorrectionEndpoint,
-    postReindexEndpoint
+    postReindexEndpoint,
+    getTermsEndpoint
   ).map(_.endpoint.tag("index"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
@@ -335,6 +367,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     postWordSuggestionHttp,
     postMetadataCorrectionHttp,
     postUndoMetadataCorrectionHttp,
-    postReindexHttp
+    postReindexHttp,
+    getTermsHttp
   )
 }

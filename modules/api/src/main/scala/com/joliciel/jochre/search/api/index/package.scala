@@ -1,5 +1,6 @@
 package com.joliciel.jochre.search.api
 
+import com.joliciel.jochre.search.core.lucene.IndexTerm
 import com.joliciel.jochre.search.core.{DocReference, MetadataField}
 import sttp.model.Part
 
@@ -45,6 +46,10 @@ package object index {
       field: String,
       value: String,
       applyEverywhere: Boolean
+  )
+
+  case class GetTermsResponse(
+      terms: Map[String, Seq[IndexTerm]]
   )
 
   object IndexHelper {

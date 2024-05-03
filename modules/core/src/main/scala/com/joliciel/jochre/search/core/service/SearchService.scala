@@ -4,7 +4,7 @@ import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model._
 import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core._
-import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.joliciel.jochre.search.core.lucene.{IndexTerm, JochreIndex, TermLister}
 import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
@@ -139,6 +139,8 @@ trait SearchService {
   def reindexWhereRequired(): Task[Unit]
 
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
+
+  def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]]
 }
 
 private[service] case class SearchServiceImpl(
@@ -1012,6 +1014,15 @@ private[service] case class SearchServiceImpl(
       }
       _ <- ZIO.foreach(docs) { doc => reindex(doc.ref) }
     } yield ()
+  }
+
+  override def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]] = {
+    for {
+      terms <- ZIO.attempt {
+        val termLister = TermLister(jochreIndex.searcherManager)
+        termLister.listTerms(docRef)
+      }
+    } yield terms
   }
 }
 

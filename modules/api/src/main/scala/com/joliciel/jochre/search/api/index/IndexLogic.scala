@@ -95,9 +95,9 @@ trait IndexLogic extends HttpErrorMapper {
       .mapError(mapToHttpError)
 
   def deleteDocumentLogic(
-    token: ValidToken,
-    docRef: DocReference,
-    ipAddress: Option[String]
+      token: ValidToken,
+      docRef: DocReference,
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, OkResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
@@ -169,4 +169,12 @@ trait IndexLogic extends HttpErrorMapper {
       searchService <- ZIO.service[SearchService]
       _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse()
+
+  def getTermsLogic(docRef: DocReference): ZIO[Requirements, HttpError, GetTermsResponse] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      terms <- searchService.getTerms(docRef)
+    } yield GetTermsResponse(terms))
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get terms", error))
+      .mapError(mapToHttpError)
 }

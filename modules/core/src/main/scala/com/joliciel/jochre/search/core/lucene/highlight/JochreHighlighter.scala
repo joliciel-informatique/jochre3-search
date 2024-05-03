@@ -8,7 +8,15 @@ import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttr
 import org.apache.lucene.queries.spans.{SpanNearQuery, SpanOrQuery, SpanQuery, SpanTermQuery}
 import org.apache.lucene.search.BooleanClause.Occur
 import org.apache.lucene.search.highlight.{Highlighter, QueryScorer, SimpleHTMLFormatter, TextFragment}
-import org.apache.lucene.search.{BooleanQuery, MatchNoDocsQuery, PhraseQuery, Query, SynonymQuery, TermQuery}
+import org.apache.lucene.search.{
+  BooleanQuery,
+  MatchNoDocsQuery,
+  MultiPhraseQuery,
+  PhraseQuery,
+  Query,
+  SynonymQuery,
+  TermQuery
+}
 import org.apache.lucene.util.PriorityQueue
 import org.slf4j.LoggerFactory
 
@@ -18,7 +26,7 @@ import scala.jdk.CollectionConverters._
 case class JochreHighlighter(query: Query, field: IndexField) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search.highlighter")
-  protected val formatter =
+  private val formatter =
     new SimpleHTMLFormatter(config.getString("formatter-pre-tag"), config.getString("formatter-post-tag"))
 
   private val highlightQuery = toSpanQuery(query).getOrElse(new MatchNoDocsQuery())
@@ -36,6 +44,23 @@ case class JochreHighlighter(query: Query, field: IndexField) {
             builder.addGap(position - currentPos)
           }
           builder.addClause(new SpanTermQuery(term))
+          position + 1
+        }
+        builder.build()
+      }
+    case query: MultiPhraseQuery =>
+      val termArrays = query.getTermArrays.toSeq
+      Option.when(!termArrays.isEmpty && !termArrays(0).isEmpty && termArrays(0)(0).field() == field.entryName) {
+        val builder = new SpanNearQuery.Builder(field.entryName, true)
+        builder.setSlop(query.getSlop)
+        val termsAndPositions = termArrays.zip(query.getPositions)
+        termsAndPositions.foldLeft(0) { case (currentPos, (terms, position)) =>
+          if (position > currentPos) {
+            builder.addGap(position - currentPos)
+          }
+          val termQueries = terms.map(term => new SpanTermQuery(term))
+          val synonymQuery = new SpanOrQuery(termQueries.toArray: _*)
+          builder.addClause(synonymQuery)
           position + 1
         }
         builder.build()
@@ -63,11 +88,11 @@ case class JochreHighlighter(query: Query, field: IndexField) {
         }
       }
     case other =>
-      if (log.isDebugEnabled) log.debug(f"Cannot convert $other to span query")
+      if (log.isDebugEnabled) log.debug(f"Cannot convert ${other.getClass.getName}: $other to span query")
       None
   }
 
-  val scorer = {
+  private val scorer = {
     val scorer = new QueryScorer(highlightQuery, field.entryName)
     scorer.setExpandMultiTermQuery(true)
     scorer
@@ -209,12 +234,12 @@ case class JochreHighlighter(query: Query, field: IndexField) {
           }
           // close all open fragments
           openFragments.foreach { closedFragment =>
-            if (closedFragment.tokens.size > 0) {
+            if (closedFragment.tokens.nonEmpty) {
               val highlightFragment =
                 HighlightFragment(closedFragment.startOffset, pageStartOffset, page, closedFragment.tokens)
 
               if (log.isTraceEnabled) {
-                log.trace(f"Created ${highlightFragment}")
+                log.trace(f"Created $highlightFragment")
               }
               fragmentQueue.insertWithOverflow(highlightFragment)
             }
@@ -239,7 +264,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
           }
 
           closedFragments.foreach { closedFragment =>
-            if (closedFragment.tokens.size > 0) {
+            if (closedFragment.tokens.nonEmpty) {
               val highlightFragment =
                 HighlightFragment(closedFragment.startOffset, rowStartOffset, page, closedFragment.tokens)
               if (log.isTraceEnabled) {
@@ -265,7 +290,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     }
 
     openFragments.foreach { stillOpen =>
-      if (stillOpen.tokens.size > 0) {
+      if (stillOpen.tokens.nonEmpty) {
         val highlightFragment =
           HighlightFragment(stillOpen.startOffset, offsetAtt.endOffset(), page, stillOpen.tokens)
         if (log.isTraceEnabled) {
@@ -282,7 +307,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       fragments match {
         case first +: second +: tail =>
           if (first.end >= second.start && first.page == second.page) {
-            val mergedTokens = (first.tokens ++ second.tokens).toSet.toSeq
+            val mergedTokens = (first.tokens ++ second.tokens).distinct
             val sortedTokens = mergedTokens.sortBy(_.start)
 
             val mergedFragment = HighlightFragment(first.start, second.end, first.page, sortedTokens)
