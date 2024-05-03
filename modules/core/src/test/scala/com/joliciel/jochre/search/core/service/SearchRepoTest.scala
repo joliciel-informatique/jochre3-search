@@ -21,7 +21,6 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         doc <- searchRepo.getDocument(docRef)
         doc2 <- searchRepo.getDocument(docRev)
-        _ <- searchRepo.updateDocument(docRef, IndexStatus.NewMetadata)
         docsToReindex <- searchRepo.getDocumentsToReindex()
       } yield {
         assertTrue(doc.rev == docRev) &&
@@ -30,7 +29,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(doc.ipAddress == joeIp) &&
         assertTrue(doc.created.toEpochMilli > startTime.toEpochMilli) &&
         assertTrue(doc == doc2) &&
-        assertTrue(docsToReindex.map(_.rev) == Seq(docRev))
+        assertTrue(docsToReindex == Seq(docRef))
       }
     },
     test("insert page") {

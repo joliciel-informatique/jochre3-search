@@ -14,10 +14,33 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
-  implicit val doobieMappingForIndexStatus: Meta[IndexStatusCode] =
-    pgEnumStringOpt("index_status", IndexStatusCode.fromEnum, IndexStatusCode.toEnum)
+  def upsertIndexedDocument(
+      ref: DocReference,
+      docRev: DocRev,
+      wordSuggestionRev: Option[WordSuggestionRev],
+      metadataCorrectionRev: Option[MetadataCorrectionRev],
+      reindex: Boolean
+  ): Task[Int] =
+    sql"""INSERT INTO indexed_document (reference, doc_rev, word_suggestion_rev,  metadata_correction_rev, reindex)
+         | VALUES (${ref.ref}, ${docRev.rev}, ${wordSuggestionRev.map(_.rev)}, ${metadataCorrectionRev.map(
+      _.rev
+    )}, $reindex)
+         | ON CONFLICT (reference)
+         | DO UPDATE SET doc_rev=${docRev.rev},
+         |   word_suggestion_rev=${wordSuggestionRev.map(_.rev)},
+         |   metadata_correction_rev=${metadataCorrectionRev.map(_.rev)},
+         |   reindex=$reindex
+         | """.stripMargin.update.run
+      .transact(transactor)
 
-  def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] =
+  def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] = {
+    for {
+      docRev <- insertDocumentInternal(ref, username, ipAddress)
+      _ <- upsertIndexedDocument(ref, DocRev(0), None, None, false)
+    } yield docRev
+  }
+
+  private def insertDocumentInternal(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] =
     sql"""INSERT INTO document (reference, username, ip)
          | VALUES (${ref.ref}, $username, $ipAddress)
          | RETURNING rev
@@ -26,18 +49,14 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def updateDocument(docRef: DocReference, indexStatus: IndexStatus): Task[Int] = {
-    sql"""UPDATE document d1 SET status=${indexStatus.code}, new_suggestion_offset=${indexStatus.newSuggestionOffset}
-         | WHERE d1.reference = ${docRef.ref}
-         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+  def markForReindex(docRef: DocReference): Task[Int] = {
+    sql"""UPDATE indexed_document d1 SET reindex=${true}
+          | WHERE reference=${docRef.ref}
        """.stripMargin.update.run
       .transact(transactor)
   }
-
   def markAllForReindex(): Task[Int] = {
-    val unindexed: IndexStatusCode = IndexStatusCode.Unindexed
-    sql"""UPDATE document d1 SET status=$unindexed, new_suggestion_offset=null
-         | WHERE d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+    sql"""UPDATE indexed_document d1 SET reindex=${true}
        """.stripMargin.update.run
       .transact(transactor)
   }
@@ -102,7 +121,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
+    sql"""SELECT rev, reference, username, ip, created
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -112,7 +131,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
+    sql"""SELECT rev, reference, username, ip, created
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -120,16 +139,38 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  def getDocumentsToReindex(): Task[Seq[DbDocument]] = {
-    val indexed: IndexStatusCode = IndexStatusCode.Indexed
-    sql"""SELECT rev, reference, username, ip, created, status, new_suggestion_offset
-         | FROM document d1
-         | WHERE d1.status != $indexed
-         | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+  def getDocumentsToReindex(): Task[Seq[DocReference]] = {
+    sql"""SELECT indexdoc.reference
+         | FROM indexed_document AS indexdoc
+         | WHERE EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
+         |   AND d.rev > indexdoc.doc_rev)
+         | OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
+         |   AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
+         | OR EXISTS (SELECT rev FROM metadata_correction m
+         |   INNER JOIN metadata_correction_doc md on m.id = md.correction_id
+         |   AND md.doc_ref = indexdoc.reference
+         |   AND m.rev > coalesce(indexdoc.metadata_correction_rev, 0))
+         | OR reindex
+         | ORDER BY reference
        """.stripMargin
-      .query[DbDocument]
+      .query[DocReference]
       .to[Seq]
       .transact(transactor)
+  }
+
+  def isContentUpdated(docRef: DocReference): Task[Boolean] = {
+    sql"""SELECT indexdoc.reference
+         | FROM indexed_document AS indexdoc
+         | WHERE EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
+         |   AND d.rev > indexdoc.doc_rev)
+         | OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
+         |   AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
+         | OR reindex
+       """.stripMargin
+      .query[DocReference]
+      .option
+      .transact(transactor)
+      .map(_.isDefined)
   }
 
   def getPage(docRev: DocRev, pageNumber: Int): Task[Option[DbPage]] =
@@ -307,6 +348,9 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   private val deleteAllDocuments: Task[Int] =
     sql"""DELETE FROM document""".update.run.transact(transactor)
 
+  private val deleteAllIndexedDocuments: Task[Int] =
+    sql"""DELETE FROM indexed_document""".update.run.transact(transactor)
+
   private val deleteAllQueries: Task[Int] =
     sql"""DELETE FROM query""".update.run.transact(transactor)
 
@@ -317,6 +361,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       _ <- deleteAllRows
       _ <- deleteAllPages
       count <- deleteAllDocuments
+      _ <- deleteAllIndexedDocuments
     } yield count
 }
 

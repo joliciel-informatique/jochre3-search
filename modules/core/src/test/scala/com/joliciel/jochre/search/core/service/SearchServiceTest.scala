@@ -2,6 +2,8 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core._
+import org.scalatest.Ignore
+import zio.test.TestAspect.ignore
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
@@ -475,8 +477,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     test("make a suggestion") {
       val wordOffset = (docRef2.ref + "\n" +
         "Hello people.\n" +
-        "How are you?\n" +
-        "Fi").length
+        "How are you?\n").length
       for {
         _ <- getSuggestionRepo()
         _ <- getSearchRepo()
@@ -557,8 +558,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer
-      .service[SearchRepo] ++ ZLayer
-      .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
-  ) @@ TestAspect.sequential
+      (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer
+        .service[SearchRepo] ++ ZLayer
+        .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
+    ) @@ TestAspect.sequential
 }

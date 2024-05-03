@@ -266,7 +266,6 @@ private[service] case class SearchServiceImpl(
         storeMetadata(ref, metadata)
       }
       pages <- indexAlto(ref, username, ipAddress, alto, metadata)
-      _ <- searchRepo.updateDocument(ref, IndexStatus.Indexed)
     } yield pages
 
   private def indexAlto(
@@ -280,7 +279,17 @@ private[service] case class SearchServiceImpl(
     log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
     val altoIndexer =
       AltoIndexer(jochreIndex, searchRepo, suggestionRepo, docRef, username, ipAddress, alto, metadata, altoUpdated)
-    altoIndexer.index()
+
+    for {
+      indexData <- altoIndexer.index()
+      _ <- searchRepo.upsertIndexedDocument(
+        docRef,
+        indexData.docRev,
+        indexData.wordSuggestionRev,
+        indexData.metadataCorrectionRev,
+        reindex = false
+      )
+    } yield indexData.pageCount
   }
 
   private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): DocMetadata =
@@ -865,18 +874,14 @@ private[service] case class SearchServiceImpl(
         page.index,
         rectAndText._1,
         suggestion,
-        rectAndText._2
+        rectAndText._2,
+        wordOffset
       )
-      currentDoc <- searchRepo
-        .getDocument(docRef)
-        .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewSuggestion(wordOffset)))
-      _ <- currentDoc
-        .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
-        .getOrElse(ZIO.succeed(()))
     } yield ()
   }
 
   override def reindex(docRef: DocReference): Task[Int] = {
+    log.info(f"About to re-index ${docRef.ref}")
     for {
       altoStream <- ZIO.attempt {
         val altoFile = docRef.getAltoPath()
@@ -887,11 +892,9 @@ private[service] case class SearchServiceImpl(
         getMetadata(docRef).getOrElse(DocMetadata())
       }
       currentDoc <- searchRepo.getDocument(docRef)
-      altoUpdated =
-        currentDoc.indexStatusCode == IndexStatusCode.Unindexed || currentDoc.indexStatusCode == IndexStatusCode.NewSuggestion
-      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, altoUpdated)
+      contentUpdated <- searchRepo.isContentUpdated(docRef)
+      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
       _ <- searchRepo.deleteOldRevs(docRef)
-      _ <- searchRepo.updateDocument(docRef, IndexStatus.Indexed)
     } yield pageCount
   }
 
@@ -961,17 +964,6 @@ private[service] case class SearchServiceImpl(
         docRefs
       )
       correction <- suggestionRepo.getMetadataCorrection(correctionId)
-      _ <- ZIO.foreach(docRefs) { docRef =>
-        log.debug(f"After correction for ${docRef.ref}, marking for re-index")
-        for {
-          currentDoc <- searchRepo
-            .getDocument(docRef)
-            .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewMetadata))
-          _ <- currentDoc
-            .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
-            .getOrElse(ZIO.succeed(()))
-        } yield ()
-      }
       _ <- ZIO.attempt {
         if (shouldSendMail) {
           CorrectionMailer.mailCorrection(correction, docRefs)
@@ -996,27 +988,16 @@ private[service] case class SearchServiceImpl(
         }
       }
       docRefs <- suggestionRepo.getMetadataCorrectionDocs(id)
-      _ <- ZIO.foreach(docRefs) { docRef =>
-        log.debug(f"Undoing correction for document ${docRef.ref}, marking for re-index")
-        for {
-          currentDoc <- searchRepo
-            .getDocument(docRef)
-            .mapAttempt(_.updateIndexStatusIfLessRestrictive(IndexStatus.NewMetadata))
-          _ <- currentDoc
-            .map(doc => searchRepo.updateDocument(docRef, doc.indexStatus))
-            .getOrElse(ZIO.succeed(()))
-        } yield ()
-      }
     } yield docRefs
   }
 
   override def reindexWhereRequired(): Task[Unit] = {
     for {
-      docs <- searchRepo.getDocumentsToReindex()
+      docRefs <- searchRepo.getDocumentsToReindex()
       _ <- ZIO.attempt {
-        log.info(f"Reindex requested, found ${docs.size} documents to re-index")
+        log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
       }
-      _ <- ZIO.foreach(docs) { doc => reindex(doc.ref) }
+      _ <- ZIO.foreach(docRefs) { docRef => reindex(docRef) }
     } yield ()
   }
 
@@ -1031,7 +1012,7 @@ private[service] case class SearchServiceImpl(
 
   override def markForReindex(docRef: DocReference): Task[Unit] = {
     for {
-      _ <- searchRepo.updateDocument(docRef, IndexStatus.Unindexed)
+      _ <- searchRepo.markForReindex(docRef)
     } yield ()
   }
 
