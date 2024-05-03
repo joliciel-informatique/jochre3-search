@@ -34,6 +34,14 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
   }
 
+  def markAllForReindex(): Task[Int] = {
+    val unindexed: IndexStatusCode = IndexStatusCode.Unindexed
+    sql"""UPDATE document d1 SET status=$unindexed, new_suggestion_offset=null
+         | WHERE d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
+       """.stripMargin.update.run
+      .transact(transactor)
+  }
+
   def deleteDocument(docRev: DocRev): Task[Int] =
     sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
       .transact(transactor)

@@ -177,4 +177,20 @@ trait IndexLogic extends HttpErrorMapper {
     } yield GetTermsResponse(terms))
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get terms", error))
       .mapError(mapToHttpError)
+
+  def postMarkForIndex(docRef: DocReference): ZIO[Requirements, HttpError, OkResponse] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      _ <- searchService.markForReindex(docRef)
+    } yield OkResponse())
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to mark for re-index", error))
+      .mapError(mapToHttpError)
+
+  def postMarkAllForIndex(): ZIO[Requirements, HttpError, OkResponse] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      _ <- searchService.markAllForReindex()
+    } yield OkResponse())
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to mark all for re-index", error))
+      .mapError(mapToHttpError)
 }

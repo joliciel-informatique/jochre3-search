@@ -173,7 +173,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .in("index")
       .in("document")
       .in(
-        jsonBody[DocReference]
+        path[DocReference]("docRef")
       )
       .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
@@ -281,7 +281,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       )
 
   private val postReindexHttp: ZServerEndpoint[Requirements, Any] =
-    postReindexEndpoint.serverLogic[Requirements](token => input => postReindexLogic())
+    postReindexEndpoint.serverLogic[Requirements](_ => _ => postReindexLogic())
 
   private val postUndoMetadataCorrectionEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -345,6 +345,66 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
   private val getTermsHttp: ZServerEndpoint[Requirements, Any] =
     getTermsEndpoint.serverLogic[Requirements](_ => input => getTermsLogic(input))
 
+  private val postMarkForReindexEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    DocReference,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document not found in index"
+          )
+        )
+      )
+      .post
+      .in("index")
+      .in("document")
+      .in(
+        path[DocReference]("docRef")
+      )
+      .in("mark-for-reindex")
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description("Mark an existing document of re-indexing")
+
+  private val postMarkForReindexHttp: ZServerEndpoint[Requirements, Any] =
+    postMarkForReindexEndpoint.serverLogic[Requirements](_ => input => postMarkForIndex(input))
+
+  private val postMarkAllForReindexEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    Unit,
+    HttpError,
+    OkResponse,
+    Any
+  ] =
+    secureEndpoint(Roles.index)
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](
+          StatusCode.BadRequest,
+          jsonBody[BadRequest].description(
+            "Not sure when this could happen"
+          )
+        )
+      )
+      .post
+      .in("index")
+      .in("mark-all-for-reindex")
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description(
+        f"Mark all documents for re-index"
+      )
+
+  private val postMarkAllForReindexHttp: ZServerEndpoint[Requirements, Any] =
+    postMarkAllForReindexEndpoint.serverLogic[Requirements](_ => _ => postMarkAllForIndex())
+
   val endpoints: List[AnyEndpoint] = List(
     putPdfEndpoint,
     putImageZipEndpoint,
@@ -354,6 +414,8 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     postWordSuggestionEndpoint,
     postMetadataCorrectionEndpoint,
     postUndoMetadataCorrectionEndpoint,
+    postMarkForReindexEndpoint,
+    postMarkAllForReindexEndpoint,
     postReindexEndpoint,
     getTermsEndpoint
   ).map(_.endpoint.tag("index"))
@@ -367,6 +429,8 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     postWordSuggestionHttp,
     postMetadataCorrectionHttp,
     postUndoMetadataCorrectionHttp,
+    postMarkForReindexHttp,
+    postMarkAllForReindexHttp,
     postReindexHttp,
     getTermsHttp
   )

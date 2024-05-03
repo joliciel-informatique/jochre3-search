@@ -141,6 +141,10 @@ trait SearchService {
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
 
   def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]]
+
+  def markForReindex(docRef: DocReference): Task[Unit]
+
+  def markAllForReindex(): Task[Unit]
 }
 
 private[service] case class SearchServiceImpl(
@@ -1024,6 +1028,16 @@ private[service] case class SearchServiceImpl(
       }
     } yield terms
   }
+
+  override def markForReindex(docRef: DocReference): Task[Unit] = {
+    for {
+      _ <- searchRepo.updateDocument(docRef, IndexStatus.Unindexed)
+    } yield ()
+  }
+
+  override def markAllForReindex(): Task[Unit] = for {
+    _ <- searchRepo.markAllForReindex()
+  } yield ()
 }
 
 object SearchService {
