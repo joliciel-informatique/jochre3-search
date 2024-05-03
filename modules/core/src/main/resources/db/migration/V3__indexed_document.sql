@@ -18,3 +18,5 @@ CREATE TABLE indexed_document(
   reindex BOOLEAN NOT NULL DEFAULT false,
   index_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+
+INSERT INTO indexed_document (reference, doc_rev) SELECT reference, rev FROM document;
