@@ -95,7 +95,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     ValidToken,
     (AltoFileForm, Option[String]),
     HttpError,
-    IndexResponse,
+    OkResponse,
     Any
   ] =
     secureEndpoint(Roles.index)
@@ -114,7 +114,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
         multipartBody[AltoFileForm]
       )
       .in(clientIp)
-      .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
+      .out(jsonBody[OkResponse].example(OkResponse()))
       .description("Replace alto OCR layer for an existing document.")
 
   private val postAltoHttp: ZServerEndpoint[Requirements, Any] =
@@ -126,7 +126,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     ValidToken,
     (MetadataFileForm, Option[String]),
     HttpError,
-    IndexResponse,
+    OkResponse,
     Any
   ] =
     secureEndpoint(Roles.index)
@@ -145,8 +145,8 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
         multipartBody[MetadataFileForm]
       )
       .in(clientIp)
-      .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
-      .description("Replace metdata for an existing document.")
+      .out(jsonBody[OkResponse].example(OkResponse()))
+      .description("Replace metadata for an existing document.")
 
   private val postMetadataHttp: ZServerEndpoint[Requirements, Any] =
     postMetadataEndpoint.serverLogic[Requirements](token => input => (postMetadataLogic _).tupled(token +: input))

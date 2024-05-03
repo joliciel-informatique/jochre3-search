@@ -17,6 +17,8 @@ import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
 import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream}
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
 import javax.imageio.ImageIO
 import scala.io.Source
@@ -58,12 +60,12 @@ trait SearchService {
   def updateAlto(
       ref: DocReference,
       altoStream: InputStream
-  ): Task[Int]
+  ): Task[Unit]
 
   def updateMetadata(
       ref: DocReference,
       metadataStream: InputStream
-  ): Task[Int]
+  ): Task[Unit]
 
   def search(
       query: SearchQuery,
@@ -136,7 +138,9 @@ trait SearchService {
       docRef: DocReference
   ): Task[Int]
 
-  def reindexWhereRequired(): Task[Unit]
+  /** Returns false if re-indexing was already underway, true otherwise (after re-indexing).
+    */
+  def reindexWhereRequired(): Task[Boolean]
 
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
 
@@ -156,6 +160,9 @@ private[service] case class SearchServiceImpl(
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
+
+  private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
+  private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
 
   override def addNewDocumentAsPdf(
       ref: DocReference,
@@ -235,21 +242,21 @@ private[service] case class SearchServiceImpl(
   override def updateAlto(
       ref: DocReference,
       altoStream: InputStream
-  ): Task[Int] = {
+  ): Task[Unit] = {
     for {
       _ <- readAndStoreAlto(ref, altoStream)
-      pageCount <- reindex(ref)
-    } yield pageCount
+      _ <- markForReindex(ref)
+    } yield ()
   }
 
   override def updateMetadata(
       ref: DocReference,
       metadataStream: InputStream
-  ): Task[Int] = {
+  ): Task[Unit] = {
     for {
       _ <- ZIO.attempt(readAndStoreMetadata(ref, metadataStream))
-      pageCount <- reindex(ref)
-    } yield pageCount
+      _ <- markForReindex(ref)
+    } yield ()
   }
 
   override def addFakeDocument(
@@ -276,20 +283,43 @@ private[service] case class SearchServiceImpl(
       metadata: DocMetadata,
       altoUpdated: Boolean = true
   ): Task[Int] = {
-    log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
-    val altoIndexer =
-      AltoIndexer(jochreIndex, searchRepo, suggestionRepo, docRef, username, ipAddress, alto, metadata, altoUpdated)
 
-    for {
-      indexData <- altoIndexer.index()
-      _ <- searchRepo.upsertIndexedDocument(
-        docRef,
-        indexData.docRev,
-        indexData.wordSuggestionRev,
-        indexData.metadataCorrectionRev,
-        reindex = false
-      )
-    } yield indexData.pageCount
+    val acquire = ZIO.attempt {
+      val alreadyUnderway = Option(documentsBeingIndexed.putIfAbsent(docRef, true)).isDefined
+      alreadyUnderway
+    }
+
+    def release(underway: Boolean) = ZIO.succeed {
+      if (!underway) {
+        documentsBeingIndexed.remove(docRef)
+        log.info(f"Finished indexing document ${docRef.ref}")
+      }
+    }
+
+    def run(underway: Boolean) = {
+      if (underway) {
+        log.info(f"Document ${docRef.ref} already being indexed")
+
+        ZIO.succeed(0)
+      } else {
+        log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
+        val altoIndexer =
+          AltoIndexer(jochreIndex, searchRepo, suggestionRepo, docRef, username, ipAddress, alto, metadata, altoUpdated)
+
+        for {
+          indexData <- altoIndexer.index()
+          _ <- searchRepo.upsertIndexedDocument(
+            docRef,
+            indexData.docRev,
+            indexData.wordSuggestionRev,
+            indexData.metadataCorrectionRev,
+            reindex = false
+          )
+        } yield indexData.pageCount
+      }
+    }
+
+    ZIO.acquireReleaseWith(acquire)(release)(run)
   }
 
   private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): DocMetadata =
@@ -991,14 +1021,38 @@ private[service] case class SearchServiceImpl(
     } yield docRefs
   }
 
-  override def reindexWhereRequired(): Task[Unit] = {
-    for {
-      docRefs <- searchRepo.getDocumentsToReindex()
-      _ <- ZIO.attempt {
-        log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
+  override def reindexWhereRequired(): Task[Boolean] = {
+    val acquireTask = ZIO.attempt {
+      val underway = reindexingUnderway.compareAndExchange(false, true)
+      underway
+    }
+
+    def releaseTask(underway: Boolean) = ZIO.succeed {
+      reindexingUnderway.compareAndExchange(true, false)
+      if (!underway) {
+        log.info("Finished reindex where required")
       }
-      _ <- ZIO.foreach(docRefs) { docRef => reindex(docRef) }
-    } yield ()
+    }
+
+    def reindexTask(underway: Boolean) = {
+      if (underway) {
+        log.info("Re-indexing already underway.")
+        ZIO.succeed(false)
+      } else {
+        for {
+          _ <- ZIO.attempt {
+            reindexingUnderway.set(true)
+          }
+          docRefs <- searchRepo.getDocumentsToReindex()
+          _ <- ZIO.attempt {
+            log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
+          }
+          _ <- ZIO.foreach(docRefs) { docRef => reindex(docRef) }
+        } yield true
+      }
+    }
+
+    ZIO.acquireReleaseWith(acquireTask)(releaseTask)(reindexTask)
   }
 
   override def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]] = {
