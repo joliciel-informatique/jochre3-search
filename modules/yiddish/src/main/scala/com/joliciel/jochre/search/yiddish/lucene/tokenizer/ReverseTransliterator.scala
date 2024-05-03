@@ -2,15 +2,8 @@ package com.joliciel.jochre.search.yiddish.lucene.tokenizer
 
 import com.joliciel.jochre.ocr.yiddish.YivoTransliterator
 import com.joliciel.jochre.search.core.text.TextNormalizer
-import org.apache.lucene.analysis.tokenattributes.{
-  CharTermAttribute,
-  OffsetAttribute,
-  PositionIncrementAttribute,
-  TypeAttribute
-}
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.analysis.{TokenFilter, TokenStream}
-import org.apache.lucene.util.AttributeSource
-import org.slf4j.LoggerFactory
 
 import java.util.Locale
 

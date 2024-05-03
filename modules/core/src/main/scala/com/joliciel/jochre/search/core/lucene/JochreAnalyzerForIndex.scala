@@ -13,15 +13,22 @@ import org.slf4j.LoggerFactory
 
 import java.util.Locale
 
-class JochreAnalyzerForIndex(locale: Locale) extends JochreAnalyzerBase(locale) {
+class JochreAnalyzerForIndex(locale: Locale, languageSpecificFilters: Option[LanguageSpecificFilters] = None)
+    extends JochreAnalyzerBase(locale) {
   private val log = LoggerFactory.getLogger(getClass)
 
   val indexingHelper = IndexingHelper()
+
+  private val maybePostTokenizationFilter = languageSpecificFilters.flatMap(_.postTokenizationFilterForIndex)
+  private def postTokenizationFilter(tokens: TokenStream): TokenStream = {
+    maybePostTokenizationFilter.map(_(tokens)).getOrElse(tokens)
+  }
 
   override def finalFilter(tokens: TokenStream): TokenStream = (addDocumentReferenceFilter(_))
     .andThen(regexTokenizerFilter)
     .andThen(textNormalizingFilter)
     .andThen(lowercaseFilter)
+    .andThen(postTokenizationFilter)
     .andThen(addPageMarkerFilter)
     .andThen(addNewlineMarkerFilter)
     .andThen(hyphenationFilter)

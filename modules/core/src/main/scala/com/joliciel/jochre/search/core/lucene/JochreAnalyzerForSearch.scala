@@ -23,7 +23,7 @@ class JochreAnalyzerForSearch(
   private val wordAnalyzer = new JochreAnalyzerForWords(locale)
   private val synonymMap = SynonymMapReader.getSynonymMap(locale, wordAnalyzer)
 
-  private val maybePostTokenizationFilter = languageSpecificFilters.flatMap(_.postTokenizationFilter)
+  private val maybePostTokenizationFilter = languageSpecificFilters.flatMap(_.postTokenizationFilterForSearch)
   private def postTokenizationFilter(tokens: TokenStream): TokenStream = {
     maybePostTokenizationFilter.map(_(tokens)).getOrElse(tokens)
   }
@@ -32,6 +32,7 @@ class JochreAnalyzerForSearch(
     (textNormalizingFilter(_))
       .andThen(regexTokenizerFilter)
       .andThen(lowercaseFilter)
+      .andThenIf(log.isTraceEnabled)(tapFilter(log, "postTokenization") _)
       .andThen(postTokenizationFilter)
       .andThenIf(log.isTraceEnabled)(tapFilter(log, "postTokenizationFilter") _)
       .andThenIf(!forPhrases)(stopWordFilter)

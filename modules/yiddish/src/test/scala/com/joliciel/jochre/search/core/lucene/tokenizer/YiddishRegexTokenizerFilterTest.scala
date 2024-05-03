@@ -10,8 +10,8 @@ import org.scalatest.matchers.should.Matchers
 import java.util.Locale
 import scala.util.matching.Regex
 
-class RegexTokenizerFilterTest extends AnyFlatSpec with Matchers with LuceneUtilities {
-  class TestAnalyzer(regex: Regex) extends Analyzer {
+class YiddishRegexTokenizerFilterTest extends AnyFlatSpec with Matchers with LuceneUtilities {
+  class TestAnalyzerForLocale(locale: Locale) extends Analyzer {
     override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
       val source = new WhitespaceTokenizer();
 
@@ -19,42 +19,19 @@ class RegexTokenizerFilterTest extends AnyFlatSpec with Matchers with LuceneUtil
     }
 
     def finalFilter(tokens: TokenStream): TokenStream = {
-      new RegexTokenizerFilter(tokens, regex)
+      RegexTokenizerFilter(tokens, locale)
     }
   }
 
-  "A RegexTokenizerFilter" should "correctly analyze a sentence" in {
-    val regex: Regex = raw"(?Ui)(\baujourd'hui|\bj'|\bn'|'s\b|\b\w+n't\b|\p{Punct}+)".r
-    val analyzer: Analyzer = new TestAnalyzer(regex)
+  "A RegexTokenizerFilter" should "work in Yiddish" in {
+    val analyzer: Analyzer = new TestAnalyzerForLocale(Locale.forLanguageTag("yi"))
 
-    val text = "\"Aujourd'hui, j'avais du temps. N'avais... aujourd'hui rien à faire. Bob's dog's's shouldn't bark.\""
+    val text = """ס‛האָט"""
     val tokens = tokenizeString(text, analyzer)
 
     val expected = Seq(
-      "\"",
-      "Aujourd'hui",
-      ",",
-      "j'",
-      "avais",
-      "du",
-      "temps",
-      ".",
-      "N'",
-      "avais",
-      "...",
-      "aujourd'hui",
-      "rien",
-      "à",
-      "faire",
-      ".",
-      "Bob",
-      "'s",
-      "dog",
-      "'s",
-      "'s",
-      "shouldn't",
-      "bark",
-      ".\""
+      "ס‛",
+      "האָט"
     )
 
     tokens.map(_.value) should equal(expected)

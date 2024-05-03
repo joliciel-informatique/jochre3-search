@@ -20,8 +20,8 @@ private[search] object AnalyzerGroup {
 
   def generic(languageSpecificFilters: Option[LanguageSpecificFilters]): AnalyzerGroup =
     AnalyzerGroup(
-      forIndexing = new JochreAnalyzerForIndex(locale),
-      forIndexingFields = new JochreAnalyzerForIndexFields(locale),
+      forIndexing = new JochreAnalyzerForIndex(locale, languageSpecificFilters),
+      forIndexingFields = new JochreAnalyzerForIndexFields(locale, languageSpecificFilters),
       forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = true, languageSpecificFilters),
       forSearchPhrases =
         new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = true, languageSpecificFilters),

@@ -6,14 +6,21 @@ import org.slf4j.LoggerFactory
 
 import java.util.Locale
 
-class JochreAnalyzerForIndexFields(locale: Locale) extends JochreAnalyzerBase(locale) {
+class JochreAnalyzerForIndexFields(locale: Locale,
+  languageSpecificFilters: Option[LanguageSpecificFilters] = None) extends JochreAnalyzerBase(locale) {
   private val log = LoggerFactory.getLogger(getClass)
 
   val indexingHelper = IndexingHelper()
 
+  private val maybePostTokenizationFilter = languageSpecificFilters.flatMap(_.postTokenizationFilterForIndex)
+  private def postTokenizationFilter(tokens: TokenStream): TokenStream = {
+    maybePostTokenizationFilter.map(_(tokens)).getOrElse(tokens)
+  }
+
   override def finalFilter(tokens: TokenStream): TokenStream = (textNormalizingFilter(_))
     .andThen(regexTokenizerFilter)
     .andThen(lowercaseFilter)
+    .andThen(postTokenizationFilter)
     .andThen(ignorePunctuationFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
