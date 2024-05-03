@@ -161,7 +161,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   def isContentUpdated(docRef: DocReference): Task[Boolean] = {
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
-         | WHERE EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
+         | WHERE indexdoc.reference = ${docRef.ref}
+         | AND EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
          |   AND d.rev > indexdoc.doc_rev)
          | OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
          |   AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
