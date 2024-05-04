@@ -121,7 +121,7 @@ case class AltoIndexer(
           val pageSuggestionMap = suggestions.groupBy(_.pageIndex)
           pages match {
             case page +: tail =>
-              log.info(f"For doc ${docRef.ref}, extracting page ${page.physicalPageNumber}")
+              log.info(f"For doc ${docRef.ref}, extracting page ${page.physicalPageNumber} of ${alto.pages.size}")
               val pageWithDefaultLanguage = page.withDefaultLanguage
               val startOffset = pageDataSeq.lastOption.map(_.endOffset).getOrElse(initialOffset)
               val pageSuggestions = pageSuggestionMap.getOrElse(page.physicalPageNumber, Seq.empty)
