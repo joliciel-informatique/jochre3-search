@@ -29,7 +29,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | DO UPDATE SET doc_rev=${docRev.rev},
          |   word_suggestion_rev=${wordSuggestionRev.map(_.rev)},
          |   metadata_correction_rev=${metadataCorrectionRev.map(_.rev)},
-         |   reindex=$reindex
+         |   reindex=$reindex,
+         |   index_time=CURRENT_TIMESTAMP
          | """.stripMargin.update.run
       .transact(transactor)
 

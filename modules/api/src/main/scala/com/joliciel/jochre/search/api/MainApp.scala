@@ -123,6 +123,8 @@ object MainApp extends ZIOAppDefault {
       startup <- ZStream
         .tick(pollInterval)
         .mapZIO(_ => searchService.reindexWhereRequired())
+        .tapError(error => ZIO.succeed(log.error("Reindex stream failed", error)))
+        .retry(Schedule.exponential(durationInt(1).second))
         .run(ZSink.foreach { reIndexed =>
           ZIO.logDebug(f"Ran re-index? $reIndexed")
         })
