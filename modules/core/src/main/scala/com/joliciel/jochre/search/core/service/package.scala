@@ -6,6 +6,7 @@ import java.io.StringReader
 import java.time.Instant
 import scala.util.Using
 import scala.xml.{PrettyPrinter, XML}
+import enumeratum.{DoobieEnum, Enum, EnumEntry}
 
 package object service {
   case class SearchResponse(results: Seq[SearchResult], totalCount: Long)
@@ -66,6 +67,18 @@ package object service {
     )
   }
 
+  sealed trait DocumentStatus extends EnumEntry
+
+  object DocumentStatus extends Enum[DocumentStatus] with DoobieEnum[DocumentStatus] {
+    val values = findValues
+
+    case object Underway extends DocumentStatus
+    case object Complete extends DocumentStatus
+
+    def toEnum(code: DocumentStatus): String = code.entryName
+    def fromEnum(s: String): Option[DocumentStatus] = DocumentStatus.withNameOption(s)
+  }
+
   private[core] case class DocRev(rev: Long) extends AnyVal
 
   private[service] case class DbDocument(
@@ -73,7 +86,8 @@ package object service {
       ref: DocReference,
       username: String,
       ipAddress: Option[String],
-      created: Instant
+      created: Instant,
+      status: DocumentStatus
   )
 
   private[service] case class PageId(id: Long) extends AnyVal

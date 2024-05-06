@@ -14,6 +14,9 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
+  implicit val doobieMappingForIndexStatus: Meta[DocumentStatus] =
+    pgEnumStringOpt("document_status", DocumentStatus.fromEnum, DocumentStatus.toEnum)
+
   def upsertIndexedDocument(
       ref: DocReference,
       docRev: DocRev,
@@ -61,6 +64,12 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
        """.stripMargin.update.run
       .transact(transactor)
   }
+
+  def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] =
+    sql"""UPDATE document
+         | SET status=${status}
+         | WHERE rev=${docRev.rev}""".stripMargin.update.run
+      .transact(transactor)
 
   def deleteDocument(docRev: DocRev): Task[Int] =
     sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
@@ -122,7 +131,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created
+    sql"""SELECT rev, reference, username, ip, created, status
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -132,7 +141,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created
+    sql"""SELECT rev, reference, username, ip, created, status
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -141,17 +150,21 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocumentsToReindex(): Task[Seq[DocReference]] = {
+    val completeStatus: DocumentStatus = DocumentStatus.Complete
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
-         | WHERE EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
-         |   AND d.rev > indexdoc.doc_rev)
-         | OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
-         |   AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
-         | OR EXISTS (SELECT rev FROM metadata_correction m
-         |   INNER JOIN metadata_correction_doc md on m.id = md.correction_id
-         |   AND md.doc_ref = indexdoc.reference
-         |   AND m.rev > coalesce(indexdoc.metadata_correction_rev, 0))
-         | OR reindex
+         | WHERE (
+         |   EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
+         |     AND d.status = $completeStatus
+         |     AND d.rev > indexdoc.doc_rev)
+         |   OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
+         |     AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
+         |   OR EXISTS (SELECT rev FROM metadata_correction m
+         |     INNER JOIN metadata_correction_doc md on m.id = md.correction_id
+         |     AND md.doc_ref = indexdoc.reference
+         |     AND m.rev > coalesce(indexdoc.metadata_correction_rev, 0))
+         |   OR reindex
+         | )
          | ORDER BY reference
        """.stripMargin
       .query[DocReference]
@@ -160,11 +173,13 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def isContentUpdated(docRef: DocReference): Task[Boolean] = {
+    val completeStatus: DocumentStatus = DocumentStatus.Complete
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE indexdoc.reference = ${docRef.ref}
          | AND (
          |   EXISTS (SELECT rev FROM document d WHERE d.reference = indexdoc.reference
+         |     AND d.status = $completeStatus
          |     AND d.rev > indexdoc.doc_rev)
          |   OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
          |     AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))

@@ -78,6 +78,7 @@ case class AltoIndexer(
         log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
         documentData.pageCount
       }
+      _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Complete)
     } yield IndexData(
       docRev = documentData.docRev,
       wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
