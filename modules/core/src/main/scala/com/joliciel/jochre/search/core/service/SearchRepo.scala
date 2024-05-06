@@ -293,7 +293,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          | FROM word
          | INNER JOIN document ON word.doc_rev = document.rev
          | WHERE document.rev = ${docRev.rev}
-         | AND word.start_offset = $offset
+         | AND word.start_offset = (SELECT MIN(w2.start_offset) FROM word w2 WHERE w2.start_offset >= $offset)
        """.stripMargin
       .query[DbWord]
       .option

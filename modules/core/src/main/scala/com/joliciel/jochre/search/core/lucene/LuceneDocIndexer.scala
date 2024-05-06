@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory
 
 import java.time.Instant
 
-private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter) {
+private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter, private val indexingHelper: IndexingHelper) {
   private val log = LoggerFactory.getLogger(getClass)
 
   def indexDocument(doc: AltoDocument): Unit = {
@@ -20,6 +20,7 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
       val fields = toLuceneDoc(doc)
       indexWriter.updateDocument(docTerm, fields)
       log.info(f"Indexed ${doc.ref.ref}")
+      indexingHelper.removeDocumentInfo(doc.ref)
       commit()
       log.info(f"Index commited for ${doc.ref.ref}")
     } catch {

@@ -22,6 +22,7 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
 
   private var attributeState: AttributeSource.State = _
   private var setAside: Seq[AttributeSource.State] = Seq.empty
+  private var hasNext: Boolean = true
 
   final override def incrementToken: Boolean = {
     if (setAside.nonEmpty) {
@@ -32,7 +33,7 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
 
       setAside = setAside.tail
       true
-    } else if (input.incrementToken()) {
+    } else if (hasNext && input.incrementToken()) {
       val tokenType = typeAttr.`type`()
       if (tokenType.startsWith(TokenTypes.DOC_REF_TYPE_PREFIX)) {
         val refValue = tokenType.substring(TokenTypes.DOC_REF_TYPE_PREFIX.length)
@@ -42,9 +43,14 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
         if (hyphenated) {
           if (log.isDebugEnabled) log.debug(f"In doc ${ref.ref} word at offset $offset is hyphenated")
           // First concatenate the hyphen
-          concatenateOrSetAsideNextToken(false)
+          val hasMoreAfterHyphen = concatenateOrSetAsideNextToken(false)
           // Then concatenate the next word
-          concatenateOrSetAsideNextToken(true)
+          val hasMoreAfter2ndWord = if (hasMoreAfterHyphen) {
+            concatenateOrSetAsideNextToken(true)
+          } else {
+            hasMoreAfterHyphen
+          }
+          hasNext = hasMoreAfter2ndWord
         }
       }
       true
@@ -53,10 +59,11 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
     }
   }
 
-  private def concatenateOrSetAsideNextToken(addSecondWordContent: Boolean): Unit = {
+  private def concatenateOrSetAsideNextToken(addSecondWordContent: Boolean): Boolean = {
     attributeState = captureState()
     // We combine this word with the hyphen and the following word, so we continue incrementing the token
     var takeNext = true
+    var hasNext = true
     while (takeNext) {
       if (input.incrementToken()) {
         val tokenType = typeAttr.`type`()
@@ -80,7 +87,13 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
         } else {
           setAside = setAside :+ captureState()
         }
+      } else {
+        takeNext = false
+        hasNext = false
+        clearAttributes()
+        restoreState(attributeState)
       }
     }
+    hasNext
   }
 }

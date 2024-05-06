@@ -31,10 +31,6 @@ class AddDocumentReferenceFilter(input: TokenStream, indexingHelper: IndexingHel
       typeAttr.setType(f"${TokenTypes.DOC_REF_TYPE_PREFIX}${refOption.get.ref}")
       true
     } else {
-      refOption.foreach { ref =>
-        log.debug(f"Removing doc info for doc ref ${ref.ref}")
-        indexingHelper.removeDocumentInfo(ref)
-      }
       refOption = None
       false
     }

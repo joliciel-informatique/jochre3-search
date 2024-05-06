@@ -39,7 +39,7 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
   def deleteDocument(docRef: DocReference): Unit =
     indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)))
 
-  def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter)
+  def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter, analyzerGroup.forIndexing.indexingHelper)
 
   def addDocumentInfo(ref: DocReference, docInfo: DocumentIndexInfo): Unit =
     analyzerGroup.forIndexing.indexingHelper.addDocumentInfo(ref, docInfo)
