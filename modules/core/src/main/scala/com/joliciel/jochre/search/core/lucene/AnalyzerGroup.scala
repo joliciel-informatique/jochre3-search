@@ -1,5 +1,6 @@
 package com.joliciel.jochre.search.core.lucene
 
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.Analyzer
 

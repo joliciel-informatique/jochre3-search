@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.{DocReference, IndexField}
 import com.joliciel.jochre.search.core.db.PostgresDatabase.getClass
-import com.joliciel.jochre.search.core.text.SynonymMapReader
+import com.joliciel.jochre.search.core.text.{LanguageSpecificFilters, SynonymMapReader}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper

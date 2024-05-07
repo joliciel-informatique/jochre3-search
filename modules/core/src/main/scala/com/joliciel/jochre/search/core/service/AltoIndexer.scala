@@ -21,6 +21,7 @@ import com.joliciel.jochre.search.core.{
   RowNotFoundException
 }
 import com.joliciel.jochre.search.core.lucene.{DocumentIndexInfo, JochreIndex}
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import zio.{Task, ZIO}
@@ -34,7 +35,8 @@ case class AltoIndexer(
     ipAddress: Option[String],
     alto: Alto,
     metadata: DocMetadata,
-    contentUpdated: Boolean = true
+    contentUpdated: Boolean = true,
+    languageSpecificFilters: Option[LanguageSpecificFilters] = None
 ) {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
@@ -49,12 +51,12 @@ case class AltoIndexer(
 
   def index(): Task[IndexData] = {
     for {
-      suggestions <- suggestionRepo.getSuggestions(docRef)
       _ <- ZIO.attempt {
         if (log.isDebugEnabled) {
           log.debug(f"About to process Alto for document ${docRef.ref}")
         }
       }
+      suggestions <- suggestionRepo.getSuggestions(docRef)
       corrections <- suggestionRepo.getMetadataCorrections(docRef)
       documentData <- persistDocument(suggestions)
       pageCount <- ZIO.attempt {
@@ -269,11 +271,13 @@ case class AltoIndexer(
           case None =>
             (withSuggestions :+ wordOrSpace) -> None
           case Some(suggestion) =>
+            val alternatives =
+              languageSpecificFilters.map(_.getAlternatives(suggestion.suggestion)).getOrElse(Seq.empty)
             val newWord = Word(
               content = suggestion.suggestion,
               rectangle = suggestion.rect,
               glyphs = Seq.empty,
-              alternatives = Seq.empty,
+              alternatives = alternatives,
               confidence = 1.0
             )
             (withSuggestions :+ newWord) -> Some(suggestion)

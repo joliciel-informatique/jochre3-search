@@ -1,5 +1,6 @@
 package com.joliciel.jochre.search.core.lucene
 
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.joliciel.jochre.search.core.util.AndThenIf.Implicits._
 import org.apache.lucene.analysis.TokenStream
 import org.slf4j.LoggerFactory

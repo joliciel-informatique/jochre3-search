@@ -2,6 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, SearchQuery, Sort}
+import com.joliciel.jochre.search.yiddish.YiddishFilters
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -124,7 +125,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ YiddishFilters.live) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer.service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential
 }

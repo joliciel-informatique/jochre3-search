@@ -16,7 +16,7 @@ object CorrectionMailer {
   private val mailConfig = config.getConfig("mail")
   private val dateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
-  def mailCorrection(correction: DbMetadataCorrection, docRefs: Seq[DocReference]) = {
+  def mailCorrection(correction: DbMetadataCorrection, docRefs: Seq[DocReference]) = try {
 
     val mailProps = new Properties
     mailProps.put("mail.smtp.port", mailConfig.getString("smtp.port"))
@@ -77,5 +77,9 @@ object CorrectionMailer {
     transport.connect(mailConfig.getString("smtp.host"), mailConfig.getString("from"), mailConfig.getString("password"))
     transport.sendMessage(message, message.getAllRecipients)
     transport.close()
+  } catch {
+    case exception: Exception =>
+      log.error(f"Unable to send email", exception)
+      throw exception
   }
 }

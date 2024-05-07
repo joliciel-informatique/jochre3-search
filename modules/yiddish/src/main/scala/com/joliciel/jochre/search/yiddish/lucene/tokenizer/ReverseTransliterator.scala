@@ -7,7 +7,7 @@ import org.apache.lucene.analysis.{TokenFilter, TokenStream}
 
 import java.util.Locale
 
-private[lucene] class ReverseTransliterator(input: TokenStream) extends TokenFilter(input) {
+private[yiddish] class ReverseTransliterator(input: TokenStream) extends TokenFilter(input) {
   private val termAttr = addAttribute(classOf[CharTermAttribute])
 
   private val textNormalizer = TextNormalizer(locale = Locale.forLanguageTag("yi"))

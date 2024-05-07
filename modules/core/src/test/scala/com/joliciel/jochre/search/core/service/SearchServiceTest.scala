@@ -2,6 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core._
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import org.scalatest.Ignore
 import zio.test.TestAspect.ignore
 import zio.test.junit.JUnitRunnableSpec
@@ -14,6 +15,7 @@ import java.time.Instant
 import scala.util.Using
 
 object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+  private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
     "nice" -> Seq("pleasant", "lovely")
@@ -558,8 +560,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       }
     }
   ).provideLayer(
-      (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer) >>> SearchService.live ++ ZLayer
-        .service[SearchRepo] ++ ZLayer
-        .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
-    ) @@ TestAspect.sequential
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer) >>> SearchService.live ++ ZLayer
+      .service[SearchRepo] ++ ZLayer
+      .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
+  ) @@ TestAspect.sequential
 }

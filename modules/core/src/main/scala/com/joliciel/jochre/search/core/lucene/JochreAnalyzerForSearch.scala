@@ -1,7 +1,7 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.lucene.tokenizer.SkipWildcardInSearchFilter
-import com.joliciel.jochre.search.core.text.SynonymMapReader
+import com.joliciel.jochre.search.core.text.{LanguageSpecificFilters, SynonymMapReader}
 import com.joliciel.jochre.search.core.util.AndThenIf.Implicits._
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.core.StopFilter

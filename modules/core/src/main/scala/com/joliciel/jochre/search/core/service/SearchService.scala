@@ -5,6 +5,7 @@ import com.joliciel.jochre.ocr.core.model._
 import com.joliciel.jochre.ocr.core.utils.ImageUtils
 import com.joliciel.jochre.search.core._
 import com.joliciel.jochre.search.core.lucene.{IndexTerm, JochreIndex, TermLister}
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.io.RandomAccessReadBuffer
@@ -155,7 +156,8 @@ private[service] case class SearchServiceImpl(
     jochreIndex: JochreIndex,
     searchRepo: SearchRepo,
     suggestionRepo: SuggestionRepo,
-    metadataReader: MetadataReader = MetadataReader.default
+    metadataReader: MetadataReader = MetadataReader.default,
+    languageSpecificFilters: Option[LanguageSpecificFilters] = None
 ) extends SearchService
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
@@ -304,7 +306,18 @@ private[service] case class SearchServiceImpl(
       } else {
         log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
         val altoIndexer =
-          AltoIndexer(jochreIndex, searchRepo, suggestionRepo, docRef, username, ipAddress, alto, metadata, altoUpdated)
+          AltoIndexer(
+            jochreIndex,
+            searchRepo,
+            suggestionRepo,
+            docRef,
+            username,
+            ipAddress,
+            alto,
+            metadata,
+            altoUpdated,
+            languageSpecificFilters
+          )
 
         for {
           indexData <- altoIndexer.index()
@@ -1076,12 +1089,18 @@ private[service] case class SearchServiceImpl(
 }
 
 object SearchService {
-  lazy val live: ZLayer[JochreIndex & SearchRepo & SuggestionRepo, Nothing, SearchService] =
+  lazy val live: ZLayer[JochreIndex & SearchRepo & SuggestionRepo & LanguageSpecificFilters, Nothing, SearchService] =
     ZLayer {
       for {
         index <- ZIO.service[JochreIndex]
         searchRepo <- ZIO.service[SearchRepo]
         suggestionRepo <- ZIO.service[SuggestionRepo]
-      } yield SearchServiceImpl(index, searchRepo, suggestionRepo)
+        languageSpecificFilters <- ZIO.service[LanguageSpecificFilters]
+      } yield SearchServiceImpl(
+        index,
+        searchRepo,
+        suggestionRepo,
+        languageSpecificFilters = Some(languageSpecificFilters)
+      )
     }
 }
