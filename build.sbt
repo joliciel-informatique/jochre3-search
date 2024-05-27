@@ -10,7 +10,7 @@ ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl
 
 val cloakroomVersion = "0.5.15"
 val luceneVersion = "9.10.0"
-val jochre3OcrVersion = "0.3.12"
+val jochre3OcrVersion = "0.3.15"
 
 lazy val jochre3SearchVersion = sys.env
   .get("JOCHRE3_SEARCH_VERSION")

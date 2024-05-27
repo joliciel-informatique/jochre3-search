@@ -10,7 +10,10 @@ import org.slf4j.LoggerFactory
 
 import java.time.Instant
 
-private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter, private val indexingHelper: IndexingHelper) {
+private[search] case class LuceneDocIndexer(
+    private val indexWriter: IndexWriter,
+    private val indexingHelper: IndexingHelper
+) {
   private val log = LoggerFactory.getLogger(getClass)
 
   def indexDocument(doc: AltoDocument): Unit = {
@@ -57,6 +60,7 @@ private[search] case class LuceneDocIndexer(private val indexWriter: IndexWriter
         .map(getFieldsForYear(IndexField.PublicationYear, IndexField.PublicationYearAsNumber, _))
         .getOrElse(Seq.empty),
       doc.metadata.url.map(getFieldsForString(IndexField.URL, _)).getOrElse(Seq.empty),
+      doc.ocrSoftware.map(getFieldsForString(IndexField.OCRSoftware, _)).getOrElse(Seq.empty),
       getFieldsForInstant(IndexField.IndexTime, Instant.now())
     ).flatten
   )

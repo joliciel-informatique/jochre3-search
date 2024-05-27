@@ -39,6 +39,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
       url = Option(doc.get(IndexField.URL.entryName))
     )
 
+  lazy val ocrSoftware: Option[String] = Option(doc.get(IndexField.OCRSoftware.entryName))
+
   private def getTokenStream(field: IndexField): Option[TokenStream] = {
     val maxStartOffset = -1
     termVector.flatMap { termVector =>
