@@ -80,6 +80,11 @@ trait SearchService {
       addOffsets: Boolean = true
   ): Task[SearchResponse]
 
+  def list(
+      query: SearchQuery,
+      sort: Sort = Sort.Score
+  ): Task[Seq[DocReference]]
+
   def getImageSnippet(
       docId: DocReference,
       startOffset: Int,
@@ -176,6 +181,10 @@ private[service] case class SearchServiceImpl(
   ): Task[Int] = {
     for {
       _ <- ZIO.attempt {
+        // Ensure book isn't already in the index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
+        }
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
@@ -201,6 +210,10 @@ private[service] case class SearchServiceImpl(
   ): Task[Int] = {
     for {
       _ <- ZIO.attempt {
+        // Ensure book isn't already in the index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
+        }
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
@@ -246,6 +259,16 @@ private[service] case class SearchServiceImpl(
       altoStream: InputStream
   ): Task[Unit] = {
     for {
+      _ <- ZIO.attempt {
+        // Ensure book is in index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(ref)
+            .getOrElse(
+              throw new DocumentNotFoundInIndex(ref)
+            )
+        }
+      }
       _ <- readAndStoreAlto(ref, altoStream)
       _ <- markForReindex(ref)
     } yield ()
@@ -256,6 +279,16 @@ private[service] case class SearchServiceImpl(
       metadataStream: InputStream
   ): Task[Unit] = {
     for {
+      _ <- ZIO.attempt {
+        // Ensure book is in index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(ref)
+            .getOrElse(
+              throw new DocumentNotFoundInIndex(ref)
+            )
+        }
+      }
       _ <- ZIO.attempt(readAndStoreMetadata(ref, metadataStream))
       _ <- markForReindex(ref)
     } yield ()
@@ -576,6 +609,19 @@ private[service] case class SearchServiceImpl(
         })
       }
     } yield responseWithPages
+  }
+
+  override def list(
+      query: SearchQuery,
+      sort: Sort
+  ): Task[Seq[DocReference]] = {
+    for {
+      docRefs <- ZIO.fromTry {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.findMatchingRefs(query, sort = sort)
+        }
+      }
+    } yield docRefs
   }
 
   override def aggregate(query: SearchQuery, field: IndexField, maxBins: Int): Task[AggregationBins] = ZIO.attempt {

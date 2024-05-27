@@ -65,7 +65,12 @@ case class AltoIndexer(
           correction.field.applyToMetadata(metadata, correction.newValue)
         }
 
-        val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata)
+        val ocrSoftware = alto.processingSteps.headOption.flatMap{step =>
+          val software = Seq(step.softwareName, step.softwareVersion).flatten.mkString(" ")
+          Option.when(software.nonEmpty)(software)
+        }
+
+        val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata, ocrSoftware)
         val docInfo =
           DocumentIndexInfo(
             documentData.pageOffsets,

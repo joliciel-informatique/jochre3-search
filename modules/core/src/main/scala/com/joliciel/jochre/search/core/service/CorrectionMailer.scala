@@ -58,7 +58,7 @@ object CorrectionMailer {
          |<li><b>IP:</b> ${correction.ipAddress}</li>
          |<li><b>Date:</b> ${ZonedDateTime.ofInstant(correction.created, ZoneOffset.UTC).format(dateTimeFormatter)}</li>
          |<li><b>Field:</b> ${correction.field.entryName}</li>
-         |<li><b>Previous value:</b> ${correction.oldValue}</li>
+         |<li><b>Previous value:</b> ${correction.oldValue.getOrElse("")}</li>
          |<li><b>New value:</b> ${correction.newValue}</li>
          |<li>Apply to the following documents:
          |<ul>

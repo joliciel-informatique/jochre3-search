@@ -141,6 +141,10 @@ package object core {
     case object URL extends IndexField {
       override def kind: FieldKind = FieldKind.String
     }
+
+    case object OCRSoftware extends IndexField {
+      override def kind: FieldKind = FieldKind.String
+    }
   }
 
   case class DocReference(ref: String) {

@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.api.index
 
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, Conflict, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
@@ -42,6 +42,14 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
+      .errorOutVariant[HttpError](
+        oneOfVariant[Conflict](
+          StatusCode.Conflict,
+          jsonBody[Conflict].description(
+            "Document already exists in index"
+          )
+        )
+      )
       .put
       .in("index")
       .in("pdf")
@@ -70,6 +78,14 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
             "Image zip file is not a valid zip file, or Alto file is not a zip file containing Alto XML"
+          )
+        )
+      )
+      .errorOutVariant[HttpError](
+        oneOfVariant[Conflict](
+          StatusCode.Conflict,
+          jsonBody[Conflict].description(
+            "Document already exists in index"
           )
         )
       )
@@ -107,6 +123,14 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document not found in index"
+          )
+        )
+      )
       .post
       .in("index")
       .in("alto")
@@ -135,6 +159,14 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
             "Metadata file is wrong format"
+          )
+        )
+      )
+      .errorOutVariant[HttpError](
+        oneOfVariant[NotFound](
+          StatusCode.NotFound,
+          jsonBody[NotFound].description(
+            "Document not found in index"
           )
         )
       )

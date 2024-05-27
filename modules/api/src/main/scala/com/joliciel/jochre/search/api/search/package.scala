@@ -23,5 +23,8 @@ package object search {
     case object DateDescending extends SortKind {
       override def toSort: Sort = Sort.Field(IndexField.PublicationYearAsNumber, ascending = false)
     }
+    case object DocReference extends SortKind {
+      override def toSort: Sort = Sort.Field(IndexField.Reference, ascending = true)
+    }
   }
 }

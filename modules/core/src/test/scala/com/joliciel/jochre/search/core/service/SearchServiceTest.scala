@@ -157,6 +157,18 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(queries.head.query.contains("are"))
       }
     },
+    test("list documents") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)
+        docRefs <- searchService.list(SearchQuery(SearchCriterion.MatchAllDocuments))
+      } yield {
+        assertTrue(docRefs == Seq(docRef1, docRef2))
+      }
+    },
     test("search single occurrence with padding") {
       for {
         _ <- getSearchRepo()

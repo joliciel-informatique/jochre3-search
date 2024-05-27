@@ -6,5 +6,6 @@ case class AltoDocument(
     ref: DocReference,
     rev: DocRev,
     text: String,
-    metadata: DocMetadata
+    metadata: DocMetadata,
+    ocrSoftware: Option[String] = None
 )
