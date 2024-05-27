@@ -38,7 +38,16 @@ trait SearchLogic extends HttpErrorMapper {
       ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, SearchResponse] = {
     for {
-      searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
+      searchQuery <- getSearchQuery(
+        query,
+        title,
+        authors,
+        authorInclude,
+        strict,
+        fromYear,
+        toYear,
+        docRefs
+      )
       searchService <- ZIO.service[SearchService]
       parsedSort <- ZIO.attempt {
         try {
@@ -170,6 +179,49 @@ trait SearchLogic extends HttpErrorMapper {
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get index size", error))
     .mapError(mapToHttpError)
 
+  def getListLogic(
+      token: ValidToken,
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      ocrSoftware: Option[String],
+      sort: Option[String],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, Seq[DocReference]] = {
+    for {
+      searchQuery <- getSearchQuery(
+        query,
+        title,
+        authors,
+        authorInclude,
+        strict,
+        fromYear,
+        toYear,
+        docRefs,
+        ocrSoftware,
+        matchAllDocuments = true
+      )
+      searchService <- ZIO.service[SearchService]
+      parsedSort <- ZIO.attempt {
+        try {
+          sort.map(SortKind.withName).getOrElse(SortKind.DocReference).toSort
+        } catch {
+          case nsee: NoSuchElementException => throw new UnknownSortException(nsee.getMessage)
+        }
+      }
+      docRefs <- searchService.list(
+        searchQuery,
+        parsedSort
+      )
+    } yield docRefs
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to list", error))
+    .mapError(mapToHttpError)
+
   private def getSearchQuery(
       query: Option[String],
       title: Option[String],
@@ -178,7 +230,9 @@ trait SearchLogic extends HttpErrorMapper {
       strict: Option[Boolean],
       fromYear: Option[Int],
       toYear: Option[Int],
-      docRefs: List[String]
+      docRefs: List[String],
+      ocrSoftware: Option[String] = None,
+      matchAllDocuments: Boolean = false
   ): Task[SearchQuery] = ZIO.attempt {
     val effectiveStrict = strict.getOrElse(false)
     val effectiveAuthorInclude = authorInclude.getOrElse(true)
@@ -205,11 +259,18 @@ trait SearchLogic extends HttpErrorMapper {
         SearchCriterion.ValueIn(IndexField.Reference, docRefs)
       },
       fromYear.map(SearchCriterion.GreaterThanOrEqualTo(IndexField.PublicationYearAsNumber, _)),
-      toYear.map(SearchCriterion.LessThanOrEqualTo(IndexField.PublicationYearAsNumber, _))
+      toYear.map(SearchCriterion.LessThanOrEqualTo(IndexField.PublicationYearAsNumber, _)),
+      ocrSoftware.map { ocrSoftware =>
+        SearchCriterion.ValueIn(IndexField.OCRSoftware, Seq(ocrSoftware))
+      }
     ).flatten
 
     val criterion = if (criteria.isEmpty) {
-      throw new NoSearchCriteriaException
+      if (matchAllDocuments) {
+        SearchCriterion.MatchAllDocuments
+      } else {
+        throw new NoSearchCriteriaException
+      }
     } else if (criteria.length == 1) {
       criteria.head
     } else {

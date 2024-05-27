@@ -15,6 +15,7 @@ package object service {
       docRef: DocReference,
       docRev: DocRev,
       metadata: DocMetadata,
+      ocrSoftware: Option[String] = None,
       score: Double,
       snippets: Seq[Snippet]
   )
@@ -44,6 +45,7 @@ package object service {
             publisher = Some("Nyu York : Sholem-Aleykhem folksfond"),
             publicationYear = Some("1917")
           ),
+          ocrSoftware = Some("Jochre 3.0.0"),
           score = 0.90,
           snippets = Seq(
             Snippet(

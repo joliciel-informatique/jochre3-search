@@ -367,6 +367,70 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   private val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
     getTextAsHtmlEndpoint.serverLogic[Requirements](_ => input => getTextAsHtmlLogic(input))
 
+  private val getListEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (
+        Option[String],
+        Option[String],
+        List[String],
+        Option[Boolean],
+        Option[Boolean],
+        Option[Int],
+        Option[Int],
+        List[String],
+        Option[String],
+        Option[String],
+        Option[String]
+    ),
+    HttpError,
+    Seq[DocReference],
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+      )
+      .get
+      .in("list")
+      .in(
+        query[Option[String]]("query")
+          .description("Query string for searching in the text")
+          .example(Some(""""פון * װעגן""""))
+      )
+      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
+      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
+      .in(
+        query[Option[Boolean]]("author-include")
+          .description("Whether the authors should be included or excluded. Default is true.")
+          .example(Some(true))
+      )
+      .in(
+        query[Option[Boolean]]("strict")
+          .description(
+            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
+          )
+          .example(Some(false))
+      )
+      .in(query[Option[Int]]("from-year").description("The earliest year of publication").example(Some(1900)))
+      .in(query[Option[Int]]("to-year").description("The latest year of publication").example(Some(1920)))
+      .in(
+        query[List[String]]("doc-refs").description("Which document references to include").example(List("nybc200089"))
+      )
+      .in(query[Option[String]]("ocr-software").description("OCR Software version").example(Some("Jochre 3.0.0")))
+      .in(
+        query[Option[String]]("sort")
+          .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
+          .example(None)
+      )
+      .in(clientIp)
+      .out(jsonBody[Seq[DocReference]].example(Seq(DocReference("nybc200089"), DocReference("nybc212100"))))
+      .description("List documents in the OCR index.")
+
+  private val getListHttp: ZServerEndpoint[Requirements, Any] =
+    getListEndpoint.serverLogic[Requirements](token => input => (getListLogic _).tupled(token +: input))
+
   private val getSizeEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
@@ -392,6 +456,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getAggregateEndpoint,
     getTopAuthorsEndpoint,
     getTextAsHtmlEndpoint,
+    getListEndpoint,
     getSizeEndpoint,
     getWordTextEndpoint,
     getWordImageEndpoint
@@ -403,6 +468,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getAggregateHttp,
     getTopAuthorsHttp,
     getTextAsHtmlHttp,
+    getListHttp,
     getSizeHttp,
     getWordTextHttp,
     getWordImageHttp

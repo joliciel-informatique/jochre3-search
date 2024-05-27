@@ -80,6 +80,11 @@ trait SearchService {
       addOffsets: Boolean = true
   ): Task[SearchResponse]
 
+  def list(
+      query: SearchQuery,
+      sort: Sort = Sort.Score
+  ): Task[Seq[DocReference]]
+
   def getImageSnippet(
       docId: DocReference,
       startOffset: Int,
@@ -604,6 +609,19 @@ private[service] case class SearchServiceImpl(
         })
       }
     } yield responseWithPages
+  }
+
+  override def list(
+      query: SearchQuery,
+      sort: Sort
+  ): Task[Seq[DocReference]] = {
+    for {
+      docRefs <- ZIO.fromTry {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.findMatchingRefs(query, sort = sort)
+        }
+      }
+    } yield docRefs
   }
 
   override def aggregate(query: SearchQuery, field: IndexField, maxBins: Int): Task[AggregationBins] = ZIO.attempt {

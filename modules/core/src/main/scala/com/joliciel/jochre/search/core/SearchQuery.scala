@@ -17,6 +17,10 @@ sealed trait SearchCriterion {
 }
 
 object SearchCriterion {
+  case object MatchAllDocuments extends SearchCriterion {
+    override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = new MatchAllDocsQuery()
+  }
+
   case class Contains(fields: Seq[IndexField], queryString: String, strict: Boolean) extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = {
       fields.foreach { field =>
