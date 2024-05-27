@@ -176,6 +176,10 @@ private[service] case class SearchServiceImpl(
   ): Task[Int] = {
     for {
       _ <- ZIO.attempt {
+        // Ensure book isn't already in the index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
+        }
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
@@ -201,6 +205,10 @@ private[service] case class SearchServiceImpl(
   ): Task[Int] = {
     for {
       _ <- ZIO.attempt {
+        // Ensure book isn't already in the index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
+        }
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
@@ -246,6 +254,16 @@ private[service] case class SearchServiceImpl(
       altoStream: InputStream
   ): Task[Unit] = {
     for {
+      _ <- ZIO.attempt {
+        // Ensure book is in index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(ref)
+            .getOrElse(
+              throw new DocumentNotFoundInIndex(ref)
+            )
+        }
+      }
       _ <- readAndStoreAlto(ref, altoStream)
       _ <- markForReindex(ref)
     } yield ()
@@ -256,6 +274,16 @@ private[service] case class SearchServiceImpl(
       metadataStream: InputStream
   ): Task[Unit] = {
     for {
+      _ <- ZIO.attempt {
+        // Ensure book is in index
+        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
+          searcher
+            .getByDocRef(ref)
+            .getOrElse(
+              throw new DocumentNotFoundInIndex(ref)
+            )
+        }
+      }
       _ <- ZIO.attempt(readAndStoreMetadata(ref, metadataStream))
       _ <- markForReindex(ref)
     } yield ()
