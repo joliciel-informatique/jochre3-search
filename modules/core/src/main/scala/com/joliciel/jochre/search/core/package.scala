@@ -147,6 +147,9 @@ package object core {
     }
   }
 
+  private val defaultExtension = "png"
+  private val secondaryExtension = "jpg"
+
   case class DocReference(ref: String) {
     def getBookDir(): Path = {
       contentDir.resolve(ref)
@@ -154,8 +157,25 @@ package object core {
 
     def getPageImagePath(pageNumber: Int): Path = {
       val bookDir = this.getBookDir()
-      val imageFileName = f"${ref}_$pageNumber%04d.png"
-      bookDir.resolve(imageFileName)
+      val jpgFileName = f"${ref}_$pageNumber%04d.$defaultExtension"
+      bookDir.resolve(jpgFileName)
+    }
+
+    def getExistingPageImagePath(pageNumber: Int): Path = {
+      val bookDir = this.getBookDir()
+      val defaultFileName = f"${ref}_$pageNumber%04d.$defaultExtension"
+      val defaultImagePath = bookDir.resolve(defaultFileName)
+      if (defaultImagePath.toFile.exists()) {
+        defaultImagePath
+      } else {
+        val secondaryFileName = f"${ref}_$pageNumber%04d.$secondaryExtension"
+        val secondaryImagePath = bookDir.resolve(secondaryFileName)
+        if (secondaryImagePath.toFile.exists()) {
+          secondaryImagePath
+        } else {
+          throw new ImageFileNotFoundException(this, pageNumber)
+        }
+      }
     }
 
     def getAltoPath(): Path = {

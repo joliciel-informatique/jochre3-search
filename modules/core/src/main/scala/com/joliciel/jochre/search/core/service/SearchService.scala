@@ -501,7 +501,12 @@ private[service] case class SearchServiceImpl(
               ImageType.RGB
             )
             val imageFile = docRef.getPageImagePath(i)
-            ImageIO.write(image, "png", imageFile.toFile)
+            val extension = if (imageFile.toFile.getName.endsWith("png")) {
+              "png"
+            } else {
+              "jpg"
+            }
+            ImageIO.write(image, extension, imageFile.toFile)
           }
           PdfInfo(
             pageCount,
@@ -554,7 +559,12 @@ private[service] case class SearchServiceImpl(
               val image = ImageIO.read(zipInputStream)
               val imageFile = bookDir.resolve(zipEntry.getName).toFile
               log.info(f"Writing ${imageFile.getName}")
-              ImageIO.write(image, "png", imageFile)
+              val extension = if (imageFile.getName.endsWith("png")) {
+                "png"
+              } else {
+                "jpg"
+              }
+              ImageIO.write(image, extension, imageFile)
             case None => // Can never happen
           }
       }
@@ -696,7 +706,7 @@ private[service] case class SearchServiceImpl(
       }
       page <- searchRepo.getPage(rows.head.pageId)
       image <- ZIO.attempt {
-        val pageImagePath = docRef.getPageImagePath(page.index)
+        val pageImagePath = docRef.getExistingPageImagePath(page.index)
         val originalImage = ImageIO.read(pageImagePath.toFile)
 
         val startRect = rows.head.rect
@@ -874,7 +884,8 @@ private[service] case class SearchServiceImpl(
       row <- searchRepo.getRow(wordsInRow.head.rowId)
       page <- searchRepo.getPage(row.pageId)
       image <- ZIO.attempt {
-        val pageImagePath = docRef.getPageImagePath(page.index)
+        val pageImagePath = docRef.getExistingPageImagePath(page.index)
+
         val originalImage = ImageIO.read(pageImagePath.toFile)
 
         val wordGroup = getWordGroup(wordsInRow, wordOffset)
