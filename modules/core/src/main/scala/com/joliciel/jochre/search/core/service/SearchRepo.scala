@@ -306,9 +306,10 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   def getWord(docRev: DocRev, offset: Int): Task[Option[DbWord]] =
     sql"""SELECT word.id, doc_rev, row_id, start_offset, end_offset, hyphenated_offset, word.lft, word.top, word.width, word.height
          | FROM word
-         | INNER JOIN document ON word.doc_rev = document.rev
-         | WHERE document.rev = ${docRev.rev}
-         | AND word.start_offset = (SELECT MIN(w2.start_offset) FROM word w2 WHERE w2.start_offset >= $offset)
+         | WHERE word.doc_rev = ${docRev.rev}
+         | AND word.start_offset = (SELECT MIN(w2.start_offset) FROM word w2
+         |   WHERE w2.start_offset >= $offset
+         |   AND w2.doc_rev = ${docRev.rev})
        """.stripMargin
       .query[DbWord]
       .option
