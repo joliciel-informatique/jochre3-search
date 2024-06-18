@@ -21,7 +21,6 @@ import javax.imageio.ImageIO
 
 trait SearchLogic extends HttpErrorMapper {
   def getSearchLogic(
-      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -63,7 +62,7 @@ trait SearchLogic extends HttpErrorMapper {
         max,
         maxSnippets,
         rowPadding,
-        token.username,
+        ipAddress.getOrElse("127.0.0.1"),
         ipAddress
       )
     } yield searchResponse
@@ -71,7 +70,6 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getImageSnippetLogic(
-      token: ValidToken,
       docRef: DocReference,
       startOffset: Int,
       endOffset: Int,
@@ -91,7 +89,6 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getAggregateLogic(
-      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -119,7 +116,6 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getTopAuthorsLogic(
-      token: ValidToken,
       prefix: String,
       maxBins: Int
   ): ZIO[Requirements, HttpError, AggregationBins] = {
@@ -180,7 +176,6 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getListLogic(
-      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],

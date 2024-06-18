@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound, Unauthorized}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
@@ -13,7 +13,7 @@ import sttp.model.{Header, MediaType, StatusCode}
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
-import sttp.tapir.{AnyEndpoint, CodecFormat}
+import sttp.tapir.{AnyEndpoint, CodecFormat, Endpoint, PublicEndpoint}
 import zio.stream.ZStream
 
 import java.nio.charset.StandardCharsets
@@ -26,33 +26,12 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     with SearchSchemaSupport {
   implicit val ec: ExecutionContext = executionContext
 
-  private val getSearchEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (
-        Option[String],
-        Option[String],
-        List[String],
-        Option[Boolean],
-        Option[Boolean],
-        Option[Int],
-        Option[Int],
-        List[String],
-        Int,
-        Int,
-        Option[Int],
-        Option[Int],
-        Option[String],
-        Option[String]
-    ),
-    HttpError,
-    SearchResponse,
-    Any
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+  private val getSearchEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        )
       )
       .get
       .in("search")
@@ -98,31 +77,23 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Search the OCR index.")
 
   private val getSearchHttp: ZServerEndpoint[Requirements, Any] =
-    getSearchEndpoint.serverLogic[Requirements](token => input => (getSearchLogic _).tupled(token +: input))
+    getSearchEndpoint.zServerLogic[Requirements](input => (getSearchLogic _).tupled(input))
 
-  private val getImageSnippetEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (DocReference, Int, Int, List[Highlight]),
-    HttpError,
-    ZStream[Any, Throwable, Byte],
-    Any with ZioStreams
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](
-          StatusCode.BadRequest,
-          jsonBody[BadRequest].description(
-            "Offsets refer to words on different pages, or are higher than document length."
-          )
-        )
-      )
-      .errorOutVariant[HttpError](
-        oneOfVariant[NotFound](
-          StatusCode.NotFound,
-          jsonBody[NotFound].description(
-            "Requested document reference not found in index."
+  private val getImageSnippetEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](
+            StatusCode.BadRequest,
+            jsonBody[BadRequest].description(
+              "Offsets refer to words on different pages, or are higher than document length."
+            )
+          ),
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description(
+              "Requested document reference not found in index."
+            )
           )
         )
       )
@@ -155,31 +126,14 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return an image snippet in PNG format")
 
   private val getImageSnippetHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getImageSnippetEndpoint.serverLogic[Requirements](token => input => (getImageSnippetLogic _).tupled(token +: input))
+    getImageSnippetEndpoint.zServerLogic[Requirements](input => (getImageSnippetLogic _).tupled(input))
 
-  private val getAggregateEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (
-        Option[String],
-        Option[String],
-        List[String],
-        Option[Boolean],
-        Option[Boolean],
-        Option[Int],
-        Option[Int],
-        List[String],
-        String,
-        Int
-    ),
-    HttpError,
-    AggregationBins,
-    Any
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+  private val getAggregateEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        )
       )
       .get
       .in("aggregate")
@@ -217,31 +171,23 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return aggregated bins for this search query and a given field.")
 
   private val getAggregateHttp: ZServerEndpoint[Requirements, Any] =
-    getAggregateEndpoint.serverLogic[Requirements](token => input => (getAggregateLogic _).tupled(token +: input))
+    getAggregateEndpoint.zServerLogic[Requirements](input => (getAggregateLogic _).tupled(input))
 
-  private val getWordImageEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (DocReference, Int),
-    HttpError,
-    ZStream[Any, Throwable, Byte],
-    Any with ZioStreams
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](
-          StatusCode.BadRequest,
-          jsonBody[BadRequest].description(
-            "Offset higher than document length."
-          )
-        )
-      )
-      .errorOutVariant[HttpError](
-        oneOfVariant[NotFound](
-          StatusCode.NotFound,
-          jsonBody[NotFound].description(
-            "Requested document reference not found in index."
+  private val getWordImageEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](
+            StatusCode.BadRequest,
+            jsonBody[BadRequest].description(
+              "Offset higher than document length."
+            )
+          ),
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description(
+              "Requested document reference not found in index."
+            )
           )
         )
       )
@@ -262,31 +208,23 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return a word image in PNG format")
 
   private val getWordImageHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getWordImageEndpoint.serverLogic[Requirements](_ => input => (getWordImageLogic _).tupled(input))
+    getWordImageEndpoint.zServerLogic[Requirements](input => (getWordImageLogic _).tupled(input))
 
-  private val getWordTextEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (DocReference, Int),
-    HttpError,
-    WordText,
-    Any
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](
-          StatusCode.BadRequest,
-          jsonBody[BadRequest].description(
-            "Offset higher than document length."
-          )
-        )
-      )
-      .errorOutVariant[HttpError](
-        oneOfVariant[NotFound](
-          StatusCode.NotFound,
-          jsonBody[NotFound].description(
-            "Requested document reference not found in index."
+  private val getWordTextEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](
+            StatusCode.BadRequest,
+            jsonBody[BadRequest].description(
+              "Offset higher than document length."
+            )
+          ),
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description(
+              "Requested document reference not found in index."
+            )
           )
         )
       )
@@ -306,20 +244,14 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return a word text")
 
   private val getWordTextHttp: ZServerEndpoint[Requirements, Any] =
-    getWordTextEndpoint.serverLogic[Requirements](_ => input => (getWordTextLogic _).tupled(input))
+    getWordTextEndpoint.zServerLogic[Requirements](input => (getWordTextLogic _).tupled(input))
 
-  private val getTopAuthorsEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (String, Int),
-    HttpError,
-    AggregationBins,
-    Any
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+  private val getTopAuthorsEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        )
       )
       .get
       .in("authors")
@@ -329,68 +261,41 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return most common authors matching prefix in alphabetical order.")
 
   private val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
-    getTopAuthorsEndpoint.serverLogic[Requirements](token => input => (getTopAuthorsLogic _).tupled(token +: input))
+    getTopAuthorsEndpoint.zServerLogic[Requirements](input => (getTopAuthorsLogic _).tupled(input))
 
-  private val getTextAsHtmlEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    DocReference,
-    HttpError,
-    ZStream[
-      Any,
-      Throwable,
-      Byte
-    ],
-    Any with ZioStreams
-  ] = secureEndpoint().get
-    .errorOutVariant[HttpError](
-      oneOfVariant[NotFound](
-        StatusCode.NotFound,
-        jsonBody[NotFound].description("Document reference not found in index")
+  private val getTextAsHtmlEndpoint =
+    insecureEndpoint.get
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description("Document reference not found in index")
+          )
+        )
       )
-    )
-    .in("text-as-html")
-    .in(
-      query[DocReference]("doc-ref")
-        .description("Document reference whose text we want.")
-        .example(DocReference("nybc200089"))
-    )
-    .out(
-      streamTextBody(ZioStreams)(
-        CodecFormat.TextHtml(),
-        Some(StandardCharsets.UTF_8)
+      .in("text-as-html")
+      .in(
+        query[DocReference]("doc-ref")
+          .description("Document reference whose text we want.")
+          .example(DocReference("nybc200089"))
       )
-    )
-    .description("Return the document in HTML format")
+      .out(
+        streamTextBody(ZioStreams)(
+          CodecFormat.TextHtml(),
+          Some(StandardCharsets.UTF_8)
+        )
+      )
+      .description("Return the document in HTML format")
 
   private val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getTextAsHtmlEndpoint.serverLogic[Requirements](_ => input => getTextAsHtmlLogic(input))
+    getTextAsHtmlEndpoint.zServerLogic[Requirements](input => getTextAsHtmlLogic(input))
 
-  private val getListEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    (
-        Option[String],
-        Option[String],
-        List[String],
-        Option[Boolean],
-        Option[Boolean],
-        Option[Int],
-        Option[Int],
-        List[String],
-        Option[String],
-        Option[String],
-        Option[String]
-    ),
-    HttpError,
-    Seq[DocReference],
-    Any
-  ] =
-    secureEndpoint()
-      .errorOutVariant[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+  private val getListEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        )
       )
       .get
       .in("list")
@@ -429,26 +334,21 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("List documents in the OCR index.")
 
   private val getListHttp: ZServerEndpoint[Requirements, Any] =
-    getListEndpoint.serverLogic[Requirements](token => input => (getListLogic _).tupled(token +: input))
+    getListEndpoint.zServerLogic[Requirements](input => (getListLogic _).tupled(input))
 
-  private val getSizeEndpoint: ZPartialServerEndpoint[
-    Requirements,
-    String,
-    ValidToken,
-    Unit,
-    HttpError,
-    SizeResponse,
-    Any
-  ] = secureEndpoint().get
-    .errorOutVariant[HttpError](
-      oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Index not found"))
-    )
-    .in("size")
-    .out(jsonBody[SizeResponse].example(SizeResponse(42)))
-    .description("Return the number of documents in the index")
+  private val getSizeEndpoint =
+    insecureEndpoint.get
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Index not found"))
+        )
+      )
+      .in("size")
+      .out(jsonBody[SizeResponse].example(SizeResponse(42)))
+      .description("Return the number of documents in the index")
 
   private val getSizeHttp: ZServerEndpoint[Requirements, Any] =
-    getSizeEndpoint.serverLogic[Requirements](_ => _ => getSizeLogic())
+    getSizeEndpoint.zServerLogic[Requirements](_ => getSizeLogic())
 
   val endpoints: List[AnyEndpoint] = List(
     getSearchEndpoint,
@@ -460,7 +360,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getSizeEndpoint,
     getWordTextEndpoint,
     getWordImageEndpoint
-  ).map(_.endpoint.tag("search"))
+  ).map(_.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
     getSearchHttp,
