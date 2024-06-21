@@ -228,7 +228,7 @@ package object core {
 
       template.map { template =>
         template
-          .replaceAll(raw"$$\{REF\}", ref.ref)
+          .replaceAll("\\$\\{REF\\}", ref.ref)
       }
     }
 
@@ -240,8 +240,8 @@ package object core {
 
       template.map { template =>
         template
-          .replaceAll(raw"$$\{REF\}", ref.ref)
-          .replaceAll(raw"$$\{PAGE\}", page.toString)
+          .replaceAll("\\$\\{REF\\}", ref.ref)
+          .replaceAll("\\$\\{PAGE\\}", page.toString)
       }
     }
   }
