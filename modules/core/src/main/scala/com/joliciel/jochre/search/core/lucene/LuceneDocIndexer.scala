@@ -60,6 +60,7 @@ private[search] case class LuceneDocIndexer(
         .map(getFieldsForYear(IndexField.PublicationYear, IndexField.PublicationYearAsNumber, _))
         .getOrElse(Seq.empty),
       doc.metadata.url.map(getFieldsForString(IndexField.URL, _)).getOrElse(Seq.empty),
+      getFieldsForMultiString(IndexField.Collection, doc.metadata.collections),
       doc.ocrSoftware.map(getFieldsForString(IndexField.OCRSoftware, _)).getOrElse(Seq.empty),
       getFieldsForInstant(IndexField.IndexTime, Instant.now())
     ).flatten
@@ -93,6 +94,16 @@ private[search] case class LuceneDocIndexer(
     )
 
     Seq(Some(stringField), sortField, facetField).flatten
+  }
+
+  private def getFieldsForMultiString(
+      field: IndexField,
+      values: Seq[String]
+  ): Seq[IndexableField] = {
+    if (field.kind != FieldKind.MultiString) {
+      throw new WrongFieldTypeException(f"Cannot create multi-string field for field ${field.entryName}")
+    }
+    values.map(new StringField(field.entryName, _, Store.YES))
   }
 
   private def getFieldsForInstant(field: IndexField, instant: Instant): Seq[IndexableField] = {
