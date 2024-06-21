@@ -36,7 +36,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
       publisher = Option(doc.get(IndexField.Publisher.entryName)),
       publicationYear = Option(doc.get(IndexField.PublicationYear.entryName)),
       volume = Option(doc.get(IndexField.Volume.entryName)),
-      url = Option(doc.get(IndexField.URL.entryName))
+      url = Option(doc.get(IndexField.URL.entryName)),
+      collections = doc.getValues(IndexField.Collection.entryName)
     )
 
   lazy val ocrSoftware: Option[String] = Option(doc.get(IndexField.OCRSoftware.entryName))
@@ -130,7 +131,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
 
             val highlightedText = lines.mkString("<br>")
             val highlights = tokens.map(token => Highlight(token.start, token.end))
-            Snippet(highlightedText, -1, start, end, highlights)
+            Snippet(highlightedText, -1, start, end, highlights, deepLink = None)
           }
         }.get
       case _ =>

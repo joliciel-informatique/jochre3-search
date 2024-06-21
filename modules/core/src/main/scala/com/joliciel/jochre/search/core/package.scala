@@ -4,10 +4,22 @@ import com.typesafe.config.ConfigFactory
 import enumeratum.{DoobieEnum, Enum, EnumEntry}
 
 import java.nio.file.Path
+import scala.jdk.CollectionConverters._
 
 package object core {
-  private val config = ConfigFactory.load().getConfig("jochre.search.index")
-  private val contentDir = Path.of(config.getString("content-directory"))
+  private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val indexConfig = config.getConfig("index")
+  private val contentDir = Path.of(indexConfig.getString("content-directory"))
+  private val defaultBookUrl = Option.when(config.hasPath("default-book-url"))(config.getString("default-book-url"))
+  private val bookUrlsByCollection = config
+    .getConfigList("book-urls-by-collection")
+    .asScala
+    .map(config => config.getString("collection") -> config.getString("url"))
+  private val defaultDeepLink = Option.when(config.hasPath("default-deep-link"))(config.getString("default-deep-link"))
+  private val deepLinksByCollection = config
+    .getConfigList("deep-links-by-collection")
+    .asScala
+    .map(config => config.getString("collection") -> config.getString("url"))
 
   sealed trait MetadataField extends EnumEntry {
     def indexField: IndexField
@@ -68,6 +80,7 @@ package object core {
     case object Integer extends FieldKind
     case object Text extends FieldKind
     case object Instant extends FieldKind
+    case object MultiString extends FieldKind
   }
 
   sealed trait IndexField extends EnumEntry {
@@ -145,6 +158,10 @@ package object core {
     case object OCRSoftware extends IndexField {
       override def kind: FieldKind = FieldKind.String
     }
+
+    case object Collection extends IndexField {
+      override def kind: FieldKind = FieldKind.MultiString
+    }
   }
 
   private val defaultExtension = "png"
@@ -199,8 +216,35 @@ package object core {
       publicationYear: Option[String] = None,
       publisher: Option[String] = None,
       volume: Option[String] = None,
-      url: Option[String] = None
-  )
+      url: Option[String] = None,
+      collections: Seq[String] = Seq.empty
+  ) {
+    def getBookUrl(ref: DocReference): Option[String] = {
+      val template = bookUrlsByCollection
+        .find(b => collections.contains(b._1))
+        .map(_._2)
+        .orElse(defaultBookUrl)
+        .orElse(url)
+
+      template.map { template =>
+        template
+          .replaceAll(raw"$$\{REF\}", ref.ref)
+      }
+    }
+
+    def getDeepLink(ref: DocReference, page: Int): Option[String] = {
+      val template = deepLinksByCollection
+        .find(b => collections.contains(b._1))
+        .map(_._2)
+        .orElse(defaultDeepLink)
+
+      template.map { template =>
+        template
+          .replaceAll(raw"$$\{REF\}", ref.ref)
+          .replaceAll(raw"$$\{PAGE\}", page.toString)
+      }
+    }
+  }
 
   case class AggregationBin(label: String, count: Int)
 

@@ -61,6 +61,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         ImageIO.write(imageSnippet, "png", tempFile)
         log.info(f"Wrote snippet to ${tempFile.getPath}")
         assertTrue(searchResults.totalCount == 1) &&
+        assertTrue(searchResults.results.head.metadata.collections == Seq("nationalyiddishbookcenter")) &&
         assertTrue(pageCount == 2) &&
         assertTrue(
           topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +

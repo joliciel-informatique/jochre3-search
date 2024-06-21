@@ -25,7 +25,8 @@ package object service {
       page: Int,
       start: Int,
       end: Int,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      deepLink: Option[String]
   )
 
   case class Highlight(start: Int, end: Int)
@@ -53,7 +54,8 @@ package object service {
               page = 11,
               start = 100,
               end = 118,
-              highlights = Seq(Highlight(108, 117))
+              highlights = Seq(Highlight(108, 117)),
+              deepLink = Some("https://archive.org/details/nybc200089/page/n10/mode/1up")
             )
           )
         )
@@ -216,6 +218,8 @@ package object service {
           val publisher = (fileXml \\ "publisher").headOption.map(_.textContent)
           val volume = (fileXml \\ "volume").headOption.map(_.textContent)
           val url = (fileXml \\ "identifier-access").headOption.map(_.textContent)
+          val collections = (fileXml \\ "collection").map(_.textContent)
+
           DocMetadata(
             title = title,
             titleEnglish = titleEnglish,
@@ -224,7 +228,8 @@ package object service {
             publicationYear = date,
             publisher = publisher,
             volume = volume,
-            url = url
+            url = url,
+            collections = collections
           )
         }.get
       }
@@ -239,6 +244,7 @@ package object service {
           {metadata.title.map(value => <title-alt-script>{value}</title-alt-script>).orNull}
           {metadata.author.map(value => <creator-alt-script>{value}</creator-alt-script>).orNull}
           {metadata.url.map(value => <identifier-access>{value}</identifier-access>).orNull}
+          {metadata.collections.map(value => <collection>{value}</collection>)}
         </metadata>
 
         val prettyPrinter = new PrettyPrinter(120, 2)

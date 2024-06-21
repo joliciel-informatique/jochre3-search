@@ -613,9 +613,19 @@ private[service] case class SearchServiceImpl(
       }
       responseWithPages <- ZIO.attempt {
         initialResponse.copy(results = initialResponse.results.zip(pages).map { case (searchResult, pages) =>
-          searchResult.copy(snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
-            snippet.copy(page = page.map(_.index).getOrElse(-1))
-          })
+          val bookUrl = searchResult.metadata.getBookUrl(searchResult.docRef)
+
+          searchResult.copy(
+            metadata = searchResult.metadata.copy(url = bookUrl),
+            snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
+              val pageNumber = page.map(_.index)
+              val deepLink = pageNumber.flatMap(searchResult.metadata.getDeepLink(searchResult.docRef, _))
+              snippet.copy(
+                page = pageNumber.getOrElse(-1),
+                deepLink = deepLink
+              )
+            }
+          )
         })
       }
     } yield responseWithPages
