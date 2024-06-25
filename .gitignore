@@ -6,9 +6,12 @@ target/
 /data
 /modules/yiddish/resources/*.zip
 /modules/api/content
+/modules/api/content2
 /modules/api/index
 /modules/yiddish/content
 /modules/yiddish/index
 /content
+/content2
 /index
 /modules/core/content
+/modules/core/content2

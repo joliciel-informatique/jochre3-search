@@ -9,7 +9,16 @@ import scala.jdk.CollectionConverters._
 package object core {
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexConfig = config.getConfig("index")
-  private val contentDir = Path.of(indexConfig.getString("content-directory"))
+  private val contentDirectories = indexConfig
+    .getConfigList("content-directories")
+    .asScala
+    .map { contentDirConfig =>
+      val minRef = contentDirConfig.getString("min-ref")
+      val directory = Path.of(contentDirConfig.getString("directory"))
+      minRef -> directory
+    }
+    .to(collection.immutable.SortedMap)
+
   private val defaultBookUrl = Option.when(config.hasPath("default-book-url"))(config.getString("default-book-url"))
   private val bookUrlsByCollection = config
     .getConfigList("book-urls-by-collection")
@@ -169,6 +178,10 @@ package object core {
 
   case class DocReference(ref: String) {
     def getBookDir(): Path = {
+      val contentDir = contentDirectories
+        .maxBefore(ref)
+        .map(_._2)
+        .getOrElse(contentDirectories.head._2)
       contentDir.resolve(ref)
     }
 
