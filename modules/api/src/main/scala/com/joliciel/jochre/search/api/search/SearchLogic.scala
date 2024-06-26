@@ -35,6 +35,74 @@ trait SearchLogic extends HttpErrorMapper {
       rowPadding: Option[Int],
       sort: Option[String],
       ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
+    query,
+    title,
+    authors,
+    authorInclude,
+    strict,
+    fromYear,
+    toYear,
+    docRefs,
+    first,
+    max,
+    maxSnippets,
+    rowPadding,
+    sort,
+    ipAddress,
+    ipAddress.getOrElse("127.0.0.1")
+  )
+
+  def getSearchWithAuthLogic(
+    token: ValidToken,
+    query: Option[String],
+    title: Option[String],
+    authors: List[String],
+    authorInclude: Option[Boolean],
+    strict: Option[Boolean],
+    fromYear: Option[Int],
+    toYear: Option[Int],
+    docRefs: List[String],
+    first: Int,
+    max: Int,
+    maxSnippets: Option[Int],
+    rowPadding: Option[Int],
+    sort: Option[String],
+    ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
+    query,
+    title,
+    authors,
+    authorInclude,
+    strict,
+    fromYear,
+    toYear,
+    docRefs,
+    first,
+    max,
+    maxSnippets,
+    rowPadding,
+    sort,
+    ipAddress,
+    token.username
+  )
+
+  private def getSearchLogicInternal(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      sort: Option[String],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, SearchResponse] = {
     for {
       searchQuery <- getSearchQuery(
@@ -62,7 +130,7 @@ trait SearchLogic extends HttpErrorMapper {
         max,
         maxSnippets,
         rowPadding,
-        ipAddress.getOrElse("127.0.0.1"),
+        logUser,
         ipAddress
       )
     } yield searchResponse
