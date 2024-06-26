@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.api.search
 
-import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound, Unauthorized}
+import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
@@ -13,8 +13,7 @@ import sttp.model.{Header, MediaType, StatusCode}
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
-import sttp.tapir.{AnyEndpoint, CodecFormat, Endpoint, PublicEndpoint}
-import zio.stream.ZStream
+import sttp.tapir.{AnyEndpoint, CodecFormat}
 
 import java.nio.charset.StandardCharsets
 import scala.concurrent.ExecutionContext
@@ -26,6 +25,42 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     with SearchSchemaSupport {
   implicit val ec: ExecutionContext = executionContext
 
+  private val queryInput = query[Option[String]]("query")
+    .description("Query string for searching in the text")
+    .example(Some(""""פון * װעגן""""))
+  private val titleInput =
+    query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל"))
+  private val authorsInput =
+    query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם"))
+  private val authorIncludeInput = query[Option[Boolean]]("author-include")
+    .description("Whether the authors should be included or excluded. Default is true.")
+    .example(Some(true))
+  private val strictInput = query[Option[Boolean]]("strict")
+    .description(
+      "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
+    )
+    .example(Some(false))
+  private val fromYearInput =
+    query[Option[Int]]("from-year").description("The earliest year of publication").example(Some(1900))
+  private val toYearInput =
+    query[Option[Int]]("to-year").description("The latest year of publication").example(Some(1920))
+  private val docRefsInput =
+    query[List[String]]("doc-refs").description("Which document references to include").example(List("nybc200089"))
+  private val firstInput =
+    query[Int]("first").description("The first result to return on the page of results").example(20)
+  private val maxInput =
+    query[Int]("max").description("The max number of results to return on the page of results").example(10)
+  private val maxSnippetsInput =
+    query[Option[Int]]("max-snippets").description("The maximum number of snippets per result").example(Some(20))
+  private val rowPaddingInput = query[Option[Int]]("row-padding")
+    .description("How many rows to add in the snippet before the first highlight and after the last highlight")
+    .example(Some(2))
+  private val sortInput = query[Option[String]]("sort")
+    .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
+    .example(None)
+  private val ocrSoftwareInput =
+    query[Option[String]]("ocr-software").description("OCR Software version").example(Some("Jochre 3.0.0"))
+
   private val getSearchEndpoint =
     insecureEndpoint
       .errorOut(
@@ -35,49 +70,77 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("search")
-      .in(
-        query[Option[String]]("query")
-          .description("Query string for searching in the text")
-          .example(Some(""""פון * װעגן""""))
-      )
-      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
-      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
-      .in(
-        query[Option[Boolean]]("author-include")
-          .description("Whether the authors should be included or excluded. Default is true.")
-          .example(Some(true))
-      )
-      .in(
-        query[Option[Boolean]]("strict")
-          .description(
-            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
-          )
-          .example(Some(false))
-      )
-      .in(query[Option[Int]]("from-year").description("The earliest year of publication").example(Some(1900)))
-      .in(query[Option[Int]]("to-year").description("The latest year of publication").example(Some(1920)))
-      .in(
-        query[List[String]]("doc-refs").description("Which document references to include").example(List("nybc200089"))
-      )
-      .in(query[Int]("first").description("The first result to return on the page of results").example(20))
-      .in(query[Int]("max").description("The max number of results to return on the page of results").example(10))
-      .in(query[Option[Int]]("max-snippets").description("The maximum number of snippets per result").example(Some(20)))
-      .in(
-        query[Option[Int]]("row-padding")
-          .description("How many rows to add in the snippet before the first highlight and after the last highlight")
-          .example(Some(2))
-      )
-      .in(
-        query[Option[String]]("sort")
-          .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
-          .example(None)
-      )
+      .in(queryInput)
+      .in(titleInput)
+      .in(authorsInput)
+      .in(authorIncludeInput)
+      .in(strictInput)
+      .in(fromYearInput)
+      .in(toYearInput)
+      .in(docRefsInput)
+      .in(firstInput)
+      .in(maxInput)
+      .in(maxSnippetsInput)
+      .in(rowPaddingInput)
+      .in(sortInput)
       .in(clientIp)
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index.")
 
   private val getSearchHttp: ZServerEndpoint[Requirements, Any] =
     getSearchEndpoint.zServerLogic[Requirements](input => (getSearchLogic _).tupled(input))
+
+  private val getSearchWithAuthEndpoint: ZPartialServerEndpoint[
+    Requirements,
+    String,
+    ValidToken,
+    (
+        Option[String],
+        Option[String],
+        List[String],
+        Option[Boolean],
+        Option[Boolean],
+        Option[Int],
+        Option[Int],
+        List[String],
+        Int,
+        Int,
+        Option[Int],
+        Option[Int],
+        Option[String],
+        Option[String]
+    ),
+    HttpError,
+    SearchResponse,
+    Any
+  ] =
+    secureEndpoint()
+      .errorOutVariant[HttpError](
+        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+      )
+      .get
+      .in("search-with-auth")
+      .in(queryInput)
+      .in(titleInput)
+      .in(authorsInput)
+      .in(authorIncludeInput)
+      .in(strictInput)
+      .in(fromYearInput)
+      .in(toYearInput)
+      .in(docRefsInput)
+      .in(firstInput)
+      .in(maxInput)
+      .in(maxSnippetsInput)
+      .in(rowPaddingInput)
+      .in(sortInput)
+      .in(clientIp)
+      .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
+      .description("Search the OCR index for an authenticated user - will store the search against the username.")
+
+  private val getSearchWithAuthHttp: ZServerEndpoint[Requirements, Any] =
+    getSearchWithAuthEndpoint.serverLogic[Requirements](token =>
+      input => (getSearchWithAuthLogic _).tupled(token +: input)
+    )
 
   private val getImageSnippetEndpoint =
     insecureEndpoint
@@ -137,30 +200,14 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("aggregate")
-      .in(
-        query[Option[String]]("query")
-          .description("Query string for searching in the text")
-          .example(Some(""""פון * װעגן""""))
-      )
-      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
-      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
-      .in(
-        query[Option[Boolean]]("authorInclude")
-          .description("Whether the authors should be included or excluded. Default is true.")
-          .example(Some(true))
-      )
-      .in(
-        query[Option[Boolean]]("strict")
-          .description(
-            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
-          )
-          .example(Some(false))
-      )
-      .in(query[Option[Int]]("fromYear").description("The earliest year of publication").example(Some(1900)))
-      .in(query[Option[Int]]("toYear").description("The latest year of publication").example(Some(1920)))
-      .in(
-        query[List[String]]("docRefs").description("Which document references to include").example(List("nybc200089"))
-      )
+      .in(queryInput)
+      .in(titleInput)
+      .in(authorsInput)
+      .in(authorIncludeInput)
+      .in(strictInput)
+      .in(fromYearInput)
+      .in(toYearInput)
+      .in(docRefsInput)
       .in(
         query[String]("field")
           .description(f"The field to choose among ${IndexField.aggregatableFields.map(_.entryName).mkString(", ")}")
@@ -299,36 +346,16 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("list")
-      .in(
-        query[Option[String]]("query")
-          .description("Query string for searching in the text")
-          .example(Some(""""פון * װעגן""""))
-      )
-      .in(query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל")))
-      .in(query[List[String]]("authors").description("Authors to include or exclude").example(List("שלום עליכם")))
-      .in(
-        query[Option[Boolean]]("author-include")
-          .description("Whether the authors should be included or excluded. Default is true.")
-          .example(Some(true))
-      )
-      .in(
-        query[Option[Boolean]]("strict")
-          .description(
-            "Whether query strings should be expanded to related synonyms (false) or not (true). Default is false."
-          )
-          .example(Some(false))
-      )
-      .in(query[Option[Int]]("from-year").description("The earliest year of publication").example(Some(1900)))
-      .in(query[Option[Int]]("to-year").description("The latest year of publication").example(Some(1920)))
-      .in(
-        query[List[String]]("doc-refs").description("Which document references to include").example(List("nybc200089"))
-      )
-      .in(query[Option[String]]("ocr-software").description("OCR Software version").example(Some("Jochre 3.0.0")))
-      .in(
-        query[Option[String]]("sort")
-          .description(f"The sort order (optional), among: ${SortKind.values.map(_.entryName).mkString(", ")}")
-          .example(None)
-      )
+      .in(queryInput)
+      .in(titleInput)
+      .in(authorsInput)
+      .in(authorIncludeInput)
+      .in(strictInput)
+      .in(fromYearInput)
+      .in(toYearInput)
+      .in(docRefsInput)
+      .in(ocrSoftwareInput)
+      .in(sortInput)
       .in(clientIp)
       .out(jsonBody[Seq[DocReference]].example(Seq(DocReference("nybc200089"), DocReference("nybc212100"))))
       .description("List documents in the OCR index.")
@@ -350,19 +377,24 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   private val getSizeHttp: ZServerEndpoint[Requirements, Any] =
     getSizeEndpoint.zServerLogic[Requirements](_ => getSizeLogic())
 
-  val endpoints: List[AnyEndpoint] = List(
-    getSearchEndpoint,
-    getImageSnippetEndpoint,
-    getAggregateEndpoint,
-    getTopAuthorsEndpoint,
-    getTextAsHtmlEndpoint,
-    getListEndpoint,
-    getSizeEndpoint,
-    getWordTextEndpoint,
-    getWordImageEndpoint
-  ).map(_.tag("search"))
+  val endpoints: List[AnyEndpoint] =
+    List(
+      getSearchWithAuthHttp
+    ).map(_.endpoint.tag("search")) ++
+      List(
+        getSearchEndpoint,
+        getImageSnippetEndpoint,
+        getAggregateEndpoint,
+        getTopAuthorsEndpoint,
+        getTextAsHtmlEndpoint,
+        getListEndpoint,
+        getSizeEndpoint,
+        getWordTextEndpoint,
+        getWordImageEndpoint
+      ).map(_.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
+    getSearchWithAuthHttp,
     getSearchHttp,
     getImageSnippetHttp,
     getAggregateHttp,

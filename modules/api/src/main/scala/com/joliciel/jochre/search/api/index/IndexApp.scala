@@ -7,13 +7,13 @@ import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
 import com.joliciel.jochre.search.core.service.MetadataCorrectionId
 import com.joliciel.jochre.search.core.{CoreProtocol, DocReference, MetadataField}
 import io.circe.generic.auto._
+import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
 import sttp.tapir.AnyEndpoint
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
-import shapeless.syntax.std.tuple._
 
 import scala.concurrent.ExecutionContext
 
