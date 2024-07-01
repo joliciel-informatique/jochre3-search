@@ -3,14 +3,16 @@ import Libraries._
 import com.typesafe.sbt.packager.docker.Cmd
 import sbt.Keys.libraryDependencies
 
-ThisBuild / scalaVersion := "2.13.13"
+ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / organization := "com.joli-ciel"
 ThisBuild / homepage := Some(url("https://www.joli-ciel.com/"))
 ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl-3.0.en.html"))
 
 val cloakroomVersion = "0.5.15"
-val luceneVersion = "9.10.0"
+val luceneVersion = "9.11.1"
 val jochre3OcrVersion = "0.3.15"
+val catsRetryVersion = "3.1.3"
+val jakartaMailVersion = "2.0.1"
 
 lazy val jochre3SearchVersion = sys.env
   .get("JOCHRE3_SEARCH_VERSION")
@@ -46,7 +48,7 @@ lazy val core = project
       "org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
       "org.apache.lucene" % "lucene-test-framework" % luceneVersion % "test",
       "com.joliciel" %% "jochre3-ocr-core" % jochre3OcrVersion,
-      "com.sun.mail" % "jakarta.mail" % "2.0.1"
+      "com.sun.mail" % "jakarta.mail" % jakartaMailVersion
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
@@ -75,7 +77,7 @@ lazy val api = project
       "com.safety-data" %% "cloakroom-scala" % cloakroomVersion,
       "com.safety-data" %% "cloakroom-test-util-scala" % cloakroomVersion % Test,
       "com.safety-data" % "cloakroom" % cloakroomVersion,
-      "com.github.cb372" %% "cats-retry" % "3.1.0"
+      "com.github.cb372" %% "cats-retry" % catsRetryVersion
     ),
     Docker / packageName := "jochre/jochre3-search",
     Docker / maintainer := "Joliciel Informatique SARL",
