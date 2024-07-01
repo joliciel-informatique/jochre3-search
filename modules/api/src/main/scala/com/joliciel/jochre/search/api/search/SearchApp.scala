@@ -115,7 +115,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Any
   ] =
     secureEndpoint()
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
       )
       .get
