@@ -35,7 +35,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
     Any
   ] =
     secureEndpoint().post
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable json"))
       )
       .in("preferences")
@@ -63,7 +63,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
     Any
   ] =
     secureEndpoint().get
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Preference not found"))
       )
       .in("preferences")
@@ -84,7 +84,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
     Any
   ] =
     secureEndpoint().delete
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Preference not found"))
       )
       .in("preferences")

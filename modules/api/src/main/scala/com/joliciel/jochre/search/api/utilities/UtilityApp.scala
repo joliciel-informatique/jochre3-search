@@ -35,7 +35,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
     Any
   ] =
     secureEndpoint(Roles.maintenance)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](StatusCode.NotFound, jsonBody[NotFound].description("Unknown log level"))
       )
       .put
@@ -60,7 +60,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
     Any
   ] =
     secureEndpoint(Roles.maintenance)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description("Not sure why this would happen")
