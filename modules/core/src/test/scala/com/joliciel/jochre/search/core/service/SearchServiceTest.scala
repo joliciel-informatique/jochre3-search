@@ -31,11 +31,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     )
   private val alto1 = textToAlto(
     "doc1",
-    "Hello world!\n" +
-      "Hello you.\n" +
+    "Hello world!\n\n" +
+      "Hello you.\n\n" +
       "Nice day to-\n" +
       "day, Madam.\n" +
-      "Isn't it?\n" +
+      "Isn't it?\n\n" +
       "Oh yes, it is.",
     alternativeMap
   )
@@ -45,14 +45,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     DocMetadata(title = Some("Hello people"), author = Some("Jack Sprat"), publicationYear = Some("[192_]"))
 
   private val text2 = "Hello people.\n" +
-    "How are you?\n" +
-    "Fine, thank you.\n" +
+    "How are you?\n\n" +
+    "Fine, thank you.\n\n" +
     "With pleasure.\n" +
-    "\n" +
+    "\n\n" +
     "Think it will rain\n" +
     "tomorrow? Oh no, I\n" +
     "don't think so.\n" +
-    "\n" +
+    "\n\n" +
     "I think it will be\n" +
     "sunny tomorrow, and even\n" +
     "the day after"
@@ -198,14 +198,14 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
-            "How <b>are</b> you?<br>" +
+            "How <b>are</b> you?<br><br>" +
             "Fine, thank you."
         ) &&
         assertTrue(
           resultWithOffsets.results.head.snippets.head.text ==
             """<span offset="5">Hello people.</span><br>
-              |<span offset="19">How </span><b><span offset="23">are</span></b><span offset="26"> you?</span><br>
-              |<span offset="32">Fine, thank you.</span>""".stripMargin.replaceAll("\n", "")
+              |<span offset="19">How </span><b><span offset="23">are</span></b><span offset="26"> you?</span><br><br>
+              |<span offset="33">Fine, thank you.</span>""".stripMargin.replaceAll("\n", "")
         )
       }
     },
@@ -228,7 +228,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          resultAre.results.head.snippets.head.text == "Hello you.<br>" +
+          resultAre.results.head.snippets.head.text == "Hello you.<br><br>" +
             "Nice day <b>to-</b><br>" +
             "<b>day</b>, Madam.<br>" +
             "Isn't it?"
@@ -287,7 +287,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           phraseResult.results.head.snippets.head.page == 1
         ) &&
         assertTrue(
-          phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br>" +
+          phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br><br>" +
             "Nice <b>day</b> <b>to-</b><br>" +
             "<b>day</b>, <b>Madam</b>.<br>" +
             "Isn't it?"
