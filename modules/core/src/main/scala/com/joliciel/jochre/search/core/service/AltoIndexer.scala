@@ -204,7 +204,7 @@ case class AltoIndexer(
         }
       pageWithSuggestions <- ZIO.attempt { replaceSuggestions(page, suggestions) }
       pageData <- ZIO
-        .iterate(pageWithSuggestions.allTextBoxes -> Seq.empty[TextBlockData])(
+        .iterate(pageWithSuggestions.allTextBlocks -> Seq.empty[TextBlockData])(
           cont = { case (t, _) =>
             t.nonEmpty
           }

@@ -10,7 +10,7 @@ ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl
 
 val cloakroomVersion = "0.5.15"
 val luceneVersion = "9.11.1"
-val jochre3OcrVersion = "0.3.15"
+val jochre3OcrVersion = "0.3.18"
 val catsRetryVersion = "3.1.3"
 val jakartaMailVersion = "2.0.1"
 
