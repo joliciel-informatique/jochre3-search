@@ -12,6 +12,7 @@ import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
 import org.slf4j.LoggerFactory
+import zio.stream.{ZSink, ZStream}
 import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
@@ -167,6 +168,7 @@ private[service] case class SearchServiceImpl(
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val indexParallelism = config.getInt("index-parallelism")
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -1127,7 +1129,15 @@ private[service] case class SearchServiceImpl(
           _ <- ZIO.attempt {
             log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
           }
-          _ <- ZIO.foreach(docRefs) { docRef => reindex(docRef) }
+          _ <- ZStream
+            .fromIterable(docRefs)
+            .mapZIOParUnordered(indexParallelism) { docRef =>
+              reindex(docRef)
+                .catchAll { case e: Throwable =>
+                  ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", e))
+                }
+            }
+            .run(ZSink.foreach(pageCount => ZIO.succeed(log.info(f"Indexed $pageCount pages"))))
         } yield true
       }
     }

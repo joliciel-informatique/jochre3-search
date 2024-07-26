@@ -27,6 +27,8 @@ import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import zio.{Task, ZIO}
 
+import java.io.{PrintWriter, StringWriter}
+
 case class AltoIndexer(
     jochreIndex: JochreIndex,
     searchRepo: SearchRepo,
@@ -60,33 +62,52 @@ case class AltoIndexer(
       suggestions <- suggestionRepo.getSuggestions(docRef)
       corrections <- suggestionRepo.getMetadataCorrections(docRef)
       documentData <- persistDocument(suggestions)
-      pageCount <- ZIO.attempt {
-        val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
-          log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
-          correction.field.applyToMetadata(metadata, correction.newValue)
-        }
-
-        val ocrSoftware = alto.processingSteps.headOption.flatMap { step =>
-          val software = Seq(step.softwareName, step.softwareVersion).flatten.mkString(" ")
-          Option.when(software.nonEmpty)(software)
-        }
-
-        val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata, ocrSoftware)
-        val docInfo =
-          DocumentIndexInfo(
-            documentData.pageOffsets,
-            documentData.newlineOffsets,
-            documentData.hyphenatedWordOffsets,
-            documentData.alternativesAtOffset
-          )
-        jochreIndex.addDocumentInfo(docRef, docInfo)
-        log.info(f"Finished processing Alto, about to index document ${docRef.ref}")
-        jochreIndex.indexer.indexDocument(document)
-        val refreshed = jochreIndex.refresh
-        log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
-        documentData.pageCount
-      }
       _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Complete)
+      pageCount <- ZIO
+        .attempt {
+          val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
+            log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
+            correction.field.applyToMetadata(metadata, correction.newValue)
+          }
+
+          val ocrSoftware = alto.processingSteps.headOption.flatMap { step =>
+            val software = Seq(step.softwareName, step.softwareVersion).flatten.mkString(" ")
+            Option.when(software.nonEmpty)(software)
+          }
+
+          val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata, ocrSoftware)
+          val docInfo =
+            DocumentIndexInfo(
+              documentData.pageOffsets,
+              documentData.newlineOffsets,
+              documentData.hyphenatedWordOffsets,
+              documentData.alternativesAtOffset
+            )
+          jochreIndex.addDocumentInfo(docRef, docInfo)
+          log.info(f"Finished processing Alto, about to index document ${docRef.ref}")
+          jochreIndex.indexer.indexDocument(document)
+          val refreshed = jochreIndex.refresh
+          log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
+          documentData.pageCount
+        }
+        .catchAll { case ex: Throwable =>
+          val sw = new StringWriter();
+          val pw = new PrintWriter(sw)
+          ex.printStackTrace(pw)
+          val messageWithStackTrace = f"${ex.getMessage}\n${sw.toString}"
+          searchRepo
+            .updateDocumentStatus(documentData.docRev, DocumentStatus.Failed(messageWithStackTrace))
+            .foldZIO(
+              failure => {
+                log.error(f"Unable to mark document failure for ${docRef.ref}", failure)
+                ZIO.fail(ex)
+              },
+              _ => {
+                ZIO.fail(ex)
+              }
+            )
+        }
+      _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Indexed)
     } yield IndexData(
       docRev = documentData.docRev,
       wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
