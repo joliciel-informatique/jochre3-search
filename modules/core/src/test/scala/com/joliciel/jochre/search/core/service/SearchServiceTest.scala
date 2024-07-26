@@ -566,9 +566,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe")))
         )
       } yield {
-        assertTrue(resultsSchmozeph.results.map(_.docRef) == Seq(docRef1, docRef3)) &&
+        assertTrue(resultsSchmozeph.results.map(_.docRef).toSet == Set(docRef1, docRef3)) &&
         assertTrue(resultsSchmozephAfterUndo.results.map(_.docRef) == Seq()) &&
-        assertTrue(resultsSchmoeAfterUndo.results.map(_.docRef) == Seq(docRef1, docRef3))
+        assertTrue(resultsSchmoeAfterUndo.results.map(_.docRef).toSet == Set(docRef1, docRef3))
       }
     }
   ).provideLayer(

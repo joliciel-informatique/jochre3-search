@@ -14,8 +14,8 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
-  implicit val doobieMappingForIndexStatus: Meta[DocumentStatus] =
-    pgEnumStringOpt("document_status", DocumentStatus.fromEnum, DocumentStatus.toEnum)
+  implicit val doobieMappingForIndexStatus: Meta[DocumentStatusCode] =
+    pgEnumStringOpt("document_status", DocumentStatusCode.fromEnum, DocumentStatusCode.toEnum)
 
   def upsertIndexedDocument(
       ref: DocReference,
@@ -65,11 +65,19 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
   }
 
-  def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] =
+  def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] = {
+    val statusCode = status.code
+    val failureReason = status match {
+      case DocumentStatus.Failed(reason) => Some(reason)
+      case _                             => None
+    }
     sql"""UPDATE document
-         | SET status=${status}
+         | SET status=$statusCode,
+         | failure_reason=$failureReason,
+         | status_updated=CURRENT_TIMESTAMP
          | WHERE rev=${docRev.rev}""".stripMargin.update.run
       .transact(transactor)
+  }
 
   def deleteDocument(docRev: DocRev): Task[Int] =
     sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
@@ -131,7 +139,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status
+    sql"""SELECT rev, reference, username, ip, created, status, failure_reason, status_updated
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -141,7 +149,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status
+    sql"""SELECT rev, reference, username, ip, created, status, failure_reason, status_updated
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -150,7 +158,10 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocumentsToReindex(): Task[Seq[DocReference]] = {
-    val completeStatus: DocumentStatus = DocumentStatus.Complete
+    val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
+
+    // The first condition seems very rare: the document has been completely saved to the database
+    // but the system was stopped before it got indexed.
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE (
@@ -173,7 +184,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def isContentUpdated(docRef: DocReference): Task[Boolean] = {
-    val completeStatus: DocumentStatus = DocumentStatus.Complete
+    val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE indexdoc.reference = ${docRef.ref}

@@ -71,16 +71,37 @@ package object service {
     )
   }
 
-  sealed trait DocumentStatus extends EnumEntry
+  sealed trait DocumentStatusCode extends EnumEntry
 
-  object DocumentStatus extends Enum[DocumentStatus] with DoobieEnum[DocumentStatus] {
+  object DocumentStatusCode extends Enum[DocumentStatusCode] with DoobieEnum[DocumentStatusCode] {
     val values = findValues
 
-    case object Underway extends DocumentStatus
-    case object Complete extends DocumentStatus
+    case object Underway extends DocumentStatusCode
+    case object Complete extends DocumentStatusCode
+    case object Indexed extends DocumentStatusCode
+    case object Failed extends DocumentStatusCode
 
-    def toEnum(code: DocumentStatus): String = code.entryName
-    def fromEnum(s: String): Option[DocumentStatus] = DocumentStatus.withNameOption(s)
+    def toEnum(code: DocumentStatusCode): String = code.entryName
+    def fromEnum(s: String): Option[DocumentStatusCode] = DocumentStatusCode.withNameOption(s)
+  }
+
+  sealed trait DocumentStatus {
+    def code: DocumentStatusCode
+  }
+
+  object DocumentStatus {
+    case object Underway extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Underway
+    }
+    case object Complete extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Complete
+    }
+    case object Indexed extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Indexed
+    }
+    case class Failed(reason: String) extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Failed
+    }
   }
 
   private[core] case class DocRev(rev: Long) extends AnyVal
@@ -91,8 +112,17 @@ package object service {
       username: String,
       ipAddress: Option[String],
       created: Instant,
-      status: DocumentStatus
-  )
+      statusCode: DocumentStatusCode,
+      failureReason: Option[String],
+      statusUpdated: Instant
+  ) {
+    val status: DocumentStatus = statusCode match {
+      case DocumentStatusCode.Underway => DocumentStatus.Underway
+      case DocumentStatusCode.Complete => DocumentStatus.Complete
+      case DocumentStatusCode.Indexed  => DocumentStatus.Indexed
+      case DocumentStatusCode.Failed   => DocumentStatus.Failed(failureReason.getOrElse("Unknown"))
+    }
+  }
 
   private[service] case class PageId(id: Long) extends AnyVal
   private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
