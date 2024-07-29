@@ -49,6 +49,7 @@ private[lucene] class AddNewlineMarkerFilter(input: TokenStream, indexingHelper:
       }
       true
     } else {
+      isNewline = false
       false
     }
   }
