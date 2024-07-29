@@ -17,7 +17,7 @@ import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
-import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream}
+import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -995,18 +995,39 @@ private[service] case class SearchServiceImpl(
   override def reindex(docRef: DocReference): Task[Int] = {
     log.info(f"About to re-index ${docRef.ref}")
     for {
-      altoStream <- ZIO.attempt {
-        val altoFile = docRef.getAltoPath()
-        new FileInputStream(altoFile.toFile)
-      }
-      alto <- readAndStoreAlto(docRef, altoStream)
-      metadata <- ZIO.attempt {
-        getMetadata(docRef).getOrElse(DocMetadata())
-      }
       currentDoc <- searchRepo.getDocument(docRef)
-      contentUpdated <- searchRepo.isContentUpdated(docRef)
-      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
-      _ <- searchRepo.deleteOldRevs(docRef)
+      pageCount <- (for {
+        altoStream <- ZIO.attempt {
+          val altoFile = docRef.getAltoPath()
+          new FileInputStream(altoFile.toFile)
+        }
+        alto <- readAndStoreAlto(docRef, altoStream)
+        metadata <- ZIO.attempt {
+          getMetadata(docRef).getOrElse(DocMetadata())
+        }
+        contentUpdated <- searchRepo.isContentUpdated(docRef)
+        pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
+        _ <- searchRepo.deleteOldRevs(docRef)
+      } yield pageCount)
+        .catchAll { case ex: Throwable =>
+          val sw = new StringWriter();
+          val pw = new PrintWriter(sw)
+          ex.printStackTrace(pw)
+          val messageWithStackTrace = f"${ex.getMessage}\n${sw.toString}"
+          (for {
+            _ <- searchRepo.updateDocumentStatus(currentDoc.rev, DocumentStatus.Failed(messageWithStackTrace))
+            _ <- searchRepo.unmarkForReindex(docRef)
+          } yield ())
+            .foldZIO(
+              failure => {
+                log.error(f"Unable to mark document failure for ${docRef.ref}", failure)
+                ZIO.fail(ex)
+              },
+              _ => {
+                ZIO.fail(ex)
+              }
+            )
+        }
     } yield pageCount
   }
 

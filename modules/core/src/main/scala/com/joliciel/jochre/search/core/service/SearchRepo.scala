@@ -64,6 +64,12 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
        """.stripMargin.update.run
       .transact(transactor)
   }
+  def unmarkForReindex(docRef: DocReference): Task[Int] = {
+    sql"""UPDATE indexed_document d1 SET reindex=${false}
+         | WHERE reference=${docRef.ref}
+       """.stripMargin.update.run
+      .transact(transactor)
+  }
 
   def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] = {
     val statusCode = status.code
