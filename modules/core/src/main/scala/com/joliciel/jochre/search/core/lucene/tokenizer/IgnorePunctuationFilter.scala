@@ -23,6 +23,8 @@ private[lucene] class IgnorePunctuationFilter(input: TokenStream) extends TokenF
       }
       true
     } else {
+      // Set back to 1 for next field
+      punctuationPositionIncrement = 1
       false
     }
   }

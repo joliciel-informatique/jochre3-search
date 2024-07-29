@@ -49,6 +49,7 @@ private[lucene] class AddPageMarkerFilter(input: TokenStream, indexingHelper: In
       }
       true
     } else {
+      isNewPage = false
       false
     }
   }

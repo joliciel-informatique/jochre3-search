@@ -49,6 +49,7 @@ private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: 
       }
       true
     } else {
+      currentAlternatives = Seq.empty
       false
     }
   }
