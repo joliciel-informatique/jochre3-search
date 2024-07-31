@@ -1068,7 +1068,8 @@ private[service] case class SearchServiceImpl(
             .getByDocRef(docRef)
             .getOrElse(throw new DocumentNotFoundInIndex(docRef))
 
-          luceneDoc.getMetaValue(field)
+          // If the existing value is empty, we don't want to replace it everywhere, hence .filter(_.trim.nonEmpty)
+          luceneDoc.getMetaValue(field).filter(_.trim.nonEmpty)
         }
       }
       docRefs <- ZIO
