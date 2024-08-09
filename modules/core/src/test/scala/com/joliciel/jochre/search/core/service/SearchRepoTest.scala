@@ -21,7 +21,17 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         doc <- searchRepo.getDocument(docRef)
         doc2 <- searchRepo.getDocument(docRev)
+        _ <- searchRepo.updateDocumentStatus(docRev, DocumentStatus.Complete)
         docsToReindex <- searchRepo.getDocumentsToReindex()
+        indexedDoc1 <- searchRepo.getIndexedDocument(docRef)
+        _ <- searchRepo.upsertIndexedDocument(
+          docRef,
+          docRev,
+          Some(WordSuggestionRev(42)),
+          Some(MetadataCorrectionRev(72)),
+          true
+        )
+        indexedDoc2 <- searchRepo.getIndexedDocument(docRef)
       } yield {
         assertTrue(doc.rev == docRev) &&
         assertTrue(doc.ref == docRef) &&
@@ -29,7 +39,15 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(doc.ipAddress == joeIp) &&
         assertTrue(doc.created.toEpochMilli > startTime.toEpochMilli) &&
         assertTrue(doc == doc2) &&
-        assertTrue(docsToReindex == Seq(docRef))
+        assertTrue(docsToReindex == Seq(docRef)) &&
+        assertTrue(indexedDoc1.isDefined) &&
+        assertTrue(indexedDoc1.get.docRev == DocRev(0)) &&
+        assertTrue(!indexedDoc1.get.reindex) &&
+        assertTrue(indexedDoc2.isDefined) &&
+        assertTrue(indexedDoc2.get.wordSuggestionRev == Some(WordSuggestionRev(42))) &&
+        assertTrue(indexedDoc2.get.metadataCorrectionRev == Some(MetadataCorrectionRev(72))) &&
+        assertTrue(indexedDoc2.get.reindex) &&
+        assertTrue(indexedDoc2.get.docRev == docRev)
       }
     },
     test("insert page") {

@@ -1,7 +1,7 @@
 package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.search.core.lucene.JochreIndex
-import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, SearchQuery, Sort}
+import com.joliciel.jochre.search.core.{DocReference, IndexField, MetadataField, SearchCriterion, SearchQuery, Sort}
 import com.joliciel.jochre.search.yiddish.YiddishFilters
 import org.slf4j.LoggerFactory
 import zio.test.junit.JUnitRunnableSpec
@@ -72,7 +72,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         assertTrue(topResult.snippets.head.page == 2)
       }
     },
-    test("upload real image zip and get image snippets") {
+    test("upload real image zip and get image snippets as well as applying a metadata correction") {
       val docRef = DocReference("nybc200089")
       val imageZipStream = getClass.getResourceAsStream("/nybc200089-11-12.zip")
 
@@ -81,7 +81,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
       val metadataStream = getClass.getResourceAsStream("/nybc200089_meta.xml")
 
       for {
-        _ <- getSearchRepo()
+        searchRepo <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.addNewDocumentAsImages(
           docRef,
@@ -91,6 +91,8 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           altoStream,
           Some(metadataStream)
         )
+        _ <- searchService.correctMetadata("test", None, docRef, MetadataField.AuthorEnglish, "Sholem Aleykhem", false)
+        _ <- searchService.reindexWhereRequired()
         searchResults <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn")),
           Sort.Score,
@@ -109,6 +111,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           topResult.snippets.head.end,
           topResult.snippets.head.highlights
         )
+        indexedDoc <- searchRepo.getIndexedDocument(docRef)
         _ <- searchService.removeDocument(docRef)
       } yield {
         val tempFile = File.createTempFile("jochre-snippet", ".png")
@@ -122,7 +125,10 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
             "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
             "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
         ) &&
-        assertTrue(topResult.snippets.head.page == 2)
+        assertTrue(topResult.snippets.head.page == 2) &&
+        assertTrue(topResult.metadata.authorEnglish == Some("Sholem Aleykhem")) &&
+        assertTrue(indexedDoc.isDefined) &&
+        assertTrue(indexedDoc.get.metadataCorrectionRev.isDefined)
       }
     }
   ).provideLayer(

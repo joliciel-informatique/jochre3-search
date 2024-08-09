@@ -356,6 +356,12 @@ private[service] case class SearchServiceImpl(
 
         for {
           indexData <- altoIndexer.index()
+          _ <- ZIO.succeed(
+            log.info(
+              f"Updating indexed document for ${docRef.ref}: docRev: ${indexData.docRev.rev}, wordSuggestionRev: ${indexData.wordSuggestionRev
+                .map(_.rev)}, metadataCorrectionRev: ${indexData.metadataCorrectionRev.map(_.rev)}"
+            )
+          )
           _ <- searchRepo.upsertIndexedDocument(
             docRef,
             indexData.docRev,
