@@ -163,6 +163,15 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
+  def getIndexedDocument(ref: DocReference): Task[Option[DbIndexedDocument]] =
+    sql"""SELECT reference, doc_rev, word_suggestion_rev, metadata_correction_rev, reindex, index_time
+         | FROM indexed_document
+         | WHERE reference = ${ref.ref} 
+       """.stripMargin
+      .query[DbIndexedDocument]
+      .option
+      .transact(transactor)
+
   def getDocumentsToReindex(): Task[Seq[DocReference]] = {
     val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
 

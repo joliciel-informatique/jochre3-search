@@ -223,7 +223,8 @@ package object service {
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
       metadataCorrectionRev: Option[MetadataCorrectionRev],
-      reindex: Boolean
+      reindex: Boolean,
+      indexTime: Instant
   )
 
   trait MetadataReader {

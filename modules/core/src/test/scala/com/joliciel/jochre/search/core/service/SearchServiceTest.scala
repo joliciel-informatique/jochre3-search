@@ -540,7 +540,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
     test("correct metadata") {
       for {
         _ <- getSuggestionRepo()
-        _ <- getSearchRepo()
+        searchRepo <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
         _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)
