@@ -359,14 +359,14 @@ private[service] case class SearchServiceImpl(
           _ <- ZIO.succeed(
             log.info(
               f"Updating indexed document for ${docRef.ref}: docRev: ${indexData.docRev.rev}, wordSuggestionRev: ${indexData.wordSuggestionRev
-                .map(_.rev)}, metadataCorrectionRev: ${indexData.metadataCorrectionRev.map(_.rev)}"
+                .map(_.rev)}, corrections: ${indexData.corrections.map(c => f"(${c.rev.rev} => ${c.field.entryName})").mkString(", ")}"
             )
           )
           _ <- searchRepo.upsertIndexedDocument(
             docRef,
             indexData.docRev,
             indexData.wordSuggestionRev,
-            indexData.metadataCorrectionRev,
+            indexData.corrections,
             reindex = false
           )
         } yield indexData.pageCount
@@ -1015,8 +1015,8 @@ private[service] case class SearchServiceImpl(
         pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
         _ <- searchRepo.deleteOldRevs(docRef)
       } yield pageCount)
-        .catchAll { case ex: Throwable =>
-          val sw = new StringWriter();
+        .catchAll { ex: Throwable =>
+          val sw = new StringWriter()
           val pw = new PrintWriter(sw)
           ex.printStackTrace(pw)
           val messageWithStackTrace = f"${ex.getMessage}\n${sw.toString}"
@@ -1161,7 +1161,7 @@ private[service] case class SearchServiceImpl(
             .fromIterable(docRefs)
             .mapZIOParUnordered(indexParallelism) { docRef =>
               reindex(docRef)
-                .catchAll { case e: Throwable =>
+                .catchAll { e: Throwable =>
                   ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", e))
                 }
             }

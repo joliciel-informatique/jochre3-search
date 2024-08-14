@@ -222,9 +222,14 @@ package object service {
       docRef: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      metadataCorrectionRev: Option[MetadataCorrectionRev],
       reindex: Boolean,
       indexTime: Instant
+  )
+
+  private[service] case class DbIndexedDocumentCorrection(
+      docRef: DocReference,
+      field: MetadataField,
+      rev: MetadataCorrectionRev
   )
 
   trait MetadataReader {
