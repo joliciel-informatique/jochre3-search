@@ -48,7 +48,7 @@ case class AltoIndexer(
   case class IndexData(
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      metadataCorrectionRev: Option[MetadataCorrectionRev],
+      corrections: Seq[DbMetadataCorrection],
       pageCount: Int
   )
 
@@ -111,7 +111,7 @@ case class AltoIndexer(
     } yield IndexData(
       docRev = documentData.docRev,
       wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
-      metadataCorrectionRev = corrections.map(_.rev).maxOption(MetadataCorrectionRev.ordering),
+      corrections,
       pageCount = pageCount
     )
   }

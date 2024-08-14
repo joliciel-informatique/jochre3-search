@@ -28,6 +28,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
 
       for {
         _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.addNewDocumentAsPdf(
           docRef,
@@ -82,6 +83,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
 
       for {
         searchRepo <- getSearchRepo()
+        _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
         pageCount <- searchService.addNewDocumentAsImages(
           docRef,
@@ -91,7 +93,14 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           altoStream,
           Some(metadataStream)
         )
-        _ <- searchService.correctMetadata("test", None, docRef, MetadataField.AuthorEnglish, "Sholem Aleykhem", false)
+        _ <- searchService.correctMetadata(
+          "test",
+          None,
+          docRef,
+          MetadataField.AuthorEnglish,
+          "Sholem Aleykhem",
+          applyEverywhere = false
+        )
         _ <- searchService.reindexWhereRequired()
         searchResults <- searchService.search(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "farshvundn")),
@@ -112,6 +121,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
           topResult.snippets.head.highlights
         )
         indexedDoc <- searchRepo.getIndexedDocument(docRef)
+        indexedDocCorrections <- searchRepo.getIndexedDocumentCorrections(docRef)
         _ <- searchService.removeDocument(docRef)
       } yield {
         val tempFile = File.createTempFile("jochre-snippet", ".png")
@@ -126,9 +136,9 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
             "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
         ) &&
         assertTrue(topResult.snippets.head.page == 2) &&
-        assertTrue(topResult.metadata.authorEnglish == Some("Sholem Aleykhem")) &&
+        assertTrue(topResult.metadata.authorEnglish.contains("Sholem Aleykhem")) &&
         assertTrue(indexedDoc.isDefined) &&
-        assertTrue(indexedDoc.get.metadataCorrectionRev.isDefined)
+        assertTrue(indexedDocCorrections.nonEmpty)
       }
     }
   ).provideLayer(
