@@ -101,7 +101,9 @@ trait SearchService {
 
   def getTopAuthors(
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthorField: Boolean,
+      includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins]
 
   def getTextAsHtml(
@@ -662,20 +664,32 @@ private[service] case class SearchServiceImpl(
     }.get
   }
 
-  override def getTopAuthors(
+  def getTopAuthors(
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthorField: Boolean,
+      includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins] = ZIO.fromTry {
+    val fields = (Seq.empty[Option[IndexField]] :+
+      Option.when(includeAuthorField)(IndexField.Author) :+
+      Option.when(includeAuthorInTranscriptionField)(IndexField.AuthorEnglish)).flatten
+
+    if (fields.isEmpty) {
+      throw new NoFieldRequestedForAggregation()
+    }
+
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.Author, prefix))
-      val bins = searcher.aggregate(searchQuery, IndexField.Author, maxBins)
-      val transcribedBins = if (bins.isEmpty) {
-        val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.AuthorEnglish, prefix))
-        searcher.aggregate(searchQuery, IndexField.AuthorEnglish, maxBins)
-      } else {
-        bins
-      }
-      AggregationBins(transcribedBins.sortBy(_.label))
+      val bins = fields
+        .map { field =>
+          val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
+          searcher.aggregate(query, field, maxBins)
+        }
+        .flatten
+        .sortBy(0 - _.count)
+        .take(maxBins)
+        .sortBy(_.label)
+
+      AggregationBins(bins)
     }
   }
 
