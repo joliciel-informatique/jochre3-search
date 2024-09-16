@@ -54,21 +54,21 @@ trait SearchLogic extends HttpErrorMapper {
   )
 
   def getSearchWithAuthLogic(
-    token: ValidToken,
-    query: Option[String],
-    title: Option[String],
-    authors: List[String],
-    authorInclude: Option[Boolean],
-    strict: Option[Boolean],
-    fromYear: Option[Int],
-    toYear: Option[Int],
-    docRefs: List[String],
-    first: Int,
-    max: Int,
-    maxSnippets: Option[Int],
-    rowPadding: Option[Int],
-    sort: Option[String],
-    ipAddress: Option[String]
+      token: ValidToken,
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      sort: Option[String],
+      ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
     query,
     title,
@@ -185,11 +185,18 @@ trait SearchLogic extends HttpErrorMapper {
 
   def getTopAuthorsLogic(
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthor: Option[Boolean],
+      includeAuthorInTranscription: Option[Boolean]
   ): ZIO[Requirements, HttpError, AggregationBins] = {
     for {
       searchService <- ZIO.service[SearchService]
-      searchResponse <- searchService.getTopAuthors(prefix, maxBins)
+      searchResponse <- searchService.getTopAuthors(
+        prefix,
+        maxBins,
+        includeAuthor.getOrElse(true),
+        includeAuthorInTranscription.getOrElse(true)
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top authors", error))
     .mapError(mapToHttpError)

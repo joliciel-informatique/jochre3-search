@@ -304,6 +304,16 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in("authors")
       .in(query[String]("prefix").description("The author name prefix").example("ש"))
       .in(query[Int]("maxBins").description("Maximum bins to return").example(20))
+      .in(
+        query[Option[Boolean]]("includeAuthor")
+          .description("If true, the Author field is included. Defaults to true.")
+          .example(Some(true))
+      )
+      .in(
+        query[Option[Boolean]]("includeAuthorInTranscription")
+          .description("If true, the AuthorEnglish field is included. Defaults to true.")
+          .example(Some(true))
+      )
       .out(jsonBody[AggregationBins].example(SearchHelper.aggregationBinsExample))
       .description("Return most common authors matching prefix in alphabetical order.")
 

@@ -477,10 +477,30 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
         _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)
         _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
-        binsJ <- searchService.getTopAuthors("J", 5)
-        binsJo <- searchService.getTopAuthors("Jo", 5)
-        binsJ1 <- searchService.getTopAuthors("J", 1)
-        binsDalet <- searchService.getTopAuthors("ד", 5)
+        binsJ <- searchService.getTopAuthors(
+          "J",
+          5,
+          includeAuthorField = true,
+          includeAuthorInTranscriptionField = true
+        )
+        binsJo <- searchService.getTopAuthors(
+          "Jo",
+          5,
+          includeAuthorField = true,
+          includeAuthorInTranscriptionField = true
+        )
+        binsJ1 <- searchService.getTopAuthors(
+          "J",
+          1,
+          includeAuthorField = true,
+          includeAuthorInTranscriptionField = true
+        )
+        binsDalet <- searchService.getTopAuthors(
+          "ד",
+          5,
+          includeAuthorField = true,
+          includeAuthorInTranscriptionField = true
+        )
       } yield {
         assertTrue(binsJ == AggregationBins(Seq(AggregationBin("Jack Sprat", 1), AggregationBin("Joe Schmoe", 2)))) &&
         assertTrue(binsJo == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2)))) &&
