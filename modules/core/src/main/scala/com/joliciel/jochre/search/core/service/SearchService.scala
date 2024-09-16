@@ -829,18 +829,23 @@ private[service] case class SearchServiceImpl(
       val title = docWithInfo._2
       val text = docWithInfo._3
 
-      val textWithPageBreaks = pages
+      val pagesWithText = pages
         .appended(DbPage(PageId(0), docWithInfo._1, 0, 0, 0, text.length))
-        .foldLeft(new StringBuilder() -> 0) { case ((textSoFar, lastOffset), page) =>
+        .foldLeft((Seq.empty[(Int, String)], 0, 0)) { case ((textSoFar, lastOffset, lastIndex), page) =>
           val nextPage = text.substring(lastOffset, page.offset).replaceAll("\n", "<br>")
-          textSoFar.append(nextPage + f"""<hr id="page${page.index}">""") -> page.offset
+          (textSoFar :+ (lastIndex -> nextPage), page.offset, page.index)
         }
         ._1
-        .toString()
 
-      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + textWithPageBreaks.substring(
-        docRef.ref.length + "<br>".length
-      )
+      val html = if (pagesWithText.isEmpty) {
+        ""
+      } else {
+        pagesWithText.tail.map { case (pageIndex, text) =>
+          f"""<div id="page$pageIndex">$text<hr></div>"""
+        }.mkString
+      }
+
+      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + html
       response
     }
 
