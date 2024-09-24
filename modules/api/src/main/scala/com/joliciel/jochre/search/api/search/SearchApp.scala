@@ -61,6 +61,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   private val ocrSoftwareInput =
     query[Option[String]]("ocr-software").description("OCR Software version").example(Some("Jochre 3.0.0"))
 
+  private val physicalNewlinesInput =
+    query[Option[Boolean]]("physical-newlines")
+      .description("Whether physical newlines should be maintained or removed from the snippets. Default is true.")
+      .example(Some(false))
+
   private val getSearchEndpoint =
     insecureEndpoint
       .errorOut(
@@ -83,6 +88,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(maxSnippetsInput)
       .in(rowPaddingInput)
       .in(sortInput)
+      .in(physicalNewlinesInput)
       .in(clientIp)
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index.")
@@ -108,6 +114,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Option[Int],
         Option[Int],
         Option[String],
+        Option[Boolean],
         Option[String]
     ),
     HttpError,
@@ -133,6 +140,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(maxSnippetsInput)
       .in(rowPaddingInput)
       .in(sortInput)
+      .in(physicalNewlinesInput)
       .in(clientIp)
       .out(jsonBody[SearchResponse].example(SearchHelper.searchResponseExample))
       .description("Search the OCR index for an authenticated user - will store the search against the username.")

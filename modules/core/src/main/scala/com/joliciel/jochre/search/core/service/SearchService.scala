@@ -78,7 +78,8 @@ trait SearchService {
       rowPadding: Option[Int] = None,
       username: String = "unknown",
       ipAddress: Option[String] = None,
-      addOffsets: Boolean = true
+      addOffsets: Boolean = true,
+      physicalNewLines: Boolean = true
   ): Task[SearchResponse]
 
   def list(
@@ -135,7 +136,7 @@ trait SearchService {
       ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
-      value: String,
+      newValue: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId]
 
@@ -598,7 +599,8 @@ private[service] case class SearchServiceImpl(
       rowPadding: Option[Int],
       username: String,
       ipAddress: Option[String],
-      addOffsets: Boolean
+      addOffsets: Boolean,
+      physicalNewLines: Boolean
   ): Task[SearchResponse] = {
     for {
       initialResponse <- ZIO.fromTry {
@@ -631,6 +633,11 @@ private[service] case class SearchServiceImpl(
               val pageNumber = page.map(_.index)
               val deepLink = pageNumber.flatMap(searchResult.metadata.getDeepLink(searchResult.docRef, _))
               snippet.copy(
+                text = if (physicalNewLines) {
+                  snippet.text
+                } else {
+                  snippet.text.replaceAll("<br><br>", "<p>").replaceAll("<br>", " ").replaceAll("<p>", "<br>")
+                },
                 page = pageNumber.getOrElse(-1),
                 deepLink = deepLink
               )
@@ -1081,10 +1088,10 @@ private[service] case class SearchServiceImpl(
       ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
-      value: String,
+      newValue: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId] = {
-    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $value")
+    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $newValue")
     val shouldSendMail = config.getBoolean("corrections.send-mail")
     for {
       oldValue <- ZIO.attempt {
@@ -1118,7 +1125,7 @@ private[service] case class SearchServiceImpl(
         ipAddress,
         field,
         oldValue,
-        value,
+        newValue,
         applyEverywhere,
         docRefs
       )
