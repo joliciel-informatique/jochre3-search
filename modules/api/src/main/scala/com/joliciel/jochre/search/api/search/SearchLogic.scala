@@ -34,6 +34,7 @@ trait SearchLogic extends HttpErrorMapper {
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       sort: Option[String],
+      physicalNewlines: Option[Boolean],
       ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
     query,
@@ -49,6 +50,7 @@ trait SearchLogic extends HttpErrorMapper {
     maxSnippets,
     rowPadding,
     sort,
+    physicalNewlines,
     ipAddress,
     ipAddress.getOrElse("127.0.0.1")
   )
@@ -68,6 +70,7 @@ trait SearchLogic extends HttpErrorMapper {
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       sort: Option[String],
+      physicalNewlines: Option[Boolean],
       ipAddress: Option[String]
   ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
     query,
@@ -83,6 +86,7 @@ trait SearchLogic extends HttpErrorMapper {
     maxSnippets,
     rowPadding,
     sort,
+    physicalNewlines,
     ipAddress,
     token.username
   )
@@ -101,6 +105,7 @@ trait SearchLogic extends HttpErrorMapper {
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       sort: Option[String],
+      physicalNewlines: Option[Boolean],
       ipAddress: Option[String],
       logUser: String
   ): ZIO[Requirements, HttpError, SearchResponse] = {
@@ -131,7 +136,8 @@ trait SearchLogic extends HttpErrorMapper {
         maxSnippets,
         rowPadding,
         logUser,
-        ipAddress
+        ipAddress,
+        physicalNewLines = physicalNewlines.getOrElse(true)
       )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
