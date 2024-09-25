@@ -17,10 +17,46 @@ import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.util.Base64
 import javax.imageio.ImageIO
 
 trait SearchLogic extends HttpErrorMapper {
   def getSearchLogic(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      sort: Option[String],
+      physicalNewlines: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
+    query,
+    title,
+    authors,
+    authorInclude,
+    strict,
+    fromYear,
+    toYear,
+    docRefs,
+    first,
+    max,
+    maxSnippets,
+    rowPadding,
+    sort,
+    physicalNewlines,
+    ipAddress,
+    ipAddress.getOrElse("127.0.0.1")
+  )
+
+  def getSearchWithAuthLogic(
       token: ValidToken,
       query: Option[String],
       title: Option[String],
@@ -35,7 +71,44 @@ trait SearchLogic extends HttpErrorMapper {
       maxSnippets: Option[Int],
       rowPadding: Option[Int],
       sort: Option[String],
+      physicalNewlines: Option[Boolean],
       ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, SearchResponse] = getSearchLogicInternal(
+    query,
+    title,
+    authors,
+    authorInclude,
+    strict,
+    fromYear,
+    toYear,
+    docRefs,
+    first,
+    max,
+    maxSnippets,
+    rowPadding,
+    sort,
+    physicalNewlines,
+    ipAddress,
+    token.username
+  )
+
+  private def getSearchLogicInternal(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      first: Int,
+      max: Int,
+      maxSnippets: Option[Int],
+      rowPadding: Option[Int],
+      sort: Option[String],
+      physicalNewlines: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, SearchResponse] = {
     for {
       searchQuery <- getSearchQuery(
@@ -63,15 +136,15 @@ trait SearchLogic extends HttpErrorMapper {
         max,
         maxSnippets,
         rowPadding,
-        token.username,
-        ipAddress
+        logUser,
+        ipAddress,
+        physicalNewLines = physicalNewlines.getOrElse(true)
       )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
     .mapError(mapToHttpError)
 
   def getImageSnippetLogic(
-      token: ValidToken,
       docRef: DocReference,
       startOffset: Int,
       endOffset: Int,
@@ -90,8 +163,36 @@ trait SearchLogic extends HttpErrorMapper {
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
     .mapError(mapToHttpError)
 
+  def getImageSnippetWithHighlightsLogic(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): ZIO[Requirements, HttpError, ImageSnippetResponse] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      imageSnippetAndHighlights <- searchService.getImageSnippetAndHighlights(
+        docRef,
+        startOffset,
+        endOffset,
+        highlights
+      )
+      response <- ZIO.attempt {
+        imageSnippetAndHighlights match {
+          case (imageSnippet, highlights) =>
+            val out = new ByteArrayOutputStream()
+            ImageIO.write(imageSnippet, "png", out)
+            val bytes = out.toByteArray
+            val encoder = Base64.getEncoder()
+            val base64Image = encoder.encodeToString(bytes)
+            ImageSnippetResponse(base64Image, highlights)
+        }
+      }
+    } yield response
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet with highlights", error))
+    .mapError(mapToHttpError)
+
   def getAggregateLogic(
-      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -119,13 +220,19 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getTopAuthorsLogic(
-      token: ValidToken,
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthor: Option[Boolean],
+      includeAuthorInTranscription: Option[Boolean]
   ): ZIO[Requirements, HttpError, AggregationBins] = {
     for {
       searchService <- ZIO.service[SearchService]
-      searchResponse <- searchService.getTopAuthors(prefix, maxBins)
+      searchResponse <- searchService.getTopAuthors(
+        prefix,
+        maxBins,
+        includeAuthor.getOrElse(true),
+        includeAuthorInTranscription.getOrElse(true)
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top authors", error))
     .mapError(mapToHttpError)
@@ -180,7 +287,6 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getListLogic(
-      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],

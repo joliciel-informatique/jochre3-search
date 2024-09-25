@@ -39,7 +39,9 @@ private[lucene] class AddNewlineMarkerFilter(input: TokenStream, indexingHelper:
         val offset = offsetAttr.startOffset()
         isNewline = indexingHelper.getDocumentInfo(ref).newlineOffsets.contains(offset)
         if (isNewline) {
-          log.debug(f"Found newline for doc ${ref.ref}  at offset $offset")
+          if (log.isDebugEnabled) {
+            log.debug(f"Found newline for doc ${ref.ref} at offset $offset, word ${termAttr.toString}")
+          }
           attributeState = captureState()
           termAttr.copyBuffer(NEWLINE_TOKEN.toCharArray, 0, NEWLINE_TOKEN.size)
           typeAttr.setType(TokenTypes.NEWLINE_TYPE)
@@ -47,6 +49,7 @@ private[lucene] class AddNewlineMarkerFilter(input: TokenStream, indexingHelper:
       }
       true
     } else {
+      isNewline = false
       false
     }
   }

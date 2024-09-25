@@ -1,12 +1,13 @@
 package com.joliciel.jochre.search.core.service
 
+import cats.implicits._
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
 import com.joliciel.jochre.search.core.{DocReference, SearchCriterion, Sort}
 import doobie._
 import doobie.implicits._
-import doobie.postgres.implicits._
 import doobie.postgres.circe.jsonb.implicits._
+import doobie.postgres.implicits._
 import io.circe.generic.auto._
 import zio._
 import zio.interop.catz._
@@ -14,33 +15,53 @@ import zio.interop.catz._
 import java.time.Instant
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) {
-  implicit val doobieMappingForIndexStatus: Meta[DocumentStatus] =
-    pgEnumStringOpt("document_status", DocumentStatus.fromEnum, DocumentStatus.toEnum)
+  implicit val doobieMappingForIndexStatus: Meta[DocumentStatusCode] =
+    pgEnumStringOpt("document_status", DocumentStatusCode.fromEnum, DocumentStatusCode.toEnum)
 
   def upsertIndexedDocument(
       ref: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      metadataCorrectionRev: Option[MetadataCorrectionRev],
+      metadataCorrections: Seq[DbMetadataCorrection],
       reindex: Boolean
-  ): Task[Int] =
-    sql"""INSERT INTO indexed_document (reference, doc_rev, word_suggestion_rev,  metadata_correction_rev, reindex)
-         | VALUES (${ref.ref}, ${docRev.rev}, ${wordSuggestionRev.map(_.rev)}, ${metadataCorrectionRev.map(
-      _.rev
-    )}, $reindex)
+  ): Task[Int] = {
+    val actions = for {
+      result <- upsertIndexedDocumentInternal(ref, docRev, wordSuggestionRev, reindex)
+      _ <- sql"DELETE FROM indexed_document_correction WHERE reference = ${ref.ref}".update.run
+      _ <- insertIndexedDocumentCorrections(ref, metadataCorrections)
+    } yield result
+    actions.transact(transactor)
+  }
+
+  private def upsertIndexedDocumentInternal(
+      ref: DocReference,
+      docRev: DocRev,
+      wordSuggestionRev: Option[WordSuggestionRev],
+      reindex: Boolean
+  ): doobie.ConnectionIO[Int] =
+    sql"""INSERT INTO indexed_document (reference, doc_rev, word_suggestion_rev, reindex)
+         | VALUES (${ref.ref}, ${docRev.rev}, ${wordSuggestionRev.map(_.rev)}, $reindex)
          | ON CONFLICT (reference)
          | DO UPDATE SET doc_rev=${docRev.rev},
          |   word_suggestion_rev=${wordSuggestionRev.map(_.rev)},
-         |   metadata_correction_rev=${metadataCorrectionRev.map(_.rev)},
          |   reindex=$reindex,
          |   index_time=CURRENT_TIMESTAMP
          | """.stripMargin.update.run
-      .transact(transactor)
+
+  private def insertIndexedDocumentCorrections(
+      ref: DocReference,
+      metadataCorrections: Seq[DbMetadataCorrection]
+  ): doobie.ConnectionIO[Seq[Int]] =
+    metadataCorrections.map { metadataCorrection =>
+      sql"""INSERT INTO indexed_document_correction (reference, field, metadata_correction_rev)
+           | VALUES (${ref.ref}, ${metadataCorrection.field.entryName}, ${metadataCorrection.rev.rev})
+         """.stripMargin.update.run
+    }.sequence
 
   def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] = {
     for {
       docRev <- insertDocumentInternal(ref, username, ipAddress)
-      _ <- upsertIndexedDocument(ref, DocRev(0), None, None, false)
+      _ <- upsertIndexedDocument(ref, DocRev(0), None, Seq.empty, reindex = false)
     } yield docRev
   }
 
@@ -64,12 +85,26 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
        """.stripMargin.update.run
       .transact(transactor)
   }
+  def unmarkForReindex(docRef: DocReference): Task[Int] = {
+    sql"""UPDATE indexed_document d1 SET reindex=${false}
+         | WHERE reference=${docRef.ref}
+       """.stripMargin.update.run
+      .transact(transactor)
+  }
 
-  def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] =
+  def updateDocumentStatus(docRev: DocRev, status: DocumentStatus): Task[Int] = {
+    val statusCode = status.code
+    val failureReason = status match {
+      case DocumentStatus.Failed(reason) => Some(reason)
+      case _                             => None
+    }
     sql"""UPDATE document
-         | SET status=${status}
+         | SET status=$statusCode,
+         | failure_reason=$failureReason,
+         | status_updated=CURRENT_TIMESTAMP
          | WHERE rev=${docRev.rev}""".stripMargin.update.run
       .transact(transactor)
+  }
 
   def deleteDocument(docRev: DocRev): Task[Int] =
     sql"""DELETE FROM document WHERE rev=${docRev.rev}""".stripMargin.update.run
@@ -131,7 +166,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def getDocument(ref: DocReference): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status
+    sql"""SELECT rev, reference, username, ip, created, status, failure_reason, status_updated
          | FROM document d1
          | WHERE d1.reference = ${ref.ref}
          | AND d1.rev = (SELECT MAX(rev) FROM document d2 WHERE d2.reference = d1.reference)
@@ -141,7 +176,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .transact(transactor)
 
   def getDocument(docRev: DocRev): Task[DbDocument] =
-    sql"""SELECT rev, reference, username, ip, created, status
+    sql"""SELECT rev, reference, username, ip, created, status, failure_reason, status_updated
          | FROM document
          | WHERE document.rev = ${docRev.rev}
        """.stripMargin
@@ -149,8 +184,34 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
+  def getIndexedDocument(ref: DocReference): Task[Option[DbIndexedDocument]] =
+    sql"""SELECT reference, doc_rev, word_suggestion_rev, reindex, index_time
+         | FROM indexed_document
+         | WHERE reference = ${ref.ref} 
+       """.stripMargin
+      .query[DbIndexedDocument]
+      .option
+      .transact(transactor)
+
+  def getIndexedDocumentCorrections(ref: DocReference): Task[Seq[DbIndexedDocumentCorrection]] =
+    sql"""SELECT reference, field, metadata_correction_rev
+         | FROM indexed_document_correction
+         | WHERE reference = ${ref.ref}
+         | ORDER BY field
+       """.stripMargin
+      .query[DbIndexedDocumentCorrection]
+      .to[Seq]
+      .transact(transactor)
+
   def getDocumentsToReindex(): Task[Seq[DocReference]] = {
-    val completeStatus: DocumentStatus = DocumentStatus.Complete
+    val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
+
+    // Condition 1 (very rare): the document has been completely saved to the database
+    // but the system was stopped before it got indexed.
+    // Condition 2: the latest word suggestion hasn't yet been taken into account
+    // Condition 3: the latest unignored metadata correction for a given field hasn't yet been taken into account
+    // Condition 4: a metadata correction for a given field has been taken into account, but has since been ignored
+    // Condition 5: the document has been marked for re-index (new alto or new metadata)
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE (
@@ -159,10 +220,41 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          |     AND d.rev > indexdoc.doc_rev)
          |   OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
          |     AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
-         |   OR EXISTS (SELECT rev FROM metadata_correction m
-         |     INNER JOIN metadata_correction_doc md on m.id = md.correction_id
-         |     AND md.doc_ref = indexdoc.reference
-         |     AND m.rev > coalesce(indexdoc.metadata_correction_rev, 0))
+         |   OR EXISTS (
+         |     SELECT mc.rev FROM metadata_correction mc
+         |     INNER JOIN metadata_correction_doc mcd ON mc.id = mcd.correction_id
+         |       AND mcd.doc_ref = indexdoc.reference
+         |     WHERE mc.id = (
+         |       SELECT MAX(mc2.id) FROM metadata_correction mc2
+         |       INNER JOIN metadata_correction_doc mcd2 ON mc2.id = mcd2.correction_id
+         |       WHERE mc2.field = mc.field
+         |         AND mcd2.doc_ref = indexdoc.reference
+         |     ) AND mc.ignore = false
+         |     AND (
+         |       NOT EXISTS (
+         |         SELECT idc.metadata_correction_rev
+         |         FROM indexed_document_correction idc
+         |         WHERE idc.reference = indexdoc.reference AND idc.field = mc.field
+         |       )
+         |       OR mc.rev != (
+         |         SELECT idc.metadata_correction_rev
+         |         FROM indexed_document_correction idc
+         |         WHERE idc.reference = indexdoc.reference AND idc.field = mc.field
+         |       )
+         |     )
+         |   )
+         |   OR EXISTS (
+         |     SELECT idc.metadata_correction_rev FROM indexed_document_correction idc
+         |     WHERE idc.reference = indexdoc.reference
+         |     AND idc.metadata_correction_rev != (
+         |       SELECT COALESCE(MAX(mc.rev), 0)
+         |       FROM metadata_correction mc
+         |       INNER JOIN metadata_correction_doc md ON mc.id = md.correction_id
+         |         AND md.doc_ref = idc.reference
+         |       WHERE mc.field = idc.field
+         |       AND mc.ignore = false
+         |     )
+         |   )
          |   OR reindex
          | )
          | ORDER BY reference
@@ -173,7 +265,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
   }
 
   def isContentUpdated(docRef: DocReference): Task[Boolean] = {
-    val completeStatus: DocumentStatus = DocumentStatus.Complete
+    val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE indexdoc.reference = ${docRef.ref}

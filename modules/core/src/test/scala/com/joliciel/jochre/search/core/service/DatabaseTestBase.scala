@@ -3,7 +3,8 @@ package com.joliciel.jochre.search.core.service
 import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
 import com.typesafe.config.ConfigFactory
-import zio.{Runtime, ZIO}
+import doobie.Transactor
+import zio.{&, Config, Runtime, Scope, Task, ZIO, ZLayer}
 import zio.config.typesafe.TypesafeConfigProvider
 
 trait DatabaseTestBase {
@@ -12,8 +13,9 @@ trait DatabaseTestBase {
   private val configProviderLayer =
     Runtime.setConfigProvider(TypesafeConfigProvider.fromTypesafeConfig(config))
 
-  private val configLayer = configProviderLayer >>> AppConfig.live
-  private val transactorLayer = configLayer >>> PostgresDatabase.transactorLive
+  private val configLayer: ZLayer[Any, Throwable, AppConfig] = configProviderLayer >>> AppConfig.live
+  val transactorLayer: ZLayer[Scope, Throwable, Transactor[Task]] =
+    configLayer >>> PostgresDatabase.transactorLive
 
   val searchRepoLayer = transactorLayer >>> SearchRepo.live
 

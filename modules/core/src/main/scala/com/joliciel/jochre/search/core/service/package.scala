@@ -25,7 +25,8 @@ package object service {
       page: Int,
       start: Int,
       end: Int,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      deepLink: Option[String]
   )
 
   case class Highlight(start: Int, end: Int)
@@ -53,7 +54,8 @@ package object service {
               page = 11,
               start = 100,
               end = 118,
-              highlights = Seq(Highlight(108, 117))
+              highlights = Seq(Highlight(108, 117)),
+              deepLink = Some("https://archive.org/details/nybc200089/page/n10/mode/1up")
             )
           )
         )
@@ -69,16 +71,37 @@ package object service {
     )
   }
 
-  sealed trait DocumentStatus extends EnumEntry
+  sealed trait DocumentStatusCode extends EnumEntry
 
-  object DocumentStatus extends Enum[DocumentStatus] with DoobieEnum[DocumentStatus] {
+  object DocumentStatusCode extends Enum[DocumentStatusCode] with DoobieEnum[DocumentStatusCode] {
     val values = findValues
 
-    case object Underway extends DocumentStatus
-    case object Complete extends DocumentStatus
+    case object Underway extends DocumentStatusCode
+    case object Complete extends DocumentStatusCode
+    case object Indexed extends DocumentStatusCode
+    case object Failed extends DocumentStatusCode
 
-    def toEnum(code: DocumentStatus): String = code.entryName
-    def fromEnum(s: String): Option[DocumentStatus] = DocumentStatus.withNameOption(s)
+    def toEnum(code: DocumentStatusCode): String = code.entryName
+    def fromEnum(s: String): Option[DocumentStatusCode] = DocumentStatusCode.withNameOption(s)
+  }
+
+  sealed trait DocumentStatus {
+    def code: DocumentStatusCode
+  }
+
+  object DocumentStatus {
+    case object Underway extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Underway
+    }
+    case object Complete extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Complete
+    }
+    case object Indexed extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Indexed
+    }
+    case class Failed(reason: String) extends DocumentStatus {
+      val code: DocumentStatusCode = DocumentStatusCode.Failed
+    }
   }
 
   private[core] case class DocRev(rev: Long) extends AnyVal
@@ -89,8 +112,17 @@ package object service {
       username: String,
       ipAddress: Option[String],
       created: Instant,
-      status: DocumentStatus
-  )
+      statusCode: DocumentStatusCode,
+      failureReason: Option[String],
+      statusUpdated: Instant
+  ) {
+    val status: DocumentStatus = statusCode match {
+      case DocumentStatusCode.Underway => DocumentStatus.Underway
+      case DocumentStatusCode.Complete => DocumentStatus.Complete
+      case DocumentStatusCode.Indexed  => DocumentStatus.Indexed
+      case DocumentStatusCode.Failed   => DocumentStatus.Failed(failureReason.getOrElse("Unknown"))
+    }
+  }
 
   private[service] case class PageId(id: Long) extends AnyVal
   private[service] case class DbPage(id: PageId, docRev: DocRev, index: Int, width: Int, height: Int, offset: Int)
@@ -190,8 +222,14 @@ package object service {
       docRef: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      metadataCorrectionRev: Option[MetadataCorrectionRev],
-      reindex: Boolean
+      reindex: Boolean,
+      indexTime: Instant
+  )
+
+  private[service] case class DbIndexedDocumentCorrection(
+      docRef: DocReference,
+      field: MetadataField,
+      rev: MetadataCorrectionRev
   )
 
   trait MetadataReader {
@@ -216,6 +254,8 @@ package object service {
           val publisher = (fileXml \\ "publisher").headOption.map(_.textContent)
           val volume = (fileXml \\ "volume").headOption.map(_.textContent)
           val url = (fileXml \\ "identifier-access").headOption.map(_.textContent)
+          val collections = (fileXml \\ "collection").map(_.textContent)
+
           DocMetadata(
             title = title,
             titleEnglish = titleEnglish,
@@ -224,7 +264,8 @@ package object service {
             publicationYear = date,
             publisher = publisher,
             volume = volume,
-            url = url
+            url = url,
+            collections = collections
           )
         }.get
       }
@@ -239,6 +280,7 @@ package object service {
           {metadata.title.map(value => <title-alt-script>{value}</title-alt-script>).orNull}
           {metadata.author.map(value => <creator-alt-script>{value}</creator-alt-script>).orNull}
           {metadata.url.map(value => <identifier-access>{value}</identifier-access>).orNull}
+          {metadata.collections.map(value => <collection>{value}</collection>)}
         </metadata>
 
         val prettyPrinter = new PrettyPrinter(120, 2)

@@ -39,7 +39,9 @@ private[lucene] class AddPageMarkerFilter(input: TokenStream, indexingHelper: In
         val offset = offsetAttr.startOffset()
         isNewPage = indexingHelper.getDocumentInfo(ref).pageOffsets.contains(offset)
         if (isNewPage) {
-          log.debug(f"Found new page for doc ${ref.ref} at offset $offset")
+          if (log.isDebugEnabled) {
+            log.debug(f"Found new page for doc ${ref.ref} at offset $offset, word ${termAttr.toString}")
+          }
           attributeState = captureState()
           termAttr.copyBuffer(PAGE_TOKEN.toCharArray, 0, PAGE_TOKEN.size)
           typeAttr.setType(TokenTypes.PAGE_TYPE)
@@ -47,6 +49,7 @@ private[lucene] class AddPageMarkerFilter(input: TokenStream, indexingHelper: In
       }
       true
     } else {
+      isNewPage = false
       false
     }
   }

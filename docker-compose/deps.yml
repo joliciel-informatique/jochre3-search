@@ -16,6 +16,7 @@ services:
       options:
         max-size: "5m"
         max-file: "10"
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c max_connections=200
   postgres-test:
     image: postgres:16.2-alpine
     environment:

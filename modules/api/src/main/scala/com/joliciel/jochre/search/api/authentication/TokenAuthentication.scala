@@ -2,8 +2,7 @@ package com.joliciel.jochre.search.api.authentication
 
 import com.joliciel.jochre.search.api.HttpError
 import com.joliciel.jochre.search.api.HttpError.Unauthorized
-import com.joliciel.jochre.search.api.MainApp.getClass
-import com.safetydata.cloakroom.scala.{VerificationError, VerifiedToken}
+import com.safetydata.cloakroom.scala.{CouldNotParseToken, InvalidToken, VerificationError, VerifiedToken}
 import io.circe.generic.auto._
 import org.slf4j.LoggerFactory
 import sttp.model.StatusCode
@@ -22,12 +21,12 @@ trait TokenAuthentication {
 
   def secureEndpoint[R](
       requiresRoles: RoleName*
-  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, Unauthorized, Unit, Any] =
+  )(implicit ec: ExecutionContext): ZPartialServerEndpoint[R, String, ValidToken, Unit, HttpError, Unit, Any] =
     RichZEndpoint(
       tapirEndpoint
         .securityIn(authenticationProvider.tokenEndpointInput)
         .errorOut(
-          oneOf[Unauthorized](
+          oneOf[HttpError](
             oneOfVariant[Unauthorized](
               StatusCode.Unauthorized,
               jsonBody[Unauthorized].description("Invalid token or missing permissions")
@@ -61,6 +60,12 @@ trait TokenAuthentication {
     }
     .flatMap(ZIO.fromEither[VerificationError, VerifiedToken](_))
     .mapError {
+      case InvalidToken(Some(underlyingError), reason) =>
+        log.error(f"Invalid token: $reason", underlyingError)
+        Unauthorized(f"Invalid token: $reason")
+      case CouldNotParseToken(Some(underlyingError), reason) =>
+        log.error(f"Could not parse token: $reason", underlyingError)
+        Unauthorized(f"Could not parse token: $reason")
       case error: VerificationError =>
         log.error(f"Token verification error: ${error.reason}")
         Unauthorized(f"Token verification error: ${error.reason}")

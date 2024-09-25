@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.service
 
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{Page, Word}
-import com.joliciel.jochre.search.core.{DocReference, IndexField, SearchCriterion, Sort}
+import com.joliciel.jochre.search.core.{DocReference, IndexField, MetadataField, SearchCriterion, Sort}
 import zio.Scope
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
@@ -18,10 +18,41 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val startTime = Instant.now()
       for {
         searchRepo <- getSearchRepo()
+        suggestionRepo <- getSuggestionRepo()
         docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
         doc <- searchRepo.getDocument(docRef)
         doc2 <- searchRepo.getDocument(docRev)
+        _ <- searchRepo.updateDocumentStatus(docRev, DocumentStatus.Complete)
         docsToReindex <- searchRepo.getDocumentsToReindex()
+        indexedDoc1 <- searchRepo.getIndexedDocument(docRef)
+        _ <- suggestionRepo.insertMetadataCorrection(
+          joe,
+          joeIp,
+          MetadataField.Author,
+          Some("Joe Schmoe"),
+          "Joseph Schmozeph",
+          applyEverywhere = true,
+          Seq(docRef)
+        )
+        _ <- suggestionRepo.insertMetadataCorrection(
+          joe,
+          joeIp,
+          MetadataField.Publisher,
+          None,
+          "Schmoe Editions Ltd",
+          applyEverywhere = false,
+          Seq(docRef)
+        )
+        corrections <- suggestionRepo.getMetadataCorrections(docRef)
+        _ <- searchRepo.upsertIndexedDocument(
+          docRef,
+          docRev,
+          Some(WordSuggestionRev(42)),
+          corrections,
+          reindex = true
+        )
+        indexedDoc2 <- searchRepo.getIndexedDocument(docRef)
+        indexedCorrections <- searchRepo.getIndexedDocumentCorrections(docRef)
       } yield {
         assertTrue(doc.rev == docRev) &&
         assertTrue(doc.ref == docRef) &&
@@ -29,7 +60,15 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(doc.ipAddress == joeIp) &&
         assertTrue(doc.created.toEpochMilli > startTime.toEpochMilli) &&
         assertTrue(doc == doc2) &&
-        assertTrue(docsToReindex == Seq(docRef))
+        assertTrue(docsToReindex == Seq(docRef)) &&
+        assertTrue(indexedDoc1.isDefined) &&
+        assertTrue(indexedDoc1.get.docRev == DocRev(0)) &&
+        assertTrue(!indexedDoc1.get.reindex) &&
+        assertTrue(indexedDoc2.isDefined) &&
+        assertTrue(indexedDoc2.get.wordSuggestionRev.contains(WordSuggestionRev(42))) &&
+        assertTrue(indexedCorrections.map(_.field) == Seq(MetadataField.Author, MetadataField.Publisher)) &&
+        assertTrue(indexedDoc2.get.reindex) &&
+        assertTrue(indexedDoc2.get.docRev == docRev)
       }
     },
     test("insert page") {
@@ -176,5 +215,5 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(queries.head.id == queryId)
       }
     }
-  ).provideLayer(searchRepoLayer) @@ TestAspect.sequential
+  ).provideLayer(searchRepoLayer ++ suggestionRepoLayer) @@ TestAspect.sequential
 }

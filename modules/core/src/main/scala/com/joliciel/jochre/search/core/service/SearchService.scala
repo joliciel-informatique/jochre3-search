@@ -12,11 +12,12 @@ import org.apache.pdfbox.io.RandomAccessReadBuffer
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
 import org.slf4j.LoggerFactory
+import zio.stream.{ZSink, ZStream}
 import zio.{&, Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
-import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream}
+import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -77,7 +78,8 @@ trait SearchService {
       rowPadding: Option[Int] = None,
       username: String = "unknown",
       ipAddress: Option[String] = None,
-      addOffsets: Boolean = true
+      addOffsets: Boolean = true,
+      physicalNewLines: Boolean = true
   ): Task[SearchResponse]
 
   def list(
@@ -92,6 +94,13 @@ trait SearchService {
       highlights: Seq[Highlight]
   ): Task[BufferedImage]
 
+  def getImageSnippetAndHighlights(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[(BufferedImage, Seq[Rectangle])]
+
   def aggregate(
       query: SearchQuery,
       field: IndexField,
@@ -100,7 +109,9 @@ trait SearchService {
 
   def getTopAuthors(
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthorField: Boolean,
+      includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins]
 
   def getTextAsHtml(
@@ -132,7 +143,7 @@ trait SearchService {
       ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
-      value: String,
+      newValue: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId]
 
@@ -167,6 +178,7 @@ private[service] case class SearchServiceImpl(
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val indexParallelism = config.getInt("index-parallelism")
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -354,11 +366,17 @@ private[service] case class SearchServiceImpl(
 
         for {
           indexData <- altoIndexer.index()
+          _ <- ZIO.succeed(
+            log.info(
+              f"Updating indexed document for ${docRef.ref}: docRev: ${indexData.docRev.rev}, wordSuggestionRev: ${indexData.wordSuggestionRev
+                .map(_.rev)}, corrections: ${indexData.corrections.map(c => f"(${c.rev.rev} => ${c.field.entryName})").mkString(", ")}"
+            )
+          )
           _ <- searchRepo.upsertIndexedDocument(
             docRef,
             indexData.docRev,
             indexData.wordSuggestionRev,
-            indexData.metadataCorrectionRev,
+            indexData.corrections,
             reindex = false
           )
         } yield indexData.pageCount
@@ -588,7 +606,8 @@ private[service] case class SearchServiceImpl(
       rowPadding: Option[Int],
       username: String,
       ipAddress: Option[String],
-      addOffsets: Boolean
+      addOffsets: Boolean,
+      physicalNewLines: Boolean
   ): Task[SearchResponse] = {
     for {
       initialResponse <- ZIO.fromTry {
@@ -613,9 +632,24 @@ private[service] case class SearchServiceImpl(
       }
       responseWithPages <- ZIO.attempt {
         initialResponse.copy(results = initialResponse.results.zip(pages).map { case (searchResult, pages) =>
-          searchResult.copy(snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
-            snippet.copy(page = page.map(_.index).getOrElse(-1))
-          })
+          val bookUrl = searchResult.metadata.getBookUrl(searchResult.docRef)
+
+          searchResult.copy(
+            metadata = searchResult.metadata.copy(url = bookUrl),
+            snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
+              val pageNumber = page.map(_.index)
+              val deepLink = pageNumber.flatMap(searchResult.metadata.getDeepLink(searchResult.docRef, _))
+              snippet.copy(
+                text = if (physicalNewLines) {
+                  snippet.text
+                } else {
+                  snippet.text.replaceAll("<br><br>", "<p>").replaceAll("<br>", " ").replaceAll("<p>", "<br>")
+                },
+                page = pageNumber.getOrElse(-1),
+                deepLink = deepLink
+              )
+            }
+          )
         })
       }
     } yield responseWithPages
@@ -644,20 +678,32 @@ private[service] case class SearchServiceImpl(
     }.get
   }
 
-  override def getTopAuthors(
+  def getTopAuthors(
       prefix: String,
-      maxBins: Int
+      maxBins: Int,
+      includeAuthorField: Boolean,
+      includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins] = ZIO.fromTry {
+    val fields = (Seq.empty[Option[IndexField]] :+
+      Option.when(includeAuthorField)(IndexField.Author) :+
+      Option.when(includeAuthorInTranscriptionField)(IndexField.AuthorEnglish)).flatten
+
+    if (fields.isEmpty) {
+      throw new NoFieldRequestedForAggregation()
+    }
+
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.Author, prefix))
-      val bins = searcher.aggregate(searchQuery, IndexField.Author, maxBins)
-      val transcribedBins = if (bins.isEmpty) {
-        val searchQuery = SearchQuery(SearchCriterion.StartsWith(IndexField.AuthorEnglish, prefix))
-        searcher.aggregate(searchQuery, IndexField.AuthorEnglish, maxBins)
-      } else {
-        bins
-      }
-      AggregationBins(transcribedBins.sortBy(_.label))
+      val bins = fields
+        .map { field =>
+          val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
+          searcher.aggregate(query, field, maxBins)
+        }
+        .flatten
+        .sortBy(0 - _.count)
+        .take(maxBins)
+        .sortBy(_.label)
+
+      AggregationBins(bins)
     }
   }
 
@@ -667,6 +713,25 @@ private[service] case class SearchServiceImpl(
       endOffset: Int,
       highlights: Seq[Highlight]
   ): Task[BufferedImage] = {
+    getImageAndHighlightRects(docRef, startOffset, endOffset, highlights, drawHighlights = true).map(_._1)
+  }
+
+  override def getImageSnippetAndHighlights(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[(BufferedImage, Seq[Rectangle])] = {
+    getImageAndHighlightRects(docRef, startOffset, endOffset, highlights, drawHighlights = false)
+  }
+
+  private def getImageAndHighlightRects(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      drawHighlights: Boolean
+  ): Task[(BufferedImage, Seq[Rectangle])] = {
     for {
       luceneDoc <- ZIO.attempt {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -705,7 +770,7 @@ private[service] case class SearchServiceImpl(
         }
       }
       page <- searchRepo.getPage(rows.head.pageId)
-      image <- ZIO.attempt {
+      imageAndRectangles <- ZIO.attempt {
         val pageImagePath = docRef.getExistingPageImagePath(page.index)
         val originalImage = ImageIO.read(pageImagePath.toFile)
 
@@ -737,12 +802,7 @@ private[service] case class SearchServiceImpl(
 
         val allWordsToHighlight = highlightWords ++ hyphenatedWords.flatten
 
-        if (log.isDebugEnabled) {
-          log.debug(f"Rows: ${rows.mkString(", ")}")
-          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
-        }
-
-        allWordsToHighlight.foreach { highlightWord =>
+        val highlightRectangles = allWordsToHighlight.map { highlightWord =>
           val highlightRect = Rectangle(
             left = (highlightWord.rect.left * horizontalScale).toInt,
             top = (highlightWord.rect.top * verticalScale).toInt,
@@ -750,25 +810,43 @@ private[service] case class SearchServiceImpl(
             height = (highlightWord.rect.height * verticalScale).toInt
           ).intersection(Rectangle(0, 0, originalImage.getWidth, originalImage.getHeight)).get
 
-          graphics2D.setStroke(new BasicStroke(1))
-          graphics2D.setPaint(Color.BLACK)
-          graphics2D.drawRect(
+          val relativeRect = Rectangle(
             highlightRect.left - snippetRect.left - extra,
             highlightRect.top - snippetRect.top - extra,
             highlightRect.width + (extra * 2),
             highlightRect.height + (extra * 2)
-          )
-          graphics2D.setColor(new Color(255, 255, 0, 127))
-          graphics2D.fillRect(
-            highlightRect.left - snippetRect.left - extra,
-            highlightRect.top - snippetRect.top - extra,
-            highlightRect.width + (extra * 2),
-            highlightRect.height + (extra * 2)
-          )
+          ).intersection(Rectangle(0, 0, snippetRect.width, snippetRect.height)).get
+
+          relativeRect
         }
-        imageSnippet
+
+        if (log.isDebugEnabled) {
+          log.debug(f"Rows: ${rows.mkString(", ")}")
+          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
+        }
+
+        if (drawHighlights) {
+          highlightRectangles.foreach { highlightRect =>
+            graphics2D.setStroke(new BasicStroke(1))
+            graphics2D.setPaint(Color.BLACK)
+            graphics2D.drawRect(
+              highlightRect.left,
+              highlightRect.top,
+              highlightRect.width,
+              highlightRect.height
+            )
+            graphics2D.setColor(new Color(255, 255, 0, 127))
+            graphics2D.fillRect(
+              highlightRect.left,
+              highlightRect.top,
+              highlightRect.width,
+              highlightRect.height
+            )
+          }
+        }
+        imageSnippet -> highlightRectangles
       }
-    } yield { image }
+    } yield { imageAndRectangles }
   }
 
   override def getIndexSize(): Task[Int] = ZIO.fromTry {
@@ -797,18 +875,23 @@ private[service] case class SearchServiceImpl(
       val title = docWithInfo._2
       val text = docWithInfo._3
 
-      val textWithPageBreaks = pages
+      val pagesWithText = pages
         .appended(DbPage(PageId(0), docWithInfo._1, 0, 0, 0, text.length))
-        .foldLeft(new StringBuilder() -> 0) { case ((textSoFar, lastOffset), page) =>
+        .foldLeft((Seq.empty[(Int, String)], 0, 0)) { case ((textSoFar, lastOffset, lastIndex), page) =>
           val nextPage = text.substring(lastOffset, page.offset).replaceAll("\n", "<br>")
-          textSoFar.append(nextPage + f"""<hr id="page${page.index}">""") -> page.offset
+          (textSoFar :+ (lastIndex -> nextPage), page.offset, page.index)
         }
         ._1
-        .toString()
 
-      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + textWithPageBreaks.substring(
-        docRef.ref.length + "<br>".length
-      )
+      val html = if (pagesWithText.isEmpty) {
+        ""
+      } else {
+        pagesWithText.tail.map { case (pageIndex, text) =>
+          f"""<div id="page$pageIndex">$text<hr></div>"""
+        }.mkString
+      }
+
+      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + html
       response
     }
 
@@ -983,18 +1066,39 @@ private[service] case class SearchServiceImpl(
   override def reindex(docRef: DocReference): Task[Int] = {
     log.info(f"About to re-index ${docRef.ref}")
     for {
-      altoStream <- ZIO.attempt {
-        val altoFile = docRef.getAltoPath()
-        new FileInputStream(altoFile.toFile)
-      }
-      alto <- readAndStoreAlto(docRef, altoStream)
-      metadata <- ZIO.attempt {
-        getMetadata(docRef).getOrElse(DocMetadata())
-      }
       currentDoc <- searchRepo.getDocument(docRef)
-      contentUpdated <- searchRepo.isContentUpdated(docRef)
-      pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
-      _ <- searchRepo.deleteOldRevs(docRef)
+      pageCount <- (for {
+        altoStream <- ZIO.attempt {
+          val altoFile = docRef.getAltoPath()
+          new FileInputStream(altoFile.toFile)
+        }
+        alto <- readAndStoreAlto(docRef, altoStream)
+        metadata <- ZIO.attempt {
+          getMetadata(docRef).getOrElse(DocMetadata())
+        }
+        contentUpdated <- searchRepo.isContentUpdated(docRef)
+        pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
+        _ <- searchRepo.deleteOldRevs(docRef)
+      } yield pageCount)
+        .catchAll { ex: Throwable =>
+          val sw = new StringWriter()
+          val pw = new PrintWriter(sw)
+          ex.printStackTrace(pw)
+          val messageWithStackTrace = f"${ex.getMessage}\n${sw.toString}"
+          (for {
+            _ <- searchRepo.updateDocumentStatus(currentDoc.rev, DocumentStatus.Failed(messageWithStackTrace))
+            _ <- searchRepo.unmarkForReindex(docRef)
+          } yield ())
+            .foldZIO(
+              failure => {
+                log.error(f"Unable to mark document failure for ${docRef.ref}", failure)
+                ZIO.fail(ex)
+              },
+              _ => {
+                ZIO.fail(ex)
+              }
+            )
+        }
     } yield pageCount
   }
 
@@ -1023,10 +1127,10 @@ private[service] case class SearchServiceImpl(
       ipAddress: Option[String],
       docRef: DocReference,
       field: MetadataField,
-      value: String,
+      newValue: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId] = {
-    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $value")
+    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $newValue")
     val shouldSendMail = config.getBoolean("corrections.send-mail")
     for {
       oldValue <- ZIO.attempt {
@@ -1035,7 +1139,8 @@ private[service] case class SearchServiceImpl(
             .getByDocRef(docRef)
             .getOrElse(throw new DocumentNotFoundInIndex(docRef))
 
-          luceneDoc.getMetaValue(field)
+          // If the existing value is empty, we don't want to replace it everywhere, hence .filter(_.trim.nonEmpty)
+          luceneDoc.getMetaValue(field).filter(_.trim.nonEmpty)
         }
       }
       docRefs <- ZIO
@@ -1059,7 +1164,7 @@ private[service] case class SearchServiceImpl(
         ipAddress,
         field,
         oldValue,
-        value,
+        newValue,
         applyEverywhere,
         docRefs
       )
@@ -1117,7 +1222,15 @@ private[service] case class SearchServiceImpl(
           _ <- ZIO.attempt {
             log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
           }
-          _ <- ZIO.foreach(docRefs) { docRef => reindex(docRef) }
+          _ <- ZStream
+            .fromIterable(docRefs)
+            .mapZIOParUnordered(indexParallelism) { docRef =>
+              reindex(docRef)
+                .catchAll { e: Throwable =>
+                  ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", e))
+                }
+            }
+            .run(ZSink.foreach(pageCount => ZIO.succeed(log.info(f"Indexed $pageCount pages"))))
         } yield true
       }
     }

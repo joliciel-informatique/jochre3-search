@@ -7,13 +7,13 @@ import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
 import com.joliciel.jochre.search.core.service.MetadataCorrectionId
 import com.joliciel.jochre.search.core.{CoreProtocol, DocReference, MetadataField}
 import io.circe.generic.auto._
+import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
 import sttp.tapir.AnyEndpoint
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.ztapir._
-import shapeless.syntax.std.tuple._
 
 import scala.concurrent.ExecutionContext
 
@@ -34,7 +34,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
@@ -42,7 +42,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[Conflict](
           StatusCode.Conflict,
           jsonBody[Conflict].description(
@@ -60,7 +60,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .out(jsonBody[IndexResponse].example(IndexHelper.indexResponseExample))
       .description("Add a new document defined by a PDF, zipped Alto XML, and optionally metadata")
 
-  private val putPdfHttp: ZServerEndpoint[Requirements, Any] =
+  private[index] val putPdfHttp =
     putPdfEndpoint.serverLogic[Requirements](token => input => (putPdfLogic _).tupled(token +: input))
 
   private val putImageZipEndpoint: ZPartialServerEndpoint[
@@ -73,7 +73,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
@@ -81,7 +81,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[Conflict](
           StatusCode.Conflict,
           jsonBody[Conflict].description(
@@ -115,7 +115,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
@@ -123,7 +123,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -154,7 +154,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
@@ -162,7 +162,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
           )
         )
       )
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -193,7 +193,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -224,7 +224,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint()
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -256,7 +256,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint()
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -297,7 +297,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(
@@ -325,7 +325,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -356,7 +356,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -387,7 +387,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[NotFound](
           StatusCode.NotFound,
           jsonBody[NotFound].description(
@@ -418,7 +418,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Any
   ] =
     secureEndpoint(Roles.index)
-      .errorOutVariant[HttpError](
+      .errorOutVariantPrepend[HttpError](
         oneOfVariant[BadRequest](
           StatusCode.BadRequest,
           jsonBody[BadRequest].description(

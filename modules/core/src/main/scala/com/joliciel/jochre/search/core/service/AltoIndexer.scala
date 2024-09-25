@@ -7,6 +7,7 @@ import com.joliciel.jochre.ocr.core.model.{
   Page,
   SpellingAlternative,
   SubsType,
+  TextBlock,
   TextLine,
   Word,
   WordOrSpace
@@ -25,6 +26,8 @@ import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.slf4j.LoggerFactory
 import zio.{Task, ZIO}
+
+import java.io.{PrintWriter, StringWriter}
 
 case class AltoIndexer(
     jochreIndex: JochreIndex,
@@ -45,7 +48,7 @@ case class AltoIndexer(
   case class IndexData(
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      metadataCorrectionRev: Option[MetadataCorrectionRev],
+      corrections: Seq[DbMetadataCorrection],
       pageCount: Int
   )
 
@@ -59,37 +62,56 @@ case class AltoIndexer(
       suggestions <- suggestionRepo.getSuggestions(docRef)
       corrections <- suggestionRepo.getMetadataCorrections(docRef)
       documentData <- persistDocument(suggestions)
-      pageCount <- ZIO.attempt {
-        val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
-          log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
-          correction.field.applyToMetadata(metadata, correction.newValue)
-        }
-
-        val ocrSoftware = alto.processingSteps.headOption.flatMap{step =>
-          val software = Seq(step.softwareName, step.softwareVersion).flatten.mkString(" ")
-          Option.when(software.nonEmpty)(software)
-        }
-
-        val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata, ocrSoftware)
-        val docInfo =
-          DocumentIndexInfo(
-            documentData.pageOffsets,
-            documentData.newlineOffsets,
-            documentData.hyphenatedWordOffsets,
-            documentData.alternativesAtOffset
-          )
-        jochreIndex.addDocumentInfo(docRef, docInfo)
-        log.info(f"Finished processing Alto, about to index document ${docRef.ref}")
-        jochreIndex.indexer.indexDocument(document)
-        val refreshed = jochreIndex.refresh
-        log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
-        documentData.pageCount
-      }
       _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Complete)
+      pageCount <- ZIO
+        .attempt {
+          val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
+            log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
+            correction.field.applyToMetadata(metadata, correction.newValue)
+          }
+
+          val ocrSoftware = alto.processingSteps.headOption.flatMap { step =>
+            val software = Seq(step.softwareName, step.softwareVersion).flatten.mkString(" ")
+            Option.when(software.nonEmpty)(software)
+          }
+
+          val document = AltoDocument(docRef, documentData.docRev, documentData.text, correctedMetadata, ocrSoftware)
+          val docInfo =
+            DocumentIndexInfo(
+              documentData.pageOffsets,
+              documentData.newlineOffsets,
+              documentData.hyphenatedWordOffsets,
+              documentData.alternativesAtOffset
+            )
+          jochreIndex.addDocumentInfo(docRef, docInfo)
+          log.info(f"Finished processing Alto, about to index document ${docRef.ref}")
+          jochreIndex.indexer.indexDocument(document)
+          val refreshed = jochreIndex.refresh
+          log.info(f"Finished indexing document ${docRef.ref}. Index refreshed? $refreshed")
+          documentData.pageCount
+        }
+        .catchAll { case ex: Throwable =>
+          val sw = new StringWriter();
+          val pw = new PrintWriter(sw)
+          ex.printStackTrace(pw)
+          val messageWithStackTrace = f"${ex.getMessage}\n${sw.toString}"
+          searchRepo
+            .updateDocumentStatus(documentData.docRev, DocumentStatus.Failed(messageWithStackTrace))
+            .foldZIO(
+              failure => {
+                log.error(f"Unable to mark document failure for ${docRef.ref}", failure)
+                ZIO.fail(ex)
+              },
+              _ => {
+                ZIO.fail(ex)
+              }
+            )
+        }
+      _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Indexed)
     } yield IndexData(
       docRev = documentData.docRev,
       wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
-      metadataCorrectionRev = corrections.map(_.rev).maxOption(MetadataCorrectionRev.ordering),
+      corrections,
       pageCount = pageCount
     )
   }
@@ -202,48 +224,39 @@ case class AltoIndexer(
             )
         }
       pageWithSuggestions <- ZIO.attempt { replaceSuggestions(page, suggestions) }
-      textLineSeq <- ZIO.attempt {
-        if (pageWithSuggestions.textLinesWithRectangles.nonEmpty) {
-          pageWithSuggestions.textLinesWithRectangles
-            .zip(
-              pageWithSuggestions.allTextLines.tail.map(Some(_)) :+ None
-            )
-            .zipWithIndex
-        } else {
-          Seq.empty
-        }
-      }
       pageData <- ZIO
-        .iterate(textLineSeq -> Seq.empty[RowData])(
+        .iterate(pageWithSuggestions.allTextBlocks -> Seq.empty[TextBlockData])(
           cont = { case (t, _) =>
             t.nonEmpty
           }
-        ) { case (textLinesWithRectangles, rowDataSeq) =>
-          textLinesWithRectangles match {
-            case (((textLine, rect), nextTextLine), rowIndex) +: tail =>
-              val currentStartOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
+        ) { case (textBoxes, textBlockDataSeq) =>
+          textBoxes match {
+            case textBlock +: tail =>
+              val currentStartOffset = textBlockDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
+              val currentStartRowIndex = textBlockDataSeq.lastOption.map(_.endRowIndex).getOrElse(0)
               for {
-                rowData <- persistRow(
+                textBlockData <- persistTextBlock(
                   docRev,
+                  page,
                   pageId,
-                  page.physicalPageNumber,
-                  textLine,
-                  nextTextLine,
-                  rowIndex,
-                  rect,
+                  textBlock,
+                  currentStartRowIndex,
                   currentStartOffset
                 )
-              } yield (tail, rowDataSeq :+ rowData)
+              } yield (tail, textBlockDataSeq :+ textBlockData)
           }
         }
-        .mapAttempt { case (_, rowDataSeq) =>
-          val alternativesAtOffset = rowDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
-            case (map, rowData) => map ++ rowData.alternativesAtOffset
+        .mapAttempt { case (_, textBlockDataSeq) =>
+          val alternativesAtOffset = textBlockDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
+            case (map, textBlockData) => map ++ textBlockData.alternativesAtOffset
           }
-          val newlineOffsets = rowDataSeq.map(_.endOffset).toSet
-          val finalOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
-          val text = rowDataSeq.map(_.text).mkString
-          val hyphenatedWordOffsets = rowDataSeq.flatMap(_.hyphenatedWordOffset).toSet
+          val newlineOffsets = textBlockDataSeq.flatMap(_.newlineOffsets).toSet
+          if (log.isDebugEnabled) {
+            log.debug(f"For page, found new line offsets at: ${newlineOffsets.mkString(", ")}")
+          }
+          val finalOffset = textBlockDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
+          val text = textBlockDataSeq.map(_.text).mkString
+          val hyphenatedWordOffsets = textBlockDataSeq.flatMap(_.hyphenatedWordOffsets).toSet
           PageData(text, finalOffset, newlineOffsets, alternativesAtOffset, hyphenatedWordOffsets)
         }
     } yield pageData
@@ -345,6 +358,86 @@ case class AltoIndexer(
       case _ => withSuggestions
     }
     textLine.copy(wordsAndSpaces = withHyphen)
+  }
+
+  private case class TextBlockData(
+      text: String,
+      endOffset: Int,
+      endRowIndex: Int,
+      newlineOffsets: Set[Int],
+      alternativesAtOffset: Map[Int, Seq[SpellingAlternative]],
+      hyphenatedWordOffsets: Set[Int]
+  )
+
+  private def persistTextBlock(
+      docRev: DocRev,
+      page: Page,
+      pageId: PageId,
+      textBlock: TextBlock,
+      startRowIndex: Int,
+      startOffset: Int
+  ): Task[TextBlockData] = {
+    for {
+      textLineSeq <- ZIO.attempt {
+        if (textBlock.textLinesWithRectangles.nonEmpty) {
+          textBlock.textLinesWithRectangles
+            .zip(
+              textBlock.textLines.tail.map(Some(_)) :+ None
+            )
+            .zipWithIndex
+        } else {
+          Seq.empty
+        }
+      }
+      textBlockData <- ZIO
+        .iterate(textLineSeq -> Seq.empty[RowData])(
+          cont = { case (t, _) =>
+            t.nonEmpty
+          }
+        ) { case (textLinesWithRectangles, rowDataSeq) =>
+          textLinesWithRectangles match {
+            case (((textLine, rect), nextTextLine), rowIndex) +: tail =>
+              val currentStartOffset = rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset)
+              for {
+                rowData <- persistRow(
+                  docRev,
+                  pageId,
+                  page.physicalPageNumber,
+                  textLine,
+                  nextTextLine,
+                  startRowIndex + rowIndex,
+                  rect,
+                  currentStartOffset
+                )
+              } yield (tail, rowDataSeq :+ rowData)
+          }
+        }
+        .mapAttempt { case (_, rowDataSeq) =>
+          val alternativesAtOffset = rowDataSeq.foldLeft(Map.empty[Int, Seq[SpellingAlternative]]) {
+            case (map, rowData) => map ++ rowData.alternativesAtOffset
+          }
+          val finalOffset =
+            rowDataSeq.lastOption.map(_.endOffset).getOrElse(startOffset) + 1 // 1 for the added newline character
+          val newlineOffsets = if (rowDataSeq.isEmpty) {
+            Set.empty[Int]
+          } else {
+            rowDataSeq.init.map(_.endOffset).toSet + finalOffset
+          }
+          if (log.isDebugEnabled) {
+            log.debug(f"For text block, found new line offsets at: ${newlineOffsets.mkString(", ")}")
+          }
+          val text = rowDataSeq.map(_.text).mkString
+          val hyphenatedWordOffsets = rowDataSeq.flatMap(_.hyphenatedWordOffset).toSet
+          TextBlockData(
+            text = text + "\n", // Add another newline at the end-of-paragraph
+            endOffset = finalOffset,
+            endRowIndex = startRowIndex + rowDataSeq.length,
+            newlineOffsets,
+            alternativesAtOffset,
+            hyphenatedWordOffsets
+          )
+        }
+    } yield textBlockData
   }
 
   private case class RowData(

@@ -55,6 +55,8 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
       }
       true
     } else {
+      setAside = Seq.empty
+      hasNext = true
       false
     }
   }
