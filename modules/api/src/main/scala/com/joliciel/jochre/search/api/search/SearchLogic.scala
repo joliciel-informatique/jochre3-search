@@ -17,6 +17,7 @@ import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.util.Base64
 import javax.imageio.ImageIO
 
 trait SearchLogic extends HttpErrorMapper {
@@ -160,6 +161,35 @@ trait SearchLogic extends HttpErrorMapper {
       }
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
+    .mapError(mapToHttpError)
+
+  def getImageSnippetWithHighlightsLogic(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): ZIO[Requirements, HttpError, ImageSnippetResponse] = {
+    for {
+      searchService <- ZIO.service[SearchService]
+      imageSnippetAndHighlights <- searchService.getImageSnippetAndHighlights(
+        docRef,
+        startOffset,
+        endOffset,
+        highlights
+      )
+      response <- ZIO.attempt {
+        imageSnippetAndHighlights match {
+          case (imageSnippet, highlights) =>
+            val out = new ByteArrayOutputStream()
+            ImageIO.write(imageSnippet, "png", out)
+            val bytes = out.toByteArray
+            val encoder = Base64.getEncoder()
+            val base64Image = encoder.encodeToString(bytes)
+            ImageSnippetResponse(base64Image, highlights)
+        }
+      }
+    } yield response
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet with highlights", error))
     .mapError(mapToHttpError)
 
   def getAggregateLogic(

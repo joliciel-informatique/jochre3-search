@@ -1,10 +1,13 @@
 package com.joliciel.jochre.search.api
 
+import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.search.core.{IndexField, Sort}
 import enumeratum.{Enum, EnumEntry}
 
 package object search {
   case class SizeResponse(size: Int)
+
+  case class ImageSnippetResponse(base64Image: String, highlights: Seq[Rectangle])
 
   case class WordText(text: String)
 

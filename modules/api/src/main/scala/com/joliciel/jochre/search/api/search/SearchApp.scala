@@ -66,6 +66,21 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Whether physical newlines should be maintained or removed from the snippets. Default is true.")
       .example(Some(false))
 
+  private val docReferenceInput = query[DocReference]("doc-ref")
+    .description("The document containing the image")
+    .example(DocReference("nybc200089"))
+  private val startOffsetInput = query[Int]("start-offset")
+    .description("The start character offset of the first word with respect to the entire document (inclusive)")
+    .example(10200)
+  private val endOffsetInput = query[Int]("end-offset")
+    .description("The end character offset of the last word with respect to the entire document (exclusive)")
+    .example(10450)
+  private val highlightInput = query[List[Highlight]]("highlight")
+    .description(
+      "A list of words to highlight using the start index and end index of each word or contiguous list of words" +
+        ", e.g. \"[10210,10215],[10312,10320]\""
+    )
+
   private val getSearchEndpoint =
     insecureEndpoint
       .errorOut(
@@ -170,34 +185,50 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .get
       .in("image-snippet")
-      .in(
-        query[DocReference]("doc-ref")
-          .description("The document containing the image")
-          .example(DocReference("nybc200089"))
-      )
-      .in(
-        query[Int]("start-offset")
-          .description("The start character offset of the first word with respect to the entire document (inclusive)")
-          .example(10200)
-      )
-      .in(
-        query[Int]("end-offset")
-          .description("The end character offset of the last word with respect to the entire document (exclusive)")
-          .example(10450)
-      )
-      .in(
-        query[List[Highlight]]("highlight")
-          .description(
-            "A list of words to highlight using the start index and end index of each word or contiguous list of words" +
-              ", e.g. \"[10210,10215],[10312,10320]\""
-          )
-      )
+      .in(docReferenceInput)
+      .in(startOffsetInput)
+      .in(endOffsetInput)
+      .in(highlightInput)
       .out(header(Header.contentType(MediaType.ImagePng)))
       .out(streamBinaryBody(ZioStreams)(PngCodecFormat))
       .description("Return an image snippet in PNG format")
 
   private val getImageSnippetHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
     getImageSnippetEndpoint.zServerLogic[Requirements](input => (getImageSnippetLogic _).tupled(input))
+
+  private val getImageSnippetWithHighlightsEndpoint =
+    insecureEndpoint
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[BadRequest](
+            StatusCode.BadRequest,
+            jsonBody[BadRequest].description(
+              "Offsets refer to words on different pages, or are higher than document length."
+            )
+          ),
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description(
+              "Requested document reference not found in index."
+            )
+          )
+        )
+      )
+      .get
+      .in("image-snippet-with-highlights")
+      .in(docReferenceInput)
+      .in(startOffsetInput)
+      .in(endOffsetInput)
+      .in(highlightInput)
+      .out(jsonBody[ImageSnippetResponse])
+      .description(
+        "Return an image snippet in PNG format converted to Base64 and a list of relative rectangles to highlight"
+      )
+
+  private val getImageSnippetWithHighlightsHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
+    getImageSnippetWithHighlightsEndpoint.zServerLogic[Requirements](input =>
+      (getImageSnippetWithHighlightsLogic _).tupled(input)
+    )
 
   private val getAggregateEndpoint =
     insecureEndpoint
@@ -402,6 +433,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       List(
         getSearchEndpoint,
         getImageSnippetEndpoint,
+        getImageSnippetWithHighlightsEndpoint,
         getAggregateEndpoint,
         getTopAuthorsEndpoint,
         getTextAsHtmlEndpoint,
@@ -415,6 +447,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getSearchWithAuthHttp,
     getSearchHttp,
     getImageSnippetHttp,
+    getImageSnippetWithHighlightsHttp,
     getAggregateHttp,
     getTopAuthorsHttp,
     getTextAsHtmlHttp,
