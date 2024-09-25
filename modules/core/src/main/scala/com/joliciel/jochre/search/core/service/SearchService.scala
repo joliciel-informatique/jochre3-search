@@ -94,6 +94,13 @@ trait SearchService {
       highlights: Seq[Highlight]
   ): Task[BufferedImage]
 
+  def getImageSnippetAndHighlights(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[(BufferedImage, Seq[Rectangle])]
+
   def aggregate(
       query: SearchQuery,
       field: IndexField,
@@ -706,6 +713,25 @@ private[service] case class SearchServiceImpl(
       endOffset: Int,
       highlights: Seq[Highlight]
   ): Task[BufferedImage] = {
+    getImageAndHighlightRects(docRef, startOffset, endOffset, highlights, drawHighlights = true).map(_._1)
+  }
+
+  override def getImageSnippetAndHighlights(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight]
+  ): Task[(BufferedImage, Seq[Rectangle])] = {
+    getImageAndHighlightRects(docRef, startOffset, endOffset, highlights, drawHighlights = false)
+  }
+
+  private def getImageAndHighlightRects(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      drawHighlights: Boolean
+  ): Task[(BufferedImage, Seq[Rectangle])] = {
     for {
       luceneDoc <- ZIO.attempt {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -744,7 +770,7 @@ private[service] case class SearchServiceImpl(
         }
       }
       page <- searchRepo.getPage(rows.head.pageId)
-      image <- ZIO.attempt {
+      imageAndRectangles <- ZIO.attempt {
         val pageImagePath = docRef.getExistingPageImagePath(page.index)
         val originalImage = ImageIO.read(pageImagePath.toFile)
 
@@ -776,12 +802,7 @@ private[service] case class SearchServiceImpl(
 
         val allWordsToHighlight = highlightWords ++ hyphenatedWords.flatten
 
-        if (log.isDebugEnabled) {
-          log.debug(f"Rows: ${rows.mkString(", ")}")
-          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
-        }
-
-        allWordsToHighlight.foreach { highlightWord =>
+        val highlightRectangles = allWordsToHighlight.map { highlightWord =>
           val highlightRect = Rectangle(
             left = (highlightWord.rect.left * horizontalScale).toInt,
             top = (highlightWord.rect.top * verticalScale).toInt,
@@ -789,25 +810,43 @@ private[service] case class SearchServiceImpl(
             height = (highlightWord.rect.height * verticalScale).toInt
           ).intersection(Rectangle(0, 0, originalImage.getWidth, originalImage.getHeight)).get
 
-          graphics2D.setStroke(new BasicStroke(1))
-          graphics2D.setPaint(Color.BLACK)
-          graphics2D.drawRect(
+          val relativeRect = Rectangle(
             highlightRect.left - snippetRect.left - extra,
             highlightRect.top - snippetRect.top - extra,
             highlightRect.width + (extra * 2),
             highlightRect.height + (extra * 2)
-          )
-          graphics2D.setColor(new Color(255, 255, 0, 127))
-          graphics2D.fillRect(
-            highlightRect.left - snippetRect.left - extra,
-            highlightRect.top - snippetRect.top - extra,
-            highlightRect.width + (extra * 2),
-            highlightRect.height + (extra * 2)
-          )
+          ).intersection(Rectangle(0, 0, snippetRect.width, snippetRect.height)).get
+
+          relativeRect
         }
-        imageSnippet
+
+        if (log.isDebugEnabled) {
+          log.debug(f"Rows: ${rows.mkString(", ")}")
+          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
+        }
+
+        if (drawHighlights) {
+          highlightRectangles.foreach { highlightRect =>
+            graphics2D.setStroke(new BasicStroke(1))
+            graphics2D.setPaint(Color.BLACK)
+            graphics2D.drawRect(
+              highlightRect.left,
+              highlightRect.top,
+              highlightRect.width,
+              highlightRect.height
+            )
+            graphics2D.setColor(new Color(255, 255, 0, 127))
+            graphics2D.fillRect(
+              highlightRect.left,
+              highlightRect.top,
+              highlightRect.width,
+              highlightRect.height
+            )
+          }
+        }
+        imageSnippet -> highlightRectangles
       }
-    } yield { image }
+    } yield { imageAndRectangles }
   }
 
   override def getIndexSize(): Task[Int] = ZIO.fromTry {
