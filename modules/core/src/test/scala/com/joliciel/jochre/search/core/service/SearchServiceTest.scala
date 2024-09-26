@@ -153,7 +153,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
         queries <- searchRepo.getQueriesSince(startTime)
       } yield {
-        assertTrue(resultAre.results.head.snippets.head.text == "How <b>are</b> you?") &&
+        assertTrue(resultAre.results.head.snippets.head.text == "<div class=\"text-snippet\">How <b>are</b> you?</div>") &&
         assertTrue(queries.head.query.contains("are"))
       }
     },
@@ -197,15 +197,15 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          resultArePadding.results.head.snippets.head.text == "Hello people.<br>" +
-            "How <b>are</b> you?<br><br>" +
-            "Fine, thank you."
+          resultArePadding.results.head.snippets.head.text == "<div class=\"text-snippet\">Hello people.<br>" +
+            "How <b>are</b> you?</div><div class=\"text-snippet\">" +
+            "Fine, thank you.</div>"
         ) &&
         assertTrue(
           resultWithOffsets.results.head.snippets.head.text ==
-            """<span offset="5">Hello people.</span><br>
-              |<span offset="19">How </span><b><span offset="23">are</span></b><span offset="26"> you?</span><br><br>
-              |<span offset="33">Fine, thank you.</span>""".stripMargin.replaceAll("\n", "")
+            """<div class="text-snippet"><span offset="5">Hello people.</span><br>
+              |<span offset="19">How </span><b><span offset="23">are</span></b><span offset="26"> you?</span></div><div class="text-snippet">
+              |<span offset="33">Fine, thank you.</span></div>""".stripMargin.replaceAll("\n", "")
         )
       }
     },
@@ -228,10 +228,10 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          resultAre.results.head.snippets.head.text == "Hello you.<br><br>" +
+          resultAre.results.head.snippets.head.text == "<div class=\"text-snippet\">Hello you.</div><div class=\"text-snippet\">" +
             "Nice day <b>to-</b><br>" +
             "<b>day</b>, Madam.<br>" +
-            "Isn't it?"
+            "Isn't it?</div>"
         )
       }
     },
@@ -274,23 +274,23 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          phraseResult.results.head.snippets.head.text == "Think it <b>will</b> <b>rain</b><br>" +
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">Think it <b>will</b> <b>rain</b><br>" +
             "<b>tomorrow</b>? Oh no, I<br>" +
-            "don't think so."
+            "don't think so.</div>"
         ) &&
         assertTrue(
-          phraseResultWithWildcard.results.head.snippets.head.text == "Think it <b>will</b> rain<br>" +
+          phraseResultWithWildcard.results.head.snippets.head.text == "<div class=\"text-snippet\">Think it <b>will</b> rain<br>" +
             "<b>tomorrow</b>? Oh no, I<br>" +
-            "don't think so."
+            "don't think so.</div>"
         ) &&
         assertTrue(
           phraseResult.results.head.snippets.head.page == 1
         ) &&
         assertTrue(
-          phraseWithHyphenResult.results.head.snippets.head.text == "Hello you.<br><br>" +
+          phraseWithHyphenResult.results.head.snippets.head.text == "<div class=\"text-snippet\">Hello you.</div><div class=\"text-snippet\">" +
             "Nice <b>day</b> <b>to-</b><br>" +
             "<b>day</b>, <b>Madam</b>.<br>" +
-            "Isn't it?"
+            "Isn't it?</div>"
         ) &&
         assertTrue(
           phraseWithHyphenResult.results.head.snippets.head.page == 0
@@ -315,9 +315,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          phraseResult.results.head.snippets.head.text == "With pleasure.<br>" +
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">With pleasure.<br>" +
             "<b>With</b> great <b>pleasure</b>.<br>" +
-            "Really."
+            "Really.</div>"
         )
       }
     },
@@ -339,7 +339,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       } yield {
         assertTrue(
-          phraseResult.results.head.snippets.head.text == "<b>Hello</b> everyone"
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\"><b>Hello</b> everyone</div>"
         )
       }
     },
@@ -363,9 +363,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultsThink.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
-            "<b>Think</b> it will rain",
-            "don't <b>think</b> so.",
-            "I <b>think</b> it will be"
+            "<div class=\"text-snippet\"><b>Think</b> it will rain</div>",
+            "<div class=\"text-snippet\">don't <b>think</b> so.</div>",
+            "<div class=\"text-snippet\">I <b>think</b> it will be</div>"
           )
         )
       }
@@ -390,11 +390,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(
           resultsThinkPadding.results.head.snippets.sortBy(_.start).map(_.text) == Seq(
-            "<b>Think</b> it will rain<br>" +
+            "<div class=\"text-snippet\"><b>Think</b> it will rain<br>" +
               "tomorrow? Oh no, I<br>" +
-              "don't <b>think</b> so.",
-            "I <b>think</b> it will be<br>" +
-              "sunny tomorrow, and even"
+              "don't <b>think</b> so.</div>",
+            "<div class=\"text-snippet\">I <b>think</b> it will be<br>" +
+              "sunny tomorrow, and even</div>"
           )
         )
       }
@@ -554,7 +554,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       } yield {
         assertTrue(resultsGreat.results.size == 1) &&
         assertTrue(resultsFineAfter.results.size == resultsFineBefore.results.size - 1) &&
-        assertTrue(resultsGreat.results.head.snippets.head.text == "<b>Great</b>, thank you.")
+        assertTrue(
+          resultsGreat.results.head.snippets.head.text == "<div class=\"text-snippet\"><b>Great</b>, thank you.</div>"
+        )
       }
     },
     test("correct metadata") {
