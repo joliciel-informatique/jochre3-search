@@ -179,6 +179,7 @@ private[service] case class SearchServiceImpl(
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexParallelism = config.getInt("index-parallelism")
+  private val snippetClass = config.getString("snippet-class")
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -639,11 +640,13 @@ private[service] case class SearchServiceImpl(
             snippets = searchResult.snippets.zip(pages).map { case (snippet, page) =>
               val pageNumber = page.map(_.index)
               val deepLink = pageNumber.flatMap(searchResult.metadata.getDeepLink(searchResult.docRef, _))
+              val innerTextWithDivs = snippet.text.replaceAll("<br><br>", f"""</div><div class="$snippetClass">""")
+              val textWithDivs = f"""<div class="$snippetClass">$innerTextWithDivs</div>"""
               snippet.copy(
                 text = if (physicalNewLines) {
-                  snippet.text
+                  textWithDivs
                 } else {
-                  snippet.text.replaceAll("<br><br>", "<p>").replaceAll("<br>", " ").replaceAll("<p>", "<br>")
+                  textWithDivs.replaceAll("<br>", " ")
                 },
                 page = pageNumber.getOrElse(-1),
                 deepLink = deepLink
