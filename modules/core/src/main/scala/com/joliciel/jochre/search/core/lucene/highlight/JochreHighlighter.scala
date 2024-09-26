@@ -36,7 +36,12 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     case query: SpanQuery => Some(query)
     case query: PhraseQuery =>
       Option.when(query.getField == field.entryName) {
-        val builder = new SpanNearQuery.Builder(field.entryName, true)
+        val hasWildcard = query.getPositions.length > 0 && query.getPositions
+          .zip(query.getPositions.tail)
+          .map { case (p1, p2) => p2 - p1 }
+          .exists(_ > 1)
+        val strictOrder = hasWildcard || query.getSlop == 0
+        val builder = new SpanNearQuery.Builder(field.entryName, strictOrder)
         builder.setSlop(query.getSlop)
         val termsAndPositions = query.getTerms.zip(query.getPositions)
         termsAndPositions.foldLeft(0) { case (currentPos, (term, position)) =>
@@ -51,7 +56,12 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     case query: MultiPhraseQuery =>
       val termArrays = query.getTermArrays.toSeq
       Option.when(!termArrays.isEmpty && !termArrays(0).isEmpty && termArrays(0)(0).field() == field.entryName) {
-        val builder = new SpanNearQuery.Builder(field.entryName, true)
+        val hasWildcard = query.getPositions.length > 0 && query.getPositions
+          .zip(query.getPositions.tail)
+          .map { case (p1, p2) => p2 - p1 }
+          .exists(_ > 1)
+        val strictOrder = hasWildcard || query.getSlop == 0
+        val builder = new SpanNearQuery.Builder(field.entryName, strictOrder)
         builder.setSlop(query.getSlop)
         val termsAndPositions = termArrays.zip(query.getPositions)
         termsAndPositions.foldLeft(0) { case (currentPos, (terms, position)) =>
