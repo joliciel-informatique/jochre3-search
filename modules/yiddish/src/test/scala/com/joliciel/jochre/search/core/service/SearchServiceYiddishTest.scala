@@ -65,10 +65,10 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         assertTrue(searchResults.results.head.metadata.collections == Seq("nationalyiddishbookcenter")) &&
         assertTrue(pageCount == 2) &&
         assertTrue(
-          topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+          topResult.snippets.head.text == "<div class=\"text-snippet\">דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
             "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
             "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
-            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־</div>"
         ) &&
         assertTrue(topResult.snippets.head.page == 2)
       }
@@ -130,10 +130,10 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
         assertTrue(searchResults.totalCount == 1) &&
         assertTrue(pageCount == 2) &&
         assertTrue(
-          topResult.snippets.head.text == "דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+          topResult.snippets.head.text == "<div class=\"text-snippet\">דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
             "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
             "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
-            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־"
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־</div>"
         ) &&
         assertTrue(topResult.snippets.head.page == 2) &&
         assertTrue(topResult.metadata.authorEnglish.contains("Sholem Aleykhem")) &&
