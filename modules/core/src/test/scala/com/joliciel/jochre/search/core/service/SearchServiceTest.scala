@@ -153,7 +153,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
         queries <- searchRepo.getQueriesSince(startTime)
       } yield {
-        assertTrue(resultAre.results.head.snippets.head.text == "<div class=\"text-snippet\">How <b>are</b> you?</div>") &&
+        assertTrue(
+          resultAre.results.head.snippets.head.text == "<div class=\"text-snippet\">How <b>are</b> you?</div>"
+        ) &&
         assertTrue(queries.head.query.contains("are"))
       }
     },
@@ -272,6 +274,16 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           "test",
           addOffsets = false
         )
+        phraseResultWithSlop <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"tomorrow rain\"~3")),
+          Sort.Score,
+          0,
+          100,
+          Some(1),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
       } yield {
         assertTrue(
           phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">Think it <b>will</b> <b>rain</b><br>" +
@@ -294,6 +306,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         ) &&
         assertTrue(
           phraseWithHyphenResult.results.head.snippets.head.page == 0
+        ) &&
+        assertTrue(
+          phraseResultWithSlop.results.head.snippets.head.text == "<div class=\"text-snippet\">Think it will <b>rain</b><br>" +
+            "<b>tomorrow</b>? Oh no, I<br>" +
+            "don't think so.</div>"
         )
       }
     },
