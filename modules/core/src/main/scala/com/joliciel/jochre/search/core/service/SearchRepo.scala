@@ -448,6 +448,30 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .to[Seq]
       .transact(transactor)
 
+  def markUnderwayAsFailedAtStartup(): Task[Int] = {
+    val failedCode: DocumentStatusCode = DocumentStatusCode.Failed
+    val failureReason: String = "Document analysis underway at startup"
+    val underwayCode: DocumentStatusCode = DocumentStatusCode.Underway
+
+    val actions = for {
+      _ <-
+        sql"""UPDATE indexed_document
+             | SET reindex=${true}
+             | WHERE reference IN (
+             |   SELECT reference FROM document WHERE document.status=$underwayCode
+             | )
+             | """.stripMargin.update.run
+      result <-
+        sql"""UPDATE document
+             | SET status=$failedCode,
+             | failure_reason=$failureReason,
+             | status_updated=CURRENT_TIMESTAMP
+             | WHERE document.status=$underwayCode
+       """.stripMargin.update.run
+    } yield result
+    actions.transact(transactor)
+  }
+
   private val deleteAllWords: Task[Int] =
     sql"""DELETE FROM word""".update.run.transact(transactor)
 

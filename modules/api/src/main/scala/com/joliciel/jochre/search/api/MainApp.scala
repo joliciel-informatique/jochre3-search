@@ -120,6 +120,7 @@ object MainApp extends ZIOAppDefault {
 
     val startup = for {
       searchService <- ZIO.service[SearchService]
+      _ <- searchService.cleanUpAtStartUp()
       startup <- ZStream
         .tick(pollInterval)
         .mapZIO(_ => searchService.reindexWhereRequired())
