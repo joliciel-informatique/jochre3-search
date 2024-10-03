@@ -166,6 +166,8 @@ trait SearchService {
   def markForReindex(docRef: DocReference): Task[Unit]
 
   def markAllForReindex(): Task[Unit]
+
+  def cleanUpAtStartUp(): Task[Unit]
 }
 
 private[service] case class SearchServiceImpl(
@@ -1258,6 +1260,11 @@ private[service] case class SearchServiceImpl(
 
   override def markAllForReindex(): Task[Unit] = for {
     _ <- searchRepo.markAllForReindex()
+  } yield ()
+
+  override def cleanUpAtStartUp(): Task[Unit] = for {
+    result <- searchRepo.markUnderwayAsFailedAtStartup()
+    _ <- ZIO.succeed(log.info(f"Marked $result underway documents as failed at startup."))
   } yield ()
 }
 
