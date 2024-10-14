@@ -3,8 +3,8 @@ package com.joliciel.jochre.search.api.index
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, OkResponse}
-import com.joliciel.jochre.search.core.{DocReference, MetadataField, UnknownMetadataFieldException}
 import com.joliciel.jochre.search.core.service.{MetadataCorrectionId, SearchService}
+import com.joliciel.jochre.search.core.{DocReference, MetadataField, UnknownMetadataFieldException}
 import zio.ZIO
 
 import java.io.FileInputStream
