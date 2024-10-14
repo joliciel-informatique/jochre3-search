@@ -9,7 +9,7 @@ import org.apache.lucene.analysis.tokenattributes.{
   PositionIncrementAttribute
 }
 
-private[lucene] trait LuceneUtilities {
+trait LuceneUtilities {
   def asStemmedSet(words: Iterable[String], analyzer: Analyzer): Set[String] =
     tokenizeString(words.mkString(" "), analyzer)
       .collect { case token @ Token(_, _, _, _) =>
