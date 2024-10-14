@@ -18,8 +18,8 @@ private[yiddish] class ReverseTransliterator(input: TokenStream) extends TokenFi
       val term = termAttr.toString
       if (latinRegex.matches(term)) {
         val alternative = YivoTransliterator.detransliterate(term)
-        val combined = YivoTransliterator.replaceWithDecomposed(alternative)
-        val normalized = textNormalizer.normalize(combined)
+        val decomposed = YivoTransliterator.replaceWithDecomposed(alternative)
+        val normalized = textNormalizer.normalize(decomposed)
         termAttr.copyBuffer(normalized.toCharArray, 0, normalized.size)
       }
       true
