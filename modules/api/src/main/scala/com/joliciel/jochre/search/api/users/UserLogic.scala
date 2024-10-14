@@ -31,7 +31,7 @@ trait UserLogic extends HttpErrorMapper {
     success =>
       success match {
         case Some(json) => ZIO.succeed(json)
-        case None => ZIO.fail(new PreferenceNotFound(token.username, key))
+        case None       => ZIO.fail(new PreferenceNotFound(token.username, key))
       }
   ).tapErrorCause(error => ZIO.logErrorCause(s"Unable to get preferences", error))
     .mapError(mapToHttpError)

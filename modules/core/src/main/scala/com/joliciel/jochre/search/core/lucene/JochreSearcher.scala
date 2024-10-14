@@ -5,21 +5,7 @@ import com.joliciel.jochre.search.core.{AggregationBin, DocReference, FieldKind,
 import org.apache.lucene.facet.FacetsCollector
 import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
-import org.apache.lucene.search.{
-  Collector,
-  CollectorManager,
-  IndexSearcher,
-  MatchAllDocsQuery,
-  Query,
-  SortField,
-  SortedNumericSortField,
-  SortedSetSortField,
-  TermQuery,
-  TopDocs,
-  TopFieldCollectorManager,
-  TopScoreDocCollectorManager,
-  Sort => LuceneSort
-}
+import org.apache.lucene.search.{Collector, CollectorManager, IndexSearcher, MatchAllDocsQuery, Query, SortField, SortedNumericSortField, SortedSetSortField, TermQuery, TopDocs, TopFieldCollectorManager, TopScoreDocCollectorManager, Sort => LuceneSort}
 import org.slf4j.LoggerFactory
 
 import scala.collection.compat.immutable.ArraySeq
