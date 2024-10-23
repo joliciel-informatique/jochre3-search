@@ -5,7 +5,21 @@ import com.joliciel.jochre.search.core.{AggregationBin, DocReference, FieldKind,
 import org.apache.lucene.facet.FacetsCollector
 import org.apache.lucene.facet.sortedset.{DefaultSortedSetDocValuesReaderState, SortedSetDocValuesFacetCounts}
 import org.apache.lucene.index.{IndexReader, Term}
-import org.apache.lucene.search.{Collector, CollectorManager, IndexSearcher, MatchAllDocsQuery, Query, SortField, SortedNumericSortField, SortedSetSortField, TermQuery, TopDocs, TopFieldCollectorManager, TopScoreDocCollectorManager, Sort => LuceneSort}
+import org.apache.lucene.search.{
+  Collector,
+  CollectorManager,
+  IndexSearcher,
+  MatchAllDocsQuery,
+  Query,
+  SortField,
+  SortedNumericSortField,
+  SortedSetSortField,
+  TermQuery,
+  TopDocs,
+  TopFieldCollectorManager,
+  TopScoreDocCollectorManager,
+  Sort => LuceneSort
+}
 import org.slf4j.LoggerFactory
 
 import scala.collection.compat.immutable.ArraySeq
@@ -37,7 +51,7 @@ private[lucene] class JochreSearcher(
     topDocs.scoreDocs.headOption.map(luceneId => new LuceneDocument(this, luceneId.doc))
   }
 
-  def getLuceneDocument(luceneId: Int): LuceneDocument = new LuceneDocument(this, luceneId)
+  private def getLuceneDocument(luceneId: Int): LuceneDocument = new LuceneDocument(this, luceneId)
 
   private def getCollectorManager(sort: Sort, first: Int, max: Int): CollectorManager[_ <: Collector, _ <: TopDocs] = {
     val maxCount = Math.max(1, indexSize)
@@ -69,7 +83,7 @@ private[lucene] class JochreSearcher(
 
   def findMatchingRefs(
       query: SearchQuery,
-      sort: Sort = Sort.Field(IndexField.Reference, true)
+      sort: Sort = Sort.Field(IndexField.Reference, ascending = true)
   ): Seq[DocReference] = {
     val luceneQuery = toLuceneQuery(query)
     if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
@@ -100,8 +114,7 @@ private[lucene] class JochreSearcher(
 
     val page = ArraySeq
       .unsafeWrapArray(topDocs.scoreDocs)
-      .drop(first)
-      .take(max)
+      .slice(first, first + max)
       .map { scoreDoc =>
         getLuceneDocument(scoreDoc.doc) -> scoreDoc.score
       }
@@ -136,14 +149,19 @@ private[lucene] class JochreSearcher(
     query.criterion.toLuceneQuery(analyzerGroup)
   }
 
-  def aggregate(searchQuery: SearchQuery, field: IndexField, maxBins: Int): Seq[AggregationBin] = {
+  def aggregate(searchQuery: SearchQuery, field: IndexField, maxBins: Option[Int]): Seq[AggregationBin] = {
     val facetCollector = this.prepareFacetCollector(searchQuery)
-    val facets = Option(
-      new SortedSetDocValuesFacetCounts(
+    val facets = Option {
+      val counts = new SortedSetDocValuesFacetCounts(
         new DefaultSortedSetDocValuesReaderState(this.indexReader, FacetConfigHolder.facetsConfig),
         facetCollector
-      ).getTopChildren(maxBins, field.entryName)
-    )
+      )
+      maxBins
+        .map {
+          counts.getTopChildren(_, field.entryName)
+        }
+        .getOrElse(counts.getAllChildren(field.entryName))
+    }
 
     facets
       .map(_.labelValues.map { labelAndValue =>

@@ -101,15 +101,28 @@ trait SearchService {
       highlights: Seq[Highlight]
   ): Task[(BufferedImage, Seq[Rectangle])]
 
+  /** Aggregate the results of a given query by a given field.
+    * @param query
+    *   which query to use for aggregating the results
+    * @param field
+    *   which field to aggregate on
+    * @param maxBins
+    *   if provided, a maximum of maxBins bins will be returned (by descending count)
+    * @param sortByLabel
+    *   if true, bins will be sorted by label after limiting to max bins, otherwise bins are sorted by descending
+    *   count
+    * @return
+    */
   def aggregate(
       query: SearchQuery,
       field: IndexField,
-      maxBins: Int
+      maxBins: Option[Int],
+      sortByLabel: Boolean = false
   ): Task[AggregationBins]
 
   def getTopAuthors(
       prefix: String,
-      maxBins: Int,
+      maxBins: Option[Int],
       includeAuthorField: Boolean,
       includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins]
@@ -673,19 +686,30 @@ private[service] case class SearchServiceImpl(
     } yield docRefs
   }
 
-  override def aggregate(query: SearchQuery, field: IndexField, maxBins: Int): Task[AggregationBins] = ZIO.attempt {
-    if (!field.aggregatable) {
-      throw new IndexFieldNotAggregatable(f"Field ${field.entryName} is not aggregatable.")
+  override def aggregate(
+      query: SearchQuery,
+      field: IndexField,
+      maxBins: Option[Int],
+      sortByLabel: Boolean
+  ): Task[AggregationBins] =
+    ZIO.attempt {
+      if (!field.aggregatable) {
+        throw new IndexFieldNotAggregatable(f"Field ${field.entryName} is not aggregatable.")
+      }
+      Using(jochreIndex.searcherManager.acquire()) { searcher =>
+        val bins = searcher.aggregate(query, field, maxBins)
+        val sortedBins = if (sortByLabel) {
+          bins.sortBy(_.label)
+        } else {
+          bins
+        }
+        AggregationBins(sortedBins)
+      }.get
     }
-    Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val bins = searcher.aggregate(query, field, maxBins)
-      AggregationBins(bins)
-    }.get
-  }
 
   def getTopAuthors(
       prefix: String,
-      maxBins: Int,
+      maxBins: Option[Int],
       includeAuthorField: Boolean,
       includeAuthorInTranscriptionField: Boolean
   ): Task[AggregationBins] = ZIO.fromTry {
@@ -698,17 +722,20 @@ private[service] case class SearchServiceImpl(
     }
 
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val bins = fields
+      val binsByCount = fields
         .map { field =>
           val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
           searcher.aggregate(query, field, maxBins)
         }
         .flatten
         .sortBy(0 - _.count)
-        .take(maxBins)
+
+      val limited = maxBins.map(binsByCount.take(_)).getOrElse(binsByCount)
+
+      val binsByLabel = limited
         .sortBy(_.label)
 
-      AggregationBins(bins)
+      AggregationBins(binsByLabel)
     }
   }
 
