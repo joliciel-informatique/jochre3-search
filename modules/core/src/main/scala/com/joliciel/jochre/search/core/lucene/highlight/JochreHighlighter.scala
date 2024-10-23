@@ -224,7 +224,9 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       }
     }
 
-    val fragmentQueue = new HighlightFragmentQueue(maxSnippets)
+    // Problem: if we limit to max snippets here, we could get far fewer snippets after merging.
+    // So we gather far more snippets for now, assuming we won't merge more than 10 snippets on average.
+    val fragmentQueue = new HighlightFragmentQueue(maxSnippets * 10)
 
     var page = 0
 
@@ -310,6 +312,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       }
     }
 
+    // Sort by start position to enable merging
     val bestFragments = (1 to fragmentQueue.size()).map(_ => fragmentQueue.pop()).sortBy(_.start)
 
     // Merge overlapping or contiguous fragments
@@ -335,6 +338,14 @@ case class JochreHighlighter(query: Query, field: IndexField) {
 
     val mergedFragments = mergeOverlappingFragments(bestFragments)
       .map(_.mergeOverlappingTokens)
-    mergedFragments
+
+    // Sort by decreasing score again to ge the top-scoring fragments
+    // then by start position for more sensible display order
+    val bestMergedFragments = mergedFragments
+      .sortBy(0 - _.score)
+      .take(maxSnippets)
+      .sortBy(_.start)
+
+    bestMergedFragments
   }
 }
