@@ -252,7 +252,18 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .description(f"The field to choose among ${IndexField.aggregatableFields.map(_.entryName).mkString(", ")}")
           .example(IndexField.Author.entryName)
       )
-      .in(query[Int]("maxBins").description("Maximum bins to return").example(20))
+      .in(
+        query[Option[Int]]("maxBins")
+          .description("Maximum bins to return. If not provided, all bins will be returned.")
+          .example(Some(20))
+      )
+      .in(
+        query[Option[Boolean]]("sortByLabel")
+          .description(
+            "If true, aggregated bins will be sorted by ascending label AFTER limiting to max bins by descending count," +
+              " otherwise bins are sorted by descending count. Default is false."
+          )
+      )
       .out(jsonBody[AggregationBins].example(SearchHelper.aggregationBinsExample))
       .description("Return aggregated bins for this search query and a given field.")
 
@@ -342,7 +353,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .get
       .in("authors")
       .in(query[String]("prefix").description("The author name prefix").example("ש"))
-      .in(query[Int]("maxBins").description("Maximum bins to return").example(20))
+      .in(
+        query[Option[Int]]("maxBins")
+          .description("Maximum bins to return. If not provided, all bins will be returned.")
+          .example(Some(20))
+      )
       .in(
         query[Option[Boolean]]("includeAuthor")
           .description("If true, the Author field is included. Defaults to true.")

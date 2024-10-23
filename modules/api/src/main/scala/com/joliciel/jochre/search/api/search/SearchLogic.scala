@@ -202,7 +202,8 @@ trait SearchLogic extends HttpErrorMapper {
       toYear: Option[Int],
       docRefs: List[String],
       field: String,
-      maxBins: Int
+      maxBins: Option[Int],
+      sortByLabel: Option[Boolean]
   ): ZIO[Requirements, HttpError, AggregationBins] = {
     for {
       indexField <- ZIO.attempt {
@@ -214,14 +215,14 @@ trait SearchLogic extends HttpErrorMapper {
       }
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
       searchService <- ZIO.service[SearchService]
-      searchResponse <- searchService.aggregate(searchQuery, indexField, maxBins)
+      searchResponse <- searchService.aggregate(searchQuery, indexField, maxBins, sortByLabel.getOrElse(false))
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to aggregate", error))
     .mapError(mapToHttpError)
 
   def getTopAuthorsLogic(
       prefix: String,
-      maxBins: Int,
+      maxBins: Option[Int],
       includeAuthor: Option[Boolean],
       includeAuthorInTranscription: Option[Boolean]
   ): ZIO[Requirements, HttpError, AggregationBins] = {

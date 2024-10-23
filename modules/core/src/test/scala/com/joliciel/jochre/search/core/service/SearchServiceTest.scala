@@ -1,16 +1,12 @@
 package com.joliciel.jochre.search.core.service
 
-import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core._
+import com.joliciel.jochre.search.core.lucene.JochreIndex
 import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
-import org.scalatest.Ignore
-import zio.test.TestAspect.ignore
 import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import zio.{Scope, ZIO, ZLayer}
 
-import java.io.{BufferedWriter, FileWriter}
-import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scala.util.Using
 
@@ -472,18 +468,27 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         binsHello <- searchService.aggregate(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello")),
           IndexField.Author,
-          2
+          Some(2)
         )
         binsHello1 <- searchService.aggregate(
           SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello")),
           IndexField.Author,
-          1
+          Some(1)
+        )
+        binsHelloByLabel <- searchService.aggregate(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello")),
+          IndexField.Author,
+          Some(2),
+          sortByLabel = true
         )
       } yield {
         assertTrue(
           binsHello == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2), AggregationBin("Jack Sprat", 1)))
         ) &&
-        assertTrue(binsHello1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2))))
+        assertTrue(binsHello1 == AggregationBins(Seq(AggregationBin("Joe Schmoe", 2)))) &&
+        assertTrue(
+          binsHelloByLabel == AggregationBins(Seq(AggregationBin("Jack Sprat", 1), AggregationBin("Joe Schmoe", 2)))
+        )
       }
     },
     test("return top authors in alphabetical order") {
@@ -496,25 +501,25 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
         binsJ <- searchService.getTopAuthors(
           "J",
-          5,
+          Some(5),
           includeAuthorField = true,
           includeAuthorInTranscriptionField = true
         )
         binsJo <- searchService.getTopAuthors(
           "Jo",
-          5,
+          None,
           includeAuthorField = true,
           includeAuthorInTranscriptionField = true
         )
         binsJ1 <- searchService.getTopAuthors(
           "J",
-          1,
+          Some(1),
           includeAuthorField = true,
           includeAuthorInTranscriptionField = true
         )
         binsDalet <- searchService.getTopAuthors(
           "ד",
-          5,
+          Some(5),
           includeAuthorField = true,
           includeAuthorInTranscriptionField = true
         )
