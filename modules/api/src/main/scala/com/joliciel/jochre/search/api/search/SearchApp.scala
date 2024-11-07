@@ -85,7 +85,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     insecureEndpoint
       .errorOut(
         oneOf[HttpError](
-          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparsable query"))
         )
       )
       .get
@@ -138,7 +138,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   ] =
     secureEndpoint()
       .errorOutVariantPrepend[HttpError](
-        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+        oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparsable query"))
       )
       .get
       .in("search-with-auth")
@@ -234,7 +234,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     insecureEndpoint
       .errorOut(
         oneOf[HttpError](
-          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparsable query"))
         )
       )
       .get
@@ -347,7 +347,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     insecureEndpoint
       .errorOut(
         oneOf[HttpError](
-          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparseable query"))
+          oneOfVariant[BadRequest](StatusCode.BadRequest, jsonBody[BadRequest].description("Unparsable query"))
         )
       )
       .get
