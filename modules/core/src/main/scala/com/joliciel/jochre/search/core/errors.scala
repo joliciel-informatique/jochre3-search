@@ -30,3 +30,5 @@ class RowNotFoundException(docRef: DocReference, pageNumber: Int, rowIndex: Int)
     extends Exception(f"In document ${docRef.ref}, page $pageNumber, row $rowIndex not found in database")
 class ImageFileNotFoundException(docRef: DocReference, pageNumber: Int)
     extends Exception(f"No image found for document ${docRef.ref}, page $pageNumber")
+
+class UnparsableQueryException(message: String) extends BadRequestException(f"Unparsable query: $message")
