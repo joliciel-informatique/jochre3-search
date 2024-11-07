@@ -3,6 +3,7 @@ package com.joliciel.jochre.search.core
 import com.joliciel.jochre.search.core.lucene.{AnalyzerGroup, JochreMultiFieldQueryParser}
 import org.apache.lucene.document.IntPoint
 import org.apache.lucene.index.Term
+import org.apache.lucene.queryparser.classic.ParseException
 import org.apache.lucene.search.BooleanClause.Occur
 import org.apache.lucene.search.{BooleanQuery, MatchAllDocsQuery, PrefixQuery, Query, TermInSetQuery}
 import org.apache.lucene.util.BytesRef
@@ -43,7 +44,12 @@ object SearchCriterion {
           phraseAnalyzer = analyzerGroup.forSearchPhrases
         )
       }
-      parser.parse(queryString)
+      try {
+        parser.parse(queryString)
+      } catch {
+        case pe: ParseException =>
+          throw new UnparsableQueryException(pe.getMessage)
+      }
     }
 
     override private[core] def getContains(): Option[Contains] = Some(this)
