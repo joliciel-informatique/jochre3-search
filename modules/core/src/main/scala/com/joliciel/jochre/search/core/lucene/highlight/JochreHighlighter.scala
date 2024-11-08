@@ -29,6 +29,8 @@ case class JochreHighlighter(query: Query, field: IndexField) {
   private val formatter =
     new SimpleHTMLFormatter(config.getString("formatter-pre-tag"), config.getString("formatter-post-tag"))
 
+  private val initialRowsToShowIfNoSnippets = config.getInt("initial-rows-to-show-if-no-snippets")
+
   private val highlightQuery = toSpanQuery(query).getOrElse(new MatchNoDocsQuery())
 
   // Highlighter only works correctly with span queries, especially in the case of PhraseQuery with wildcards
@@ -161,7 +163,11 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     * @param rowPadding
     *   how many rows without highlights to add before and after each row containing highlights
     */
-  def findSnippets(tokenStream: TokenStream, maxSnippets: Int, rowPadding: Int): Seq[HighlightFragment] = {
+  def findSnippets(
+      tokenStream: TokenStream,
+      maxSnippets: Int,
+      rowPadding: Int
+  ): Seq[HighlightFragment] = {
     val scoredStream = Option(scorer.init(tokenStream)).getOrElse(tokenStream)
     val termAtt = scoredStream.addAttribute(classOf[CharTermAttribute])
     val offsetAtt = scoredStream.addAttribute(classOf[OffsetAttribute])
@@ -209,6 +215,8 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     }
 
     var openFragments: Seq[OpenFragment] = Vector.empty
+    var initialFragments: Seq[HighlightFragment] = Vector.empty
+
     class HighlightFragmentQueue(maxSnippets: Int) extends PriorityQueue[HighlightFragment](maxSnippets) {
       override def lessThan(a: HighlightFragment, b: HighlightFragment): Boolean = {
         if (a.score == b.score) {
@@ -255,6 +263,14 @@ case class JochreHighlighter(query: Query, field: IndexField) {
               }
               fragmentQueue.insertWithOverflow(highlightFragment)
             }
+            if (initialFragments.size < initialRowsToShowIfNoSnippets) {
+              initialFragments = initialFragments :+ HighlightFragment(
+                closedFragment.startOffset,
+                pageStartOffset,
+                page,
+                closedFragment.tokens
+              )
+            }
           }
           openFragments = Vector.empty
           page = page + 1
@@ -284,6 +300,14 @@ case class JochreHighlighter(query: Query, field: IndexField) {
               }
               fragmentQueue.insertWithOverflow(highlightFragment)
             }
+            if (initialFragments.size < initialRowsToShowIfNoSnippets) {
+              initialFragments = initialFragments :+ HighlightFragment(
+                closedFragment.startOffset,
+                rowStartOffset,
+                page,
+                closedFragment.tokens
+              )
+            }
           }
           openFragments = stillOpen
         }
@@ -310,10 +334,19 @@ case class JochreHighlighter(query: Query, field: IndexField) {
         }
         fragmentQueue.insertWithOverflow(highlightFragment)
       }
+      if (initialFragments.size < initialRowsToShowIfNoSnippets) {
+        initialFragments =
+          initialFragments :+ HighlightFragment(stillOpen.startOffset, offsetAtt.endOffset(), page, stillOpen.tokens)
+      }
     }
 
     // Sort by start position to enable merging
-    val bestFragments = (1 to fragmentQueue.size()).map(_ => fragmentQueue.pop()).sortBy(_.start)
+    val hasSnippets = fragmentQueue.size() > 0
+    val bestFragments = if (hasSnippets) {
+      (1 to fragmentQueue.size()).map(_ => fragmentQueue.pop()).sortBy(_.start)
+    } else {
+      initialFragments.sortBy(_.start)
+    }
 
     // Merge overlapping or contiguous fragments
     def mergeOverlappingFragments(fragments: Seq[HighlightFragment]): Seq[HighlightFragment] =
@@ -339,13 +372,18 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     val mergedFragments = mergeOverlappingFragments(bestFragments)
       .map(_.mergeOverlappingTokens)
 
-    // Sort by decreasing score again to ge the top-scoring fragments
-    // then by start position for more sensible display order
-    val bestMergedFragments = mergedFragments
-      .sortBy(0 - _.score)
-      .take(maxSnippets)
-      .sortBy(_.start)
+    if (!hasSnippets) {
+      // If there were no "real" snippets, only return the first merged snippet
+      mergedFragments.take(1)
+    } else {
+      // Sort by decreasing score again to ge the top-scoring fragments
+      // then by start position for more sensible display order
+      val bestMergedFragments = mergedFragments
+        .sortBy(0 - _.score)
+        .take(maxSnippets)
+        .sortBy(_.start)
 
-    bestMergedFragments
+      bestMergedFragments
+    }
   }
 }
