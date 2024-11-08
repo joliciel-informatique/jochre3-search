@@ -49,7 +49,10 @@ object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase 
     )
   private val alto2 = textToAlto(
     "doc2",
-    "Cat Mouse",
+    "Cat Mouse\n" +
+      "Horse Wolf\n" +
+      "\n\n" +
+      "Spider Bat\n",
     Map.empty
   )
 
@@ -104,9 +107,34 @@ object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase 
         )
       } yield {
         assertTrue(pageCount1 == 1) &&
-        assertTrue(pageCount2 == 1) &&
+        assertTrue(pageCount2 == 2) &&
         assertTrue(resultsCatDog.results.map(_.docRef) == Seq(docRef1)) &&
         assertTrue(resultsCatDogNoQuotes.results.map(_.docRef) == Seq(docRef1, docRef2))
+      }
+    },
+    test("return start of book if no text to highlight") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
+        _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)
+        resultsDoc2 <- searchService.search(
+          SearchQuery(SearchCriterion.ValueIn(IndexField.Reference, Seq(docRef2.ref))),
+          Sort.Score,
+          0,
+          100,
+          Some(1),
+          Some(0),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          resultsDoc2.results.flatMap(_.snippets.map(_.text)) == Seq(
+            "<div class=\"text-snippet\">Cat Mouse<br>Horse Wolf</div>"
+          )
+        )
       }
     }
   ).provideLayer(
