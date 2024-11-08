@@ -10,7 +10,21 @@ import org.apache.lucene.util.BytesRef
 
 import scala.jdk.CollectionConverters._
 
-case class SearchQuery(criterion: SearchCriterion)
+case class SearchQuery(criterion: SearchCriterion) {
+  def replaceQuery(replaceFunction: String => String): SearchQuery = {
+    def replaceCriterion(criterion: SearchCriterion): SearchCriterion = criterion match {
+      case SearchCriterion.Not(criterion) => SearchCriterion.Not(replaceCriterion(criterion))
+      case SearchCriterion.And(criteria: Seq[SearchCriterion]) =>
+        SearchCriterion.And(criteria.map(replaceCriterion(_)): _*)
+      case SearchCriterion.Or(criteria: Seq[SearchCriterion]) =>
+        SearchCriterion.Or(criteria.map(replaceCriterion(_)): _*)
+      case SearchCriterion.Contains(fields, queryString, strict) =>
+        SearchCriterion.Contains(fields, replaceFunction(queryString), strict)
+      case other => other
+    }
+    this.copy(replaceCriterion(criterion))
+  }
+}
 
 sealed trait SearchCriterion {
   private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query

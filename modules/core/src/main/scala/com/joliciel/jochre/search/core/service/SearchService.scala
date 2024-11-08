@@ -26,6 +26,7 @@ import javax.imageio.ImageIO
 import scala.io.Source
 import scala.util.Using
 import scala.xml.{Node, PrettyPrinter, XML}
+import scala.jdk.CollectionConverters._
 
 trait SearchService {
 
@@ -109,8 +110,7 @@ trait SearchService {
     * @param maxBins
     *   if provided, a maximum of maxBins bins will be returned (by descending count)
     * @param sortByLabel
-    *   if true, bins will be sorted by label after limiting to max bins, otherwise bins are sorted by descending
-    *   count
+    *   if true, bins will be sorted by label after limiting to max bins, otherwise bins are sorted by descending count
     * @return
     */
   def aggregate(
@@ -195,6 +195,11 @@ private[service] case class SearchServiceImpl(
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexParallelism = config.getInt("index-parallelism")
   private val snippetClass = config.getString("snippet-class")
+  private val queryFindReplacePairs = config
+    .getConfigList("query-replacements")
+    .asScala
+    .map(c => c.getString("find").r -> c.getString("replace"))
+    .toSeq
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -613,6 +618,12 @@ private[service] case class SearchServiceImpl(
     ZIO.acquireReleaseWith(acquire)(release)(readImages)
   }
 
+  private def replaceQuery(query: SearchQuery): SearchQuery = {
+    queryFindReplacePairs.foldLeft(query) { case (query, (find, replace)) =>
+      query.replaceQuery((s: String) => find.replaceAllIn(s, replace))
+    }
+  }
+
   override def search(
       query: SearchQuery,
       sort: Sort,
@@ -626,9 +637,12 @@ private[service] case class SearchServiceImpl(
       physicalNewLines: Boolean
   ): Task[SearchResponse] = {
     for {
+      fixedQuery <- ZIO.attempt {
+        replaceQuery(query)
+      }
       initialResponse <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
+          searcher.search(fixedQuery, sort, first, max, maxSnippets, rowPadding, addOffsets)
         }
       }
       _ <- searchRepo.insertQuery(
@@ -678,9 +692,12 @@ private[service] case class SearchServiceImpl(
       sort: Sort
   ): Task[Seq[DocReference]] = {
     for {
+      fixedQuery <- ZIO.attempt {
+        replaceQuery(query)
+      }
       docRefs <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.findMatchingRefs(query, sort = sort)
+          searcher.findMatchingRefs(fixedQuery, sort = sort)
         }
       }
     } yield docRefs
@@ -696,8 +713,9 @@ private[service] case class SearchServiceImpl(
       if (!field.aggregatable) {
         throw new IndexFieldNotAggregatable(f"Field ${field.entryName} is not aggregatable.")
       }
+      val fixedQuery = replaceQuery(query)
       Using(jochreIndex.searcherManager.acquire()) { searcher =>
-        val bins = searcher.aggregate(query, field, maxBins)
+        val bins = searcher.aggregate(fixedQuery, field, maxBins)
         val sortedBins = if (sortByLabel) {
           bins.sortBy(_.label)
         } else {
