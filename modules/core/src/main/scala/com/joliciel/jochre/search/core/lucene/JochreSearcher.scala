@@ -145,7 +145,7 @@ private[lucene] class JochreSearcher(
 
   override def close(): Unit = manager.release(this)
 
-  private def toLuceneQuery(query: SearchQuery): Query = {
+  def toLuceneQuery(query: SearchQuery): Query = {
     query.criterion.toLuceneQuery(analyzerGroup)
   }
 

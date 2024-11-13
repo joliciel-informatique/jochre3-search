@@ -10,7 +10,7 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object IndexErrorTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+object IndexErrorTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),

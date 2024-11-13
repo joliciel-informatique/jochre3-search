@@ -390,6 +390,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .description("Document reference whose text we want.")
           .example(DocReference("nybc200089"))
       )
+      .in(queryInput)
+      .in(strictInput)
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextHtml(),
@@ -399,7 +401,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return the document in HTML format")
 
   private val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getTextAsHtmlEndpoint.zServerLogic[Requirements](input => getTextAsHtmlLogic(input))
+    getTextAsHtmlEndpoint.zServerLogic[Requirements](input => (getTextAsHtmlLogic _).tupled(input))
 
   private val getListEndpoint =
     insecureEndpoint
