@@ -11,7 +11,7 @@ import zio.{Scope, ZIO, ZLayer}
 import java.io.File
 import javax.imageio.ImageIO
 
-object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
   private val log = LoggerFactory.getLogger(getClass)
 
   private val username = "jimi@hendrix.org"

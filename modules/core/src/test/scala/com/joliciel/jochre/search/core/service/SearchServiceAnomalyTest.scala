@@ -22,7 +22,7 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
 
   private val docRef1 = DocReference("doc1")

@@ -10,7 +10,7 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndex with AltoHelper {
+object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
@@ -109,7 +109,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             searcher.findMatchingRefs(query)
           }.get
         }
-        textWithHtml <- searchService.getTextAsHtml(docRef2)
+        textWithHtml <- searchService.getTextAsHtml(docRef2, query = None)
+        textWithHtmlHighlights <- searchService.getTextAsHtml(
+          docRef2,
+          query = Some(SearchQuery(SearchCriterion.Contains(IndexField.Text, "think")))
+        )
         _ <- searchService.removeDocument(docRef1)
         refsHelloAfterRemove <- ZIO.attempt {
           val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello"))
@@ -125,6 +129,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(refsHello.toSet == Set(docRef1, docRef2)) &&
         assertTrue(
           textWithHtml.replaceAll("<(.+?)>", "") == f"${metadata2.title.get}${text2.replaceAll("\n", "")}"
+        ) &&
+        assertTrue(
+          // Remove all HTML except for highlights marked with <b>word</b>
+          textWithHtmlHighlights
+            .replaceAll("<((?!b\\b|\\/b\\b).+?)>", "") == f"${metadata2.title.get}${text2.replaceAll("\n", "").replaceAll("([Tt]hink)", "<b>$1</b>")}"
         ) &&
         assertTrue(refsHelloAfterRemove == Seq(docRef2))
       }
