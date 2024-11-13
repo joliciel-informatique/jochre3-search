@@ -133,7 +133,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       .map(PreformattedHighlightFragment(_))
   }
 
-  def findTerms(tokenStream: TokenStream): Seq[Token] = {
+  def findTerms(tokenStream: TokenStream, includePageBreaks: Boolean = false): Seq[Token] = {
     val scoredStream = Option(scorer.init(tokenStream)).getOrElse(tokenStream)
     val termAtt = scoredStream.addAttribute(classOf[CharTermAttribute])
     val offsetAtt = scoredStream.addAttribute(classOf[OffsetAttribute])
@@ -145,9 +145,10 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       .unfold(scoredStream.incrementToken()) {
         case true =>
           val tokenScore = scorer.getTokenScore
+          val token = termAtt.toString
           Some(
-            Option.when(tokenScore > 0.0)(
-              Token(termAtt.toString, offsetAtt.startOffset(), offsetAtt.endOffset(), tokenScore)
+            Option.when(tokenScore > 0.0 || (includePageBreaks && token == PAGE_TOKEN))(
+              Token(token, offsetAtt.startOffset(), offsetAtt.endOffset(), tokenScore)
             )
               -> scoredStream.incrementToken()
           )

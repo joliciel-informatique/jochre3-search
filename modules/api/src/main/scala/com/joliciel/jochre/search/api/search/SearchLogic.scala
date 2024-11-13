@@ -239,11 +239,18 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getTextAsHtmlLogic(
-      docRef: DocReference
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean]
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
     (for {
       searchService <- ZIO.service[SearchService]
-      textAsHtml <- searchService.getTextAsHtml(docRef)
+      searchQuery <- getSearchQuery(
+        query = query,
+        strict = strict,
+        matchAllDocuments = true
+      )
+      textAsHtml <- searchService.getTextAsHtml(docRef, Some(searchQuery))
     } yield {
       ZStream(textAsHtml)
         .via(ZPipeline.utf8Encode)
@@ -330,14 +337,14 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   private def getSearchQuery(
-      query: Option[String],
-      title: Option[String],
-      authors: List[String],
-      authorInclude: Option[Boolean],
-      strict: Option[Boolean],
-      fromYear: Option[Int],
-      toYear: Option[Int],
-      docRefs: List[String],
+      query: Option[String] = None,
+      title: Option[String] = None,
+      authors: List[String] = List.empty,
+      authorInclude: Option[Boolean] = None,
+      strict: Option[Boolean] = None,
+      fromYear: Option[Int] = None,
+      toYear: Option[Int] = None,
+      docRefs: List[String] = List.empty,
       ocrSoftware: Option[String] = None,
       matchAllDocuments: Boolean = false
   ): Task[SearchQuery] = ZIO.attempt {

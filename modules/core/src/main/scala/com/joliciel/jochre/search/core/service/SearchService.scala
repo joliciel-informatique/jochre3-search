@@ -128,7 +128,8 @@ trait SearchService {
   ): Task[AggregationBins]
 
   def getTextAsHtml(
-      docRef: DocReference
+      docRef: DocReference,
+      query: Option[SearchQuery]
   ): Task[String]
 
   def getWordText(
@@ -298,7 +299,7 @@ private[service] case class SearchServiceImpl(
           searcher
             .getByDocRef(ref)
             .getOrElse(
-              throw new DocumentNotFoundInIndex(ref)
+              throw new DocumentNotFoundInIndexException(ref)
             )
         }
       }
@@ -318,7 +319,7 @@ private[service] case class SearchServiceImpl(
           searcher
             .getByDocRef(ref)
             .getOrElse(
-              throw new DocumentNotFoundInIndex(ref)
+              throw new DocumentNotFoundInIndexException(ref)
             )
         }
       }
@@ -787,7 +788,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
         }.get
       }
       rows <- searchRepo.getRowsByStartAndEndOffset(luceneDoc.rev, startOffset, endOffset)
@@ -905,38 +906,37 @@ private[service] case class SearchServiceImpl(
     }
   }
 
-  override def getTextAsHtml(docRef: DocReference): Task[String] = {
+  override def getTextAsHtml(docRef: DocReference, query: Option[SearchQuery]): Task[String] = {
     for {
       docWithInfo <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           val document = searcher
             .getByDocRef(docRef)
             .getOrElse(
-              throw new DocumentNotFoundInIndex(docRef)
+              throw new DocumentNotFoundInIndexException(docRef)
             )
           val title = document.metadata.title
-          val text = document.getText(IndexField.Text).getOrElse("")
+          val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
+          val luceneQuery = searcher.toLuceneQuery(queryToUse)
+          val pageOffsetsAndTexts = document.highlightPages(luceneQuery)
 
-          (document.rev, title, text)
+          (document.rev, title, pageOffsetsAndTexts)
         }
       }
       pages <- searchRepo.getPages(docWithInfo._1)
     } yield {
-      val title = docWithInfo._2
-      val text = docWithInfo._3
+      val (_, title, pageOffsetsAndTexts) = docWithInfo
 
-      val pagesWithText = pages
-        .appended(DbPage(PageId(0), docWithInfo._1, 0, 0, 0, text.length))
-        .foldLeft((Seq.empty[(Int, String)], 0, 0)) { case ((textSoFar, lastOffset, lastIndex), page) =>
-          val nextPage = text.substring(lastOffset, page.offset).replaceAll("\n", "<br>")
-          (textSoFar :+ (lastIndex -> nextPage), page.offset, page.index)
-        }
-        ._1
+      val offsetToTextMap = pageOffsetsAndTexts.toMap
+
+      val pagesWithText = pages.map { page =>
+        page.index -> offsetToTextMap.get(page.offset).getOrElse("")
+      }
 
       val html = if (pagesWithText.isEmpty) {
         ""
       } else {
-        pagesWithText.tail.map { case (pageIndex, text) =>
+        pagesWithText.map { case (pageIndex, text) =>
           f"""<div id="page$pageIndex">$text<hr></div>"""
         }.mkString
       }
@@ -944,7 +944,6 @@ private[service] case class SearchServiceImpl(
       val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + html
       response
     }
-
   }
 
   private def getWordGroup(wordsInRow: Seq[DbWord], wordOffset: Int): Seq[DbWord] = {
@@ -975,7 +974,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
         }.get
       }
       wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
@@ -992,7 +991,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
             .getText(IndexField.Text)
             .map(_.substring(startOffset, endOffset))
             .getOrElse(throw new WordOffsetNotFound(docRef, wordOffset))
@@ -1007,7 +1006,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
         }.get
       }
       wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
@@ -1065,7 +1064,7 @@ private[service] case class SearchServiceImpl(
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
         }.get
       }
       wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
@@ -1092,7 +1091,7 @@ private[service] case class SearchServiceImpl(
         val previousText = Using(jochreIndex.searcherManager.acquire()) { searcher =>
           searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
             .getText(IndexField.Text)
             .map(_.substring(startOffset, endOffset))
             .getOrElse(throw new WordOffsetNotFound(docRef, wordOffset))
@@ -1187,7 +1186,7 @@ private[service] case class SearchServiceImpl(
         Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
           val luceneDoc = searcher
             .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndex(docRef))
+            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
 
           // If the existing value is empty, we don't want to replace it everywhere, hence .filter(_.trim.nonEmpty)
           luceneDoc.getMetaValue(field).filter(_.trim.nonEmpty)
