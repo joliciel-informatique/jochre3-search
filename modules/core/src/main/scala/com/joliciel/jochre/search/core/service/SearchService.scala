@@ -132,6 +132,11 @@ trait SearchService {
       query: Option[SearchQuery]
   ): Task[String]
 
+  def highlightDocument(
+      docRef: DocReference,
+      query: Option[SearchQuery]
+  ): Task[HighlightedDocument]
+
   def getWordText(
       docRef: DocReference,
       wordOffset: Int
@@ -918,7 +923,7 @@ private[service] case class SearchServiceImpl(
           val title = document.metadata.title
           val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val pageOffsetsAndTexts = document.highlightPages(luceneQuery)
+          val pageOffsetsAndTexts = document.highlightPagesAsHtml(luceneQuery)
 
           (document.rev, title, pageOffsetsAndTexts)
         }
@@ -943,6 +948,41 @@ private[service] case class SearchServiceImpl(
 
       val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + html
       response
+    }
+  }
+
+  override def highlightDocument(docRef: DocReference, query: Option[SearchQuery]): Task[HighlightedDocument] = {
+    for {
+      docWithInfo <- ZIO.fromTry {
+        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+          val document = searcher
+            .getByDocRef(docRef)
+            .getOrElse(
+              throw new DocumentNotFoundInIndexException(docRef)
+            )
+          val title = document.metadata.title
+          val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
+          val luceneQuery = searcher.toLuceneQuery(queryToUse)
+          val highlightedPages = document.highlightPages(luceneQuery)
+
+          (document.rev, title, highlightedPages)
+        }
+      }
+      pages <- searchRepo.getPages(docWithInfo._1)
+    } yield {
+      val (_, title, highlightedPages) = docWithInfo
+
+      val offsetToHighlightedPageMap = highlightedPages.map(p => p.startOffset -> p).toMap
+
+      val pagesWithIndexes = pages.map { page =>
+        val highlightedPage = offsetToHighlightedPageMap.get(page.offset)
+        highlightedPage.map(_.copy(index = page.index))
+      }.flatten
+
+      HighlightedDocument(
+        title = title.getOrElse(""),
+        pagesWithIndexes
+      )
     }
   }
 
