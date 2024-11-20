@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField, MetadataField}
 import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
-import com.joliciel.jochre.search.core.service.{DocRev, Highlight, Snippet}
+import com.joliciel.jochre.search.core.service.{DocRev, Highlight, HighlightedPage, Snippet}
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.document.Document
@@ -149,7 +149,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
     * @param query
     *   the query to use for highlighting
     */
-  def highlightPages(
+  def highlightPagesAsHtml(
       query: Query
   ): Seq[(Int, String)] = {
     val highlighter = JochreHighlighter(query, IndexField.Text)
@@ -181,6 +181,45 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           // We take the tail to skip the "fake" page containing the document reference
           val pageTexts = pageBuilders.tail.map { case (startOffset, sb) => startOffset -> sb.toString() }
           pageTexts
+        }
+      case _ =>
+        Seq.empty
+    }
+  }
+
+  def highlightPages(
+      query: Query
+  ): Seq[HighlightedPage] = {
+    val highlighter = JochreHighlighter(query, IndexField.Text)
+
+    this.getTokenStreamAndText(IndexField.Text) match {
+      case (Some(tokenStream), Some(text)) =>
+        Using.resource(tokenStream) { tokenStream =>
+          val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
+          val (pageBuilders, lastPos) = terms.foldLeft(Vector((0, new StringBuilder(), Seq.empty[Highlight])) -> 0) {
+            case ((pageBuilders, lastPos), token) =>
+              val leftover = text.substring(lastPos, token.start)
+              val (pageStart, sb, highlights) = pageBuilders.last
+              if (token.value == PAGE_TOKEN) {
+                sb.append(leftover)
+                (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
+              } else {
+                sb.append(leftover)
+                sb.append(text.substring(token.start, token.end))
+                val highlight = Highlight(token.start - pageStart, token.end - pageStart)
+                val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights :+ highlight)
+                (newPageBuilders, token.end)
+              }
+          }
+          if (lastPos < text.length) {
+            val (_, sb, _) = pageBuilders.last
+            sb.append(text.substring(lastPos, text.length))
+          }
+          // We take the tail to skip the "fake" page containing the document reference
+          val pages = pageBuilders.tail.map { case (startOffset, sb, highlights) =>
+            HighlightedPage(0, startOffset, sb.toString(), highlights)
+          }
+          pages
         }
       case _ =>
         Seq.empty
