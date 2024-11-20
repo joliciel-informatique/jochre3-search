@@ -28,6 +28,7 @@ import org.http4s.server.Router
 import org.http4s.server.middleware.{CORS, Logger}
 import org.slf4j.LoggerFactory
 import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
+import sttp.tapir.swagger.SwaggerUIOptions
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 import zio.{Duration => ZIODuration, _}
 import zio.config.typesafe.TypesafeConfigProvider
@@ -41,6 +42,7 @@ object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val pollInterval: java.time.Duration = config.getDuration("index.poll-interval")
+  private val apiPrefix = Option.when(config.hasPath("api-prefix"))(config.getString("api-prefix"))
 
   override val bootstrap: ZLayer[ZIOAppArgs, Throwable, Any] =
     Runtime.setConfigProvider(TypesafeConfigProvider.fromTypesafeConfig(config))
@@ -61,12 +63,17 @@ object MainApp extends ZIOAppDefault {
     val utilityRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(utilityDirectives.http).toRoutes
 
     val version = sys.env.get("JOCHRE3_SEARCH_VERSION").getOrElse("0.1.0-SNAPSHOT")
+
+    val swaggerUIOptions = apiPrefix
+      .map(apiPrefix => SwaggerUIOptions.default.copy(contextPath = List(apiPrefix)))
+      .getOrElse(SwaggerUIOptions.default)
     val swaggerDirectives =
-      SwaggerInterpreter().fromEndpoints[AppTask](
-        searchDirectives.endpoints ++ indexDirectives.endpoints ++ userDirectives.endpoints ++ utilityDirectives.endpoints,
-        "Jochre Search Server",
-        version
-      )
+      SwaggerInterpreter(swaggerUIOptions = swaggerUIOptions)
+        .fromEndpoints[AppTask](
+          searchDirectives.endpoints ++ indexDirectives.endpoints ++ userDirectives.endpoints ++ utilityDirectives.endpoints,
+          "Jochre Search Server",
+          version
+        )
     val swaggerRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(swaggerDirectives).toRoutes
 
     val routes = searchRoutes <+> indexRoutes <+> userRoutes <+> utilityRoutes <+> swaggerRoutes
