@@ -4,7 +4,13 @@ import com.joliciel.jochre.search.api.HttpError.{BadRequest, NotFound}
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.{AuthenticationProvider, TokenAuthentication, ValidToken}
 import com.joliciel.jochre.search.api.{HttpError, PngCodecFormat}
-import com.joliciel.jochre.search.core.service.{Highlight, SearchHelper, SearchProtocol, SearchResponse}
+import com.joliciel.jochre.search.core.service.{
+  Highlight,
+  HighlightedDocument,
+  SearchHelper,
+  SearchProtocol,
+  SearchResponse
+}
 import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
 import io.circe.generic.auto._
 import shapeless.syntax.std.tuple._
@@ -374,6 +380,32 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   private val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
     getTopAuthorsEndpoint.zServerLogic[Requirements](input => (getTopAuthorsLogic _).tupled(input))
 
+  private val getHighlightedTextEndpoint =
+    insecureEndpoint.get
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description("Document reference not found in index")
+          )
+        )
+      )
+      .in("highlighted-text")
+      .in(
+        query[DocReference]("doc-ref")
+          .description("Document reference whose text we want.")
+          .example(DocReference("nybc200089"))
+      )
+      .in(queryInput)
+      .in(strictInput)
+      .out(jsonBody[HighlightedDocument].example(SearchHelper.highlightedDocExample))
+      .description(
+        "Return the highlighted document. Note that a highlight can contain a newline character, if it concerns a hyphenated word."
+      )
+
+  private val getHighlightedTextHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
+    getHighlightedTextEndpoint.zServerLogic[Requirements](input => (getHighlightedTextLogic _).tupled(input))
+
   private val getTextAsHtmlEndpoint =
     insecureEndpoint.get
       .errorOut(
@@ -453,6 +485,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         getImageSnippetWithHighlightsEndpoint,
         getAggregateEndpoint,
         getTopAuthorsEndpoint,
+        getHighlightedTextEndpoint,
         getTextAsHtmlEndpoint,
         getListEndpoint,
         getSizeEndpoint,
@@ -467,6 +500,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getImageSnippetWithHighlightsHttp,
     getAggregateHttp,
     getTopAuthorsHttp,
+    getHighlightedTextHttp,
     getTextAsHtmlHttp,
     getListHttp,
     getSizeHttp,
