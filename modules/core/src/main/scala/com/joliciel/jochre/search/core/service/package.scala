@@ -35,7 +35,8 @@ package object service {
       index: Int,
       startOffset: Int,
       text: String,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      logicalPageNumber: Option[Int]
   )
 
   case class HighlightedDocument(
@@ -108,7 +109,8 @@ package object service {
               "פון דער אַפּטײק ; און מעני, דעם שכנ’ס קעלבעל, האָט מען\n" +
               "אַרױסנעלאָזט נאָך פון אַײן ערגערען עפּוש : פון אַ קלײן, פינ־\n\n" +
               "9\n\n",
-            highlights = Seq(Highlight(236, 242), Highlight(873, 879))
+            highlights = Seq(Highlight(236, 242), Highlight(873, 879)),
+            logicalPageNumber = Some(9)
           ),
           HighlightedPage(
             index = 2,
@@ -147,7 +149,8 @@ package object service {
             highlights = Seq(
               Highlight(1302, 1308),
               Highlight(1326, 1332)
-            )
+            ),
+            logicalPageNumber = Some(10)
           )
         )
       )

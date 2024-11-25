@@ -93,7 +93,8 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
           Seq(
             Highlight("Hello ".length, "Hello cat".length),
             Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-\nat".length)
-          )
+          ),
+          None
         ),
         HighlightedPage(
           0,
@@ -101,9 +102,10 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
           "Yes, the cat is happy.\nOh good. ",
           Seq(
             Highlight("Yes, the ".length, "Yes, the cat".length)
-          )
+          ),
+          None
         ),
-        HighlightedPage(0, prefix.length + page1.length + page2.length, "Life is good.", Seq.empty[Highlight])
+        HighlightedPage(0, prefix.length + page1.length + page2.length, "Life is good.", Seq.empty[Highlight], None)
       )
     }
   }
@@ -137,21 +139,29 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
         HighlightedPage(
           0,
           prefix.length,
-          "Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? ",
+          "<div class=\"text-snippet\">Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? </div>",
           Seq(
             Highlight("Hello ".length, "Hello cat".length),
             Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-\nat".length)
-          )
+          ),
+          None
         ),
         HighlightedPage(
           0,
           prefix.length + page1.length,
-          "Yes, the <b>cat</b> is happy.<br>Oh good. ",
+          "<div class=\"text-snippet\">Yes, the <b>cat</b> is happy.<br>Oh good. </div>",
           Seq(
             Highlight("Yes, the ".length, "Yes, the cat".length)
-          )
+          ),
+          None
         ),
-        HighlightedPage(0, prefix.length + page1.length + page2.length, "Life is good.", Seq.empty[Highlight])
+        HighlightedPage(
+          0,
+          prefix.length + page1.length + page2.length,
+          "<div class=\"text-snippet\">Life is good.</div>",
+          Seq.empty[Highlight],
+          None
+        )
       )
     }
   }

@@ -18,6 +18,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   private val highlightPostTag = config.getString("formatter-post-tag")
   private val defaultMaxSnippetCount = config.getInt("default-max-snippets")
   private val defaultRowPadding = config.getInt("default-row-padding")
+  private val snippetClass = config.getString("snippet-class")
 
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
   lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.entryName))
@@ -187,6 +188,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
     }
   }
 
+  private val numberRegex = raw"\d+".r
   def highlightPages(
       query: Query,
       textAsHtml: Boolean
@@ -234,7 +236,27 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           }
           // We take the tail to skip the "fake" page containing the document reference
           val pages = pageBuilders.tail.map { case (startOffset, sb, highlights) =>
-            HighlightedPage(0, startOffset, sb.toString(), highlights)
+            val initialText = sb.toString()
+            val paragraphRegex = if (textAsHtml) "<br>" else "\n"
+            val paragraphs = initialText.split(paragraphRegex)
+
+            val logicalPageNumber = if (paragraphs.length > 0 && numberRegex.matches(paragraphs.head)) {
+              Some(paragraphs.head.toInt)
+            } else if (paragraphs.length > 1 && numberRegex.matches(paragraphs(1))) {
+              Some(paragraphs(1).toInt)
+            } else if (paragraphs.length > 0 && numberRegex.matches(paragraphs.last)) {
+              Some(paragraphs.last.toInt)
+            } else {
+              None
+            }
+
+            val pageText = if (textAsHtml) {
+              val innerTextWithDivs = initialText.replaceAll("<br><br>", f"""</div><div class="$snippetClass">""")
+              f"""<div class="$snippetClass">$innerTextWithDivs</div>"""
+            } else {
+              initialText
+            }
+            HighlightedPage(0, startOffset, pageText, highlights, logicalPageNumber)
           }
           pages
         }
