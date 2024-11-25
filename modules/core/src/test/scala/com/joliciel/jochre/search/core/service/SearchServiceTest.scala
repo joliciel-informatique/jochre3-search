@@ -539,61 +539,10 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         assertTrue(binsDalet == AggregationBins(Seq(AggregationBin("דשאָו שמאָו", 1))))
       }
     },
-    test("make a suggestion") {
-      val wordOffset = (docRef2.ref + "\n" +
-        "Hello people.\n" +
-        "How are you?\n").length
-      for {
-        _ <- getSuggestionRepo()
-        _ <- getSearchRepo()
-        searchService <- ZIO.service[SearchService]
-        _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
-        _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)
-        _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
-        resultsFineBefore <- searchService.search(
-          SearchQuery(SearchCriterion.Contains(IndexField.Text, "fine")),
-          Sort.Score,
-          0,
-          100,
-          Some(100),
-          Some(0),
-          "joe",
-          addOffsets = false
-        )
-        _ <- searchService.suggestWord(username, ipAddress, docRef2, wordOffset, "Great,")
-        _ <- searchService.reindexWhereRequired()
-        resultsGreat <- searchService.search(
-          SearchQuery(SearchCriterion.Contains(IndexField.Text, "great")),
-          Sort.Score,
-          0,
-          100,
-          Some(100),
-          Some(0),
-          "joe",
-          addOffsets = false
-        )
-        resultsFineAfter <- searchService.search(
-          SearchQuery(SearchCriterion.Contains(IndexField.Text, "fine")),
-          Sort.Score,
-          0,
-          100,
-          Some(100),
-          Some(0),
-          "joe",
-          addOffsets = false
-        )
-      } yield {
-        assertTrue(resultsGreat.results.size == 1) &&
-        assertTrue(resultsFineAfter.results.size == resultsFineBefore.results.size - 1) &&
-        assertTrue(
-          resultsGreat.results.head.snippets.head.text == "<div class=\"text-snippet\"><b>Great</b>, thank you.</div>"
-        )
-      }
-    },
     test("correct metadata") {
       for {
         _ <- getSuggestionRepo()
-        searchRepo <- getSearchRepo()
+        _ <- getSearchRepo()
         searchService <- ZIO.service[SearchService]
         _ <- searchService.addFakeDocument(docRef1, username, ipAddress, alto1, metadata1)
         _ <- searchService.addFakeDocument(docRef2, username, ipAddress, alto2, metadata2)

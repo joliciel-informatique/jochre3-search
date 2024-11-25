@@ -1,6 +1,6 @@
 package com.joliciel.jochre.search.core.text
 
-import com.joliciel.jochre.ocr.core.model.SpellingAlternative
+import com.joliciel.jochre.ocr.core.model.{SpellingAlternative, Word}
 import org.apache.lucene.analysis.TokenStream
 
 trait LanguageSpecificFilters {
@@ -9,6 +9,8 @@ trait LanguageSpecificFilters {
   def postTokenizationFilterForIndex: Option[TokenStream => TokenStream]
 
   def getAlternatives(word: String): Seq[SpellingAlternative]
+
+  def breakWord(word: Word): Seq[Word]
 }
 
 object LanguageSpecificFilters {
@@ -18,5 +20,7 @@ object LanguageSpecificFilters {
     override def postTokenizationFilterForIndex: Option[TokenStream => TokenStream] = None
 
     override def getAlternatives(word: String): Seq[SpellingAlternative] = Seq.empty
+
+    override def breakWord(word: Word): Seq[Word] = Seq(word)
   }
 }
