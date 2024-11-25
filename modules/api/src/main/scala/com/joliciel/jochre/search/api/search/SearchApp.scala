@@ -398,6 +398,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .in(queryInput)
       .in(strictInput)
+      .in(
+        query[Option[Boolean]]("text-as-html")
+          .description("Should the text be pre-formatted as HTML. Defaults to false.")
+          .example(Some(true))
+      )
       .out(jsonBody[HighlightedDocument].example(SearchHelper.highlightedDocExample))
       .description(
         "Return the highlighted document. Note that a highlight can contain a newline character, if it concerns a hyphenated word."
