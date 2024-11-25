@@ -201,7 +201,7 @@ private[service] case class SearchServiceImpl(
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexParallelism = config.getInt("index-parallelism")
-  private val snippetClass = config.getString("snippet-class")
+  private val snippetClass = config.getString("highlighter.snippet-class")
   private val queryFindReplacePairs = config
     .getConfigList("query-replacements")
     .asScala
