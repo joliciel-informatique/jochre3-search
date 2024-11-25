@@ -60,7 +60,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
     }
   }
 
-  "higlightPages" should "correctly highlight pages" in {
+  "highlightPages" should "correctly highlight pages" in {
     val jochreIndex = getJochreIndex
 
     jochreIndex.addDocumentInfo(
@@ -84,7 +84,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
       assert(luceneDocOpt.isDefined)
       val luceneDoc = luceneDocOpt.get
       val query = new TermQuery(new Term(IndexField.Text.entryName, "cat"))
-      val highlightedPages = luceneDoc.highlightPages(query)
+      val highlightedPages = luceneDoc.highlightPages(query, textAsHtml = false)
       highlightedPages shouldEqual Seq(
         HighlightedPage(
           0,
@@ -99,6 +99,54 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
           0,
           prefix.length + page1.length,
           "Yes, the cat is happy.\nOh good. ",
+          Seq(
+            Highlight("Yes, the ".length, "Yes, the cat".length)
+          )
+        ),
+        HighlightedPage(0, prefix.length + page1.length + page2.length, "Life is good.", Seq.empty[Highlight])
+      )
+    }
+  }
+
+  it should "correctly highlight pages as HTML" in {
+    val jochreIndex = getJochreIndex
+
+    jochreIndex.addDocumentInfo(
+      docRef,
+      DocumentIndexInfo(
+        pageOffsets = Set(prefix.length, prefix.length + page1.length, prefix.length + page1.length + page2.length),
+        newlineOffsets = Set(
+          prefix.length + page1line1.length,
+          prefix.length + page1line1.length + page1line2.length,
+          prefix.length + page1.length + page2line1.length
+        ),
+        hyphenatedWordOffsets = Set(prefix.length + page1line1.length + "Is the ".length),
+        offsetToAlternativeMap = Map.empty
+      )
+    )
+    jochreIndex.indexer.indexDocument(doc)
+    jochreIndex.refresh
+
+    Using.resource(jochreIndex.searcherManager.acquire()) { jochreSearcher =>
+      val luceneDocOpt = jochreSearcher.getByDocRef(docRef)
+      assert(luceneDocOpt.isDefined)
+      val luceneDoc = luceneDocOpt.get
+      val query = new TermQuery(new Term(IndexField.Text.entryName, "cat"))
+      val highlightedPages = luceneDoc.highlightPages(query, textAsHtml = true)
+      highlightedPages shouldEqual Seq(
+        HighlightedPage(
+          0,
+          prefix.length,
+          "Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? ",
+          Seq(
+            Highlight("Hello ".length, "Hello cat".length),
+            Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-\nat".length)
+          )
+        ),
+        HighlightedPage(
+          0,
+          prefix.length + page1.length,
+          "Yes, the <b>cat</b> is happy.<br>Oh good. ",
           Seq(
             Highlight("Yes, the ".length, "Yes, the cat".length)
           )

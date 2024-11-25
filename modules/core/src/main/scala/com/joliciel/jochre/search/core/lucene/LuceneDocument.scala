@@ -188,7 +188,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   }
 
   def highlightPages(
-      query: Query
+      query: Query,
+      textAsHtml: Boolean
   ): Seq[HighlightedPage] = {
     val highlighter = JochreHighlighter(query, IndexField.Text)
 
@@ -198,14 +199,25 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector((0, new StringBuilder(), Seq.empty[Highlight])) -> 0) {
             case ((pageBuilders, lastPos), token) =>
-              val leftover = text.substring(lastPos, token.start)
+              val leftover = if (textAsHtml) {
+                text.substring(lastPos, token.start).replaceAll("\n", "<br>")
+              } else {
+                text.substring(lastPos, token.start)
+              }
               val (pageStart, sb, highlights) = pageBuilders.last
               if (token.value == PAGE_TOKEN) {
                 sb.append(leftover)
                 (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
               } else {
                 sb.append(leftover)
-                sb.append(text.substring(token.start, token.end))
+                val highlightText = text.substring(token.start, token.end)
+                if (textAsHtml) {
+                  sb.append(highlightPreTag)
+                  sb.append(highlightText.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
+                  sb.append(highlightPostTag)
+                } else {
+                  sb.append(highlightText)
+                }
                 val highlight = Highlight(token.start - pageStart, token.end - pageStart)
                 val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights :+ highlight)
                 (newPageBuilders, token.end)
@@ -213,7 +225,12 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           }
           if (lastPos < text.length) {
             val (_, sb, _) = pageBuilders.last
-            sb.append(text.substring(lastPos, text.length))
+            val leftover = if (textAsHtml) {
+              text.substring(lastPos, text.length).replaceAll("\n", "<br>")
+            } else {
+              text.substring(lastPos, text.length)
+            }
+            sb.append(leftover)
           }
           // We take the tail to skip the "fake" page containing the document reference
           val pages = pageBuilders.tail.map { case (startOffset, sb, highlights) =>

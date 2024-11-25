@@ -134,7 +134,8 @@ trait SearchService {
 
   def highlightDocument(
       docRef: DocReference,
-      query: Option[SearchQuery]
+      query: Option[SearchQuery],
+      textAsHtml: Boolean
   ): Task[HighlightedDocument]
 
   def getWordText(
@@ -951,7 +952,11 @@ private[service] case class SearchServiceImpl(
     }
   }
 
-  override def highlightDocument(docRef: DocReference, query: Option[SearchQuery]): Task[HighlightedDocument] = {
+  override def highlightDocument(
+      docRef: DocReference,
+      query: Option[SearchQuery],
+      textAsHtml: Boolean
+  ): Task[HighlightedDocument] = {
     for {
       docWithInfo <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -963,7 +968,7 @@ private[service] case class SearchServiceImpl(
           val title = document.metadata.title
           val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val highlightedPages = document.highlightPages(luceneQuery)
+          val highlightedPages = document.highlightPages(luceneQuery, textAsHtml = textAsHtml)
 
           (document.rev, title, highlightedPages)
         }
