@@ -1115,8 +1115,10 @@ private[service] case class SearchServiceImpl(
       page <- searchRepo.getPage(row.pageId)
       rectAndText <- ZIO.attempt {
         val wordGroup = getWordGroup(wordsInRow, wordOffset)
+        log.debug(s"Word group: ${wordGroup.mkString(", ")}")
         val startRect = wordGroup.head.rect
         val wordRect = wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_))
+        log.debug(f"Word group rectangle: $wordRect")
         val horizontalScale = 10000 / page.width.toDouble
         val verticalScale = 10000 / page.height.toDouble
         val scaledRect = wordRect.copy(

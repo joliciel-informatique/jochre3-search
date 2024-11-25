@@ -12,8 +12,11 @@ import com.joliciel.jochre.ocr.core.model.{
   Word,
   WordOrSpace
 }
+import org.slf4j.LoggerFactory
 
 trait AltoHelper {
+  private val log = LoggerFactory.getLogger(getClass)
+
   def textToAlto(fileName: String, text: String, alternativeMap: Map[String, Seq[String]]): Alto = {
     val pagesOfText = text.split("\n\n\n")
 
@@ -30,7 +33,7 @@ trait AltoHelper {
                   val space = Space(Rectangle(charIndex * 10, startHeight + lineIndex * 10, 10, 10))
                   (charIndex + 1) -> (wordsAndSpaces :+ space)
                 } else {
-                  val wordParts = wordOrSpace.split(raw"((?<=\p{Punct})|(?=\p{Punct}))")
+                  val wordParts = wordOrSpace.split(raw"(?U)((?<=\p{Punct})|(?=\p{Punct}))")
                   val (finalCharIndex, words) = wordParts.foldLeft(charIndex -> Seq.empty[Word]) {
                     case ((charIndex, words), wordText) =>
                       val alternatives = alternativeMap
@@ -43,6 +46,7 @@ trait AltoHelper {
                         alternatives = alternatives,
                         confidence = 1.0
                       )
+                      log.debug(s"Added word: ${word}")
                       (charIndex + wordText.length) -> (words :+ word)
                   }
                   finalCharIndex -> (wordsAndSpaces ++ words)

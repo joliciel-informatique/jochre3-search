@@ -159,10 +159,10 @@ case class AltoIndexer(
               val verticalScale = page.height.toDouble / 10000.0
               val scaledSuggestions = pageSuggestions.map(s =>
                 s.copy(
-                  left = (s.left * horizontalScale).toInt,
-                  top = (s.top * verticalScale).toInt,
-                  width = (s.width * horizontalScale).toInt,
-                  height = (s.height * verticalScale).toInt
+                  left = Math.round(s.left * horizontalScale).toInt,
+                  top = Math.round(s.top * verticalScale).toInt,
+                  width = Math.round(s.width * horizontalScale).toInt,
+                  height = Math.round(s.height * verticalScale).toInt
                 )
               )
               for {
@@ -285,20 +285,25 @@ case class AltoIndexer(
       case ((withSuggestions, lastSuggestion), wordOrSpace) =>
         wordSuggestions.get(wordOrSpace).flatten match {
           case suggestion @ Some(_) if suggestion == lastSuggestion =>
+            log.debug(f"Suggestion already replaced $wordOrSpace")
             withSuggestions -> lastSuggestion
           case None =>
             (withSuggestions :+ wordOrSpace) -> None
           case Some(suggestion) =>
-            val alternatives =
-              languageSpecificFilters.map(_.getAlternatives(suggestion.suggestion)).getOrElse(Seq.empty)
             val newWord = Word(
               content = suggestion.suggestion,
               rectangle = suggestion.rect,
               glyphs = Seq.empty,
-              alternatives = alternatives,
+              alternatives = Seq.empty,
               confidence = 1.0
             )
-            (withSuggestions :+ newWord) -> Some(suggestion)
+
+            // A single word isn't really enough - it needs multiple words if there's attached punctuation.
+            // Since highlighting code depends on a word starting at the exact offset
+            val newWords = languageSpecificFilters.map(_.breakWord(newWord)).getOrElse(Seq(newWord))
+
+            log.debug(f"Suggestion found: $suggestion. Replacing $wordOrSpace by $newWords")
+            (withSuggestions ++ newWords) -> Some(suggestion)
         }
     }
     val endOfRowSuggestion = wordsAndSpaces.lastOption.flatMap(wordSuggestions.get).flatten
