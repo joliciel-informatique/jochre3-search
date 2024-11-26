@@ -32,7 +32,7 @@ package object service {
   case class Highlight(start: Int, end: Int)
 
   case class HighlightedPage(
-      index: Int,
+      physicalPageNumber: Int,
       startOffset: Int,
       text: String,
       highlights: Seq[Highlight],
@@ -88,7 +88,7 @@ package object service {
         title = "מאָטל, פּײסי דעם חזנס",
         pages = Seq(
           HighlightedPage(
-            index = 1,
+            physicalPageNumber = 1,
             startOffset = 11,
             text = "הײנט איז יום־טוב — מע טאָר נישט װײנען !\n\n" +
               "א.\n\n" +
@@ -113,7 +113,7 @@ package object service {
             logicalPageNumber = Some(9)
           ),
           HighlightedPage(
-            index = 2,
+            physicalPageNumber = 2,
             startOffset = 966,
             text = "10\n\n" +
               "שלום־עליכם\n\n" +

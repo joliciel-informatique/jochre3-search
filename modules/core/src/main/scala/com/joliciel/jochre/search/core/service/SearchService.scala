@@ -981,7 +981,7 @@ private[service] case class SearchServiceImpl(
 
       val pagesWithIndexes = pages.map { page =>
         val highlightedPage = offsetToHighlightedPageMap.get(page.offset)
-        highlightedPage.map(_.copy(index = page.index))
+        highlightedPage.map(_.copy(physicalPageNumber = page.index))
       }.flatten
 
       HighlightedDocument(

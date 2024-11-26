@@ -33,7 +33,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
 
   private val queryInput = query[Option[String]]("query")
     .description("Query string for searching in the text")
-    .example(Some(""""פון * װעגן""""))
+    .example(Some("קעלבעל"))
   private val titleInput =
     query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל"))
   private val authorsInput =
