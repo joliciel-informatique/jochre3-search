@@ -171,6 +171,10 @@ trait SearchService {
       id: MetadataCorrectionId
   ): Task[Seq[DocReference]]
 
+  def ignoreSuggestions(
+      username: String
+  ): Task[Int]
+
   def reindex(
       docRef: DocReference
   ): Task[Int]
@@ -1291,6 +1295,11 @@ private[service] case class SearchServiceImpl(
       docRefs <- suggestionRepo.getMetadataCorrectionDocs(id)
     } yield docRefs
   }
+
+  override def ignoreSuggestions(username: String): Task[Int] =
+    for {
+      ignoreCount <- suggestionRepo.ignoreSuggestions(username)
+    } yield ignoreCount
 
   override def reindexWhereRequired(): Task[Boolean] = {
     val acquireTask = ZIO.attempt {

@@ -61,11 +61,26 @@ case class AltoIndexer(
       }
       suggestions <- suggestionRepo.getSuggestions(docRef)
       corrections <- suggestionRepo.getMetadataCorrections(docRef)
-      documentData <- persistDocument(suggestions)
+      documentData <- persistDocument(suggestions.filterNot(_.ignore))
       _ <- searchRepo.updateDocumentStatus(documentData.docRev, DocumentStatus.Complete)
+      mostRecentCorrections <- ZIO.attempt {
+        corrections
+          .groupBy(_.field)
+          .view
+          .mapValues(_.head)
+          .values
+          .toSeq
+      }
       pageCount <- ZIO
         .attempt {
-          val correctedMetadata = corrections.foldLeft(metadata) { case (metadata, correction) =>
+          val mostRecentUnignoredCorrections = corrections
+            .filterNot(_.ignore)
+            .groupBy(_.field)
+            .view
+            .mapValues(_.head)
+            .values
+            .toSeq
+          val correctedMetadata = mostRecentUnignoredCorrections.foldLeft(metadata) { case (metadata, correction) =>
             log.debug(f"On doc ${docRef.ref}, correcting ${correction.field.entryName} to '${correction.newValue}'")
             correction.field.applyToMetadata(metadata, correction.newValue)
           }
@@ -111,7 +126,7 @@ case class AltoIndexer(
     } yield IndexData(
       docRev = documentData.docRev,
       wordSuggestionRev = suggestions.map(_.rev).maxOption(WordSuggestionRev.ordering),
-      corrections,
+      mostRecentCorrections,
       pageCount = pageCount
     )
   }
