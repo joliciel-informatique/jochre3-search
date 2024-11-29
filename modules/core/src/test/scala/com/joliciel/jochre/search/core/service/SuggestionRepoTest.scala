@@ -29,6 +29,7 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         suggestions <- suggestionRepo.getSuggestions(docRef)
         _ <- suggestionRepo.ignoreSuggestions(joe)
         suggestionsAfterIgnore <- suggestionRepo.getSuggestions(docRef)
+        suggestion1AfterIgnore <- suggestionRepo.getSuggestion(suggestionId1)
       } yield {
         assertTrue(suggestion1.username == joe) &&
         assertTrue(suggestion1.ipAddress == joeIp) &&
@@ -44,7 +45,10 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(suggestion1.offset == 10) &&
         assertTrue(suggestion1.rev.rev > 0) &&
         assertTrue(suggestions.map(_.id) == Seq(suggestionId2, suggestionId1)) &&
-        assertTrue(suggestionsAfterIgnore.map(_.id) == Seq(suggestionId2))
+        // The suggestions should be re-ordered with the ignored suggestion on top
+        assertTrue(suggestionsAfterIgnore.map(_.id) == Seq(suggestionId1, suggestionId2)) &&
+        assertTrue(suggestion1AfterIgnore.rev.rev > suggestion1.rev.rev) &&
+        assertTrue(suggestion1AfterIgnore.ignore)
       }
     },
     test("insert metadata correction") {
@@ -105,9 +109,9 @@ object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(correction1.rev.rev > 0) &&
         assertTrue(docs == Seq(docRef, docRef2)) &&
         assertTrue(corrections.map(_.id) == Seq(correctionId2, correctionId1)) &&
-        assertTrue(correctionsAfterUpdate.map(_.id) == Seq(correctionId3, correctionId2)) &&
-        assertTrue(correctionsAfterIgnore.map(_.id) == Seq(correctionId2)) &&
-        assertTrue(correctionsAfterIgnoreMore.map(_.id) == Seq())
+        assertTrue(correctionsAfterUpdate.map(_.id) == Seq(correctionId3, correctionId2, correctionId1)) &&
+        assertTrue(correctionsAfterIgnore.map(_.id) == Seq(correctionId3, correctionId1, correctionId2)) &&
+        assertTrue(correctionsAfterIgnoreMore.map(_.id) == Seq(correctionId2, correctionId3, correctionId1))
       }
     }
   ).provideLayer(suggestionRepoLayer) @@ TestAspect.sequential

@@ -38,14 +38,14 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  /** Get suggestions for a given document from newest to oldest.
+  /** Get suggestions for a given document from newest to oldest. Note we include ignored suggestions as well, which
+    * will need to be ignored by client code.
     */
   def getSuggestions(docRef: DocReference): Task[Seq[DbWordSuggestion]] = {
     sql"""SELECT id, username, ip, created, doc_ref, page_index, lft, top, width, height, suggestion, previous_text, ignore, start_offset, rev
          | FROM word_suggestion
          | WHERE doc_ref = ${docRef.ref}
-         | AND ignore = ${false}
-         | ORDER BY id DESC
+         | ORDER BY rev DESC
        """.stripMargin
       .query[DbWordSuggestion]
       .to[Seq]
@@ -116,17 +116,14 @@ private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
       .to[Seq]
       .transact(transactor)
 
-  /** Get most recent corrections for a given document.
+  /** Get all recent corrections for a given document, including ignored, ordered by most recent to oldest.
     */
   def getMetadataCorrections(docRef: DocReference): Task[Seq[DbMetadataCorrection]] = {
     sql"""SELECT id, username, ip, created, field, old_value, new_value, apply_everywhere, ignore, sent, rev
          | FROM metadata_correction m1
          | INNER JOIN metadata_correction_doc d1 ON m1.id = d1.correction_id
          | WHERE d1.doc_ref = ${docRef.ref}
-         | AND ignore = ${false}
-         | AND id = (SELECT MAX(m2.id) FROM metadata_correction m2
-         |  INNER JOIN metadata_correction_doc d2 ON m2.id = d2.correction_id WHERE m2.field = m1.field AND d2.doc_ref = d1.doc_ref)
-         | ORDER BY id DESC
+         | ORDER BY rev DESC
        """.stripMargin
       .query[DbMetadataCorrection]
       .to[Seq]

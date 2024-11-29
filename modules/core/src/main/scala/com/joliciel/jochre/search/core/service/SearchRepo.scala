@@ -209,9 +209,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
     // Condition 1 (very rare): the document has been completely saved to the database
     // but the system was stopped before it got indexed.
     // Condition 2: the latest word suggestion hasn't yet been taken into account
-    // Condition 3: the latest unignored metadata correction for a given field hasn't yet been taken into account
-    // Condition 4: a metadata correction for a given field has been taken into account, but has since been ignored
-    // Condition 5: the document has been marked for re-index (new alto or new metadata)
+    // Condition 3: the latest metadata correction for a given field hasn't yet been taken into account
+    // Condition 4: the document has been marked for re-index (new alto or new metadata)
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE (
@@ -224,35 +223,23 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
          |     SELECT mc.rev FROM metadata_correction mc
          |     INNER JOIN metadata_correction_doc mcd ON mc.id = mcd.correction_id
          |       AND mcd.doc_ref = indexdoc.reference
-         |     WHERE mc.id = (
-         |       SELECT MAX(mc2.id) FROM metadata_correction mc2
+         |     WHERE mc.rev = (
+         |       SELECT MAX(mc2.rev) FROM metadata_correction mc2
          |       INNER JOIN metadata_correction_doc mcd2 ON mc2.id = mcd2.correction_id
          |       WHERE mc2.field = mc.field
          |         AND mcd2.doc_ref = indexdoc.reference
-         |     ) AND mc.ignore = false
+         |     )
          |     AND (
          |       NOT EXISTS (
          |         SELECT idc.metadata_correction_rev
          |         FROM indexed_document_correction idc
          |         WHERE idc.reference = indexdoc.reference AND idc.field = mc.field
          |       )
-         |       OR mc.rev != (
+         |       OR mc.rev > (
          |         SELECT idc.metadata_correction_rev
          |         FROM indexed_document_correction idc
          |         WHERE idc.reference = indexdoc.reference AND idc.field = mc.field
          |       )
-         |     )
-         |   )
-         |   OR EXISTS (
-         |     SELECT idc.metadata_correction_rev FROM indexed_document_correction idc
-         |     WHERE idc.reference = indexdoc.reference
-         |     AND idc.metadata_correction_rev != (
-         |       SELECT COALESCE(MAX(mc.rev), 0)
-         |       FROM metadata_correction mc
-         |       INNER JOIN metadata_correction_doc md ON mc.id = md.correction_id
-         |         AND md.doc_ref = idc.reference
-         |       WHERE mc.field = idc.field
-         |       AND mc.ignore = false
          |     )
          |   )
          |   OR reindex
