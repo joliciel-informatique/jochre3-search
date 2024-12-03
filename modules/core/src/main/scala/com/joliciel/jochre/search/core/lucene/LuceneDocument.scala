@@ -18,6 +18,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   private val highlightPostTag = config.getString("formatter-post-tag")
   private val defaultMaxSnippetCount = config.getInt("default-max-snippets")
   private val defaultRowPadding = config.getInt("default-row-padding")
+  private val snippetClass = config.getString("snippet-class")
 
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
   lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.entryName))
@@ -187,8 +188,10 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
     }
   }
 
+  private val numberRegex = raw"\d+".r
   def highlightPages(
-      query: Query
+      query: Query,
+      textAsHtml: Boolean
   ): Seq[HighlightedPage] = {
     val highlighter = JochreHighlighter(query, IndexField.Text)
 
@@ -198,14 +201,25 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector((0, new StringBuilder(), Seq.empty[Highlight])) -> 0) {
             case ((pageBuilders, lastPos), token) =>
-              val leftover = text.substring(lastPos, token.start)
+              val leftover = if (textAsHtml) {
+                text.substring(lastPos, token.start).replaceAll("\n", "<br>")
+              } else {
+                text.substring(lastPos, token.start)
+              }
               val (pageStart, sb, highlights) = pageBuilders.last
               if (token.value == PAGE_TOKEN) {
                 sb.append(leftover)
                 (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
               } else {
                 sb.append(leftover)
-                sb.append(text.substring(token.start, token.end))
+                val highlightText = text.substring(token.start, token.end)
+                if (textAsHtml) {
+                  sb.append(highlightPreTag)
+                  sb.append(highlightText.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
+                  sb.append(highlightPostTag)
+                } else {
+                  sb.append(highlightText)
+                }
                 val highlight = Highlight(token.start - pageStart, token.end - pageStart)
                 val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights :+ highlight)
                 (newPageBuilders, token.end)
@@ -213,11 +227,36 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           }
           if (lastPos < text.length) {
             val (_, sb, _) = pageBuilders.last
-            sb.append(text.substring(lastPos, text.length))
+            val leftover = if (textAsHtml) {
+              text.substring(lastPos, text.length).replaceAll("\n", "<br>")
+            } else {
+              text.substring(lastPos, text.length)
+            }
+            sb.append(leftover)
           }
           // We take the tail to skip the "fake" page containing the document reference
           val pages = pageBuilders.tail.map { case (startOffset, sb, highlights) =>
-            HighlightedPage(0, startOffset, sb.toString(), highlights)
+            val initialText = sb.toString()
+            val paragraphRegex = if (textAsHtml) "<br>" else "\n"
+            val paragraphs = initialText.split(paragraphRegex)
+
+            val logicalPageNumber = if (paragraphs.length > 0 && numberRegex.matches(paragraphs.head)) {
+              Some(paragraphs.head.toInt)
+            } else if (paragraphs.length > 1 && numberRegex.matches(paragraphs(1))) {
+              Some(paragraphs(1).toInt)
+            } else if (paragraphs.length > 0 && numberRegex.matches(paragraphs.last)) {
+              Some(paragraphs.last.toInt)
+            } else {
+              None
+            }
+
+            val pageText = if (textAsHtml) {
+              val innerTextWithDivs = initialText.replaceAll("<br><br>", f"""</div><div class="$snippetClass">""")
+              f"""<div class="$snippetClass">$innerTextWithDivs</div>"""
+            } else {
+              initialText
+            }
+            HighlightedPage(0, startOffset, pageText, highlights, logicalPageNumber)
           }
           pages
         }

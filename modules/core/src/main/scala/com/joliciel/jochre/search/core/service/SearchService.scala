@@ -134,7 +134,8 @@ trait SearchService {
 
   def highlightDocument(
       docRef: DocReference,
-      query: Option[SearchQuery]
+      query: Option[SearchQuery],
+      textAsHtml: Boolean
   ): Task[HighlightedDocument]
 
   def getWordText(
@@ -170,6 +171,10 @@ trait SearchService {
       id: MetadataCorrectionId
   ): Task[Seq[DocReference]]
 
+  def ignoreSuggestions(
+      username: String
+  ): Task[Int]
+
   def reindex(
       docRef: DocReference
   ): Task[Int]
@@ -200,7 +205,7 @@ private[service] case class SearchServiceImpl(
   private val log = LoggerFactory.getLogger(getClass)
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexParallelism = config.getInt("index-parallelism")
-  private val snippetClass = config.getString("snippet-class")
+  private val snippetClass = config.getString("highlighter.snippet-class")
   private val queryFindReplacePairs = config
     .getConfigList("query-replacements")
     .asScala
@@ -951,7 +956,11 @@ private[service] case class SearchServiceImpl(
     }
   }
 
-  override def highlightDocument(docRef: DocReference, query: Option[SearchQuery]): Task[HighlightedDocument] = {
+  override def highlightDocument(
+      docRef: DocReference,
+      query: Option[SearchQuery],
+      textAsHtml: Boolean
+  ): Task[HighlightedDocument] = {
     for {
       docWithInfo <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -963,7 +972,7 @@ private[service] case class SearchServiceImpl(
           val title = document.metadata.title
           val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val highlightedPages = document.highlightPages(luceneQuery)
+          val highlightedPages = document.highlightPages(luceneQuery, textAsHtml = textAsHtml)
 
           (document.rev, title, highlightedPages)
         }
@@ -976,7 +985,7 @@ private[service] case class SearchServiceImpl(
 
       val pagesWithIndexes = pages.map { page =>
         val highlightedPage = offsetToHighlightedPageMap.get(page.offset)
-        highlightedPage.map(_.copy(index = page.index))
+        highlightedPage.map(_.copy(physicalPageNumber = page.index))
       }.flatten
 
       HighlightedDocument(
@@ -1115,8 +1124,10 @@ private[service] case class SearchServiceImpl(
       page <- searchRepo.getPage(row.pageId)
       rectAndText <- ZIO.attempt {
         val wordGroup = getWordGroup(wordsInRow, wordOffset)
+        log.debug(s"Word group: ${wordGroup.mkString(", ")}")
         val startRect = wordGroup.head.rect
         val wordRect = wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_))
+        log.debug(f"Word group rectangle: $wordRect")
         val horizontalScale = 10000 / page.width.toDouble
         val verticalScale = 10000 / page.height.toDouble
         val scaledRect = wordRect.copy(
@@ -1284,6 +1295,11 @@ private[service] case class SearchServiceImpl(
       docRefs <- suggestionRepo.getMetadataCorrectionDocs(id)
     } yield docRefs
   }
+
+  override def ignoreSuggestions(username: String): Task[Int] =
+    for {
+      ignoreCount <- suggestionRepo.ignoreSuggestions(username)
+    } yield ignoreCount
 
   override def reindexWhereRequired(): Task[Boolean] = {
     val acquireTask = ZIO.attempt {

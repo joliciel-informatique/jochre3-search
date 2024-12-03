@@ -33,7 +33,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
 
   private val queryInput = query[Option[String]]("query")
     .description("Query string for searching in the text")
-    .example(Some(""""פון * װעגן""""))
+    .example(Some("קעלבעל"))
   private val titleInput =
     query[Option[String]]("title").description("Query string for searching in the title").example(Some("מאָטעל"))
   private val authorsInput =
@@ -398,6 +398,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .in(queryInput)
       .in(strictInput)
+      .in(
+        query[Option[Boolean]]("text-as-html")
+          .description("Should the text be pre-formatted as HTML. Defaults to false.")
+          .example(Some(true))
+      )
       .out(jsonBody[HighlightedDocument].example(SearchHelper.highlightedDocExample))
       .description(
         "Return the highlighted document. Note that a highlight can contain a newline character, if it concerns a hyphenated word."

@@ -32,10 +32,11 @@ package object service {
   case class Highlight(start: Int, end: Int)
 
   case class HighlightedPage(
-      index: Int,
+      physicalPageNumber: Int,
       startOffset: Int,
       text: String,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      logicalPageNumber: Option[Int]
   )
 
   case class HighlightedDocument(
@@ -87,7 +88,7 @@ package object service {
         title = "מאָטל, פּײסי דעם חזנס",
         pages = Seq(
           HighlightedPage(
-            index = 1,
+            physicalPageNumber = 1,
             startOffset = 11,
             text = "הײנט איז יום־טוב — מע טאָר נישט װײנען !\n\n" +
               "א.\n\n" +
@@ -108,10 +109,11 @@ package object service {
               "פון דער אַפּטײק ; און מעני, דעם שכנ’ס קעלבעל, האָט מען\n" +
               "אַרױסנעלאָזט נאָך פון אַײן ערגערען עפּוש : פון אַ קלײן, פינ־\n\n" +
               "9\n\n",
-            highlights = Seq(Highlight(236, 242), Highlight(873, 879))
+            highlights = Seq(Highlight(236, 242), Highlight(873, 879)),
+            logicalPageNumber = Some(9)
           ),
           HighlightedPage(
-            index = 2,
+            physicalPageNumber = 2,
             startOffset = 966,
             text = "10\n\n" +
               "שלום־עליכם\n\n" +
@@ -147,7 +149,8 @@ package object service {
             highlights = Seq(
               Highlight(1302, 1308),
               Highlight(1326, 1332)
-            )
+            ),
+            logicalPageNumber = Some(10)
           )
         )
       )

@@ -4,7 +4,15 @@ import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
 import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, UnknownSortException}
 import com.joliciel.jochre.search.core.service.{Highlight, HighlightedDocument, SearchResponse, SearchService}
-import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField, NoSearchCriteriaException, SearchCriterion, SearchQuery, UnknownIndexFieldException}
+import com.joliciel.jochre.search.core.{
+  AggregationBins,
+  DocReference,
+  IndexField,
+  NoSearchCriteriaException,
+  SearchCriterion,
+  SearchQuery,
+  UnknownIndexFieldException
+}
 import zio.stream.{ZPipeline, ZStream}
 import zio.{Task, ZIO}
 
@@ -251,10 +259,11 @@ trait SearchLogic extends HttpErrorMapper {
       .mapError(mapToHttpError)
 
   def getHighlightedTextLogic(
-    docRef: DocReference,
-    query: Option[String],
-    strict: Option[Boolean]
-  ): ZIO[Requirements, HttpError, HighlightedDocument]=
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean],
+      textAsHtml: Option[Boolean]
+  ): ZIO[Requirements, HttpError, HighlightedDocument] =
     (for {
       searchService <- ZIO.service[SearchService]
       searchQuery <- getSearchQuery(
@@ -262,7 +271,7 @@ trait SearchLogic extends HttpErrorMapper {
         strict = strict,
         matchAllDocuments = true
       )
-      highlightedDoc <- searchService.highlightDocument(docRef, Some(searchQuery))
+      highlightedDoc <- searchService.highlightDocument(docRef, Some(searchQuery), textAsHtml.getOrElse(false))
     } yield {
       highlightedDoc
     })
