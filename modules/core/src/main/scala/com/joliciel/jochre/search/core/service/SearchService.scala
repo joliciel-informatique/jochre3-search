@@ -210,7 +210,11 @@ private[service] case class SearchServiceImpl(
     .getConfigList("query-replacements")
     .asScala
     .map(c => c.getString("find").r -> c.getString("replace"))
-    .toSeq
+    .map { case (find, replace) =>
+      log.info(f"Added query replacement: FIND $find REPLACE $replace")
+      find -> replace
+    }
+    .toSeq ++ languageSpecificFilters.map(_.queryFindReplacePairs).getOrElse(Seq.empty)
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -751,15 +755,13 @@ private[service] case class SearchServiceImpl(
     }
 
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val binsByCount = fields
-        .map { field =>
+      val binsByCount = fields.flatMap { field =>
           val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
           searcher.aggregate(query, field, maxBins)
         }
-        .flatten
         .sortBy(0 - _.count)
 
-      val limited = maxBins.map(binsByCount.take(_)).getOrElse(binsByCount)
+      val limited = maxBins.map(binsByCount.take).getOrElse(binsByCount)
 
       val binsByLabel = limited
         .sortBy(_.label)
@@ -940,7 +942,7 @@ private[service] case class SearchServiceImpl(
       val offsetToTextMap = pageOffsetsAndTexts.toMap
 
       val pagesWithText = pages.map { page =>
-        page.index -> offsetToTextMap.get(page.offset).getOrElse("")
+        page.index -> offsetToTextMap.getOrElse(page.offset, "")
       }
 
       val html = if (pagesWithText.isEmpty) {
@@ -983,10 +985,10 @@ private[service] case class SearchServiceImpl(
 
       val offsetToHighlightedPageMap = highlightedPages.map(p => p.startOffset -> p).toMap
 
-      val pagesWithIndexes = pages.map { page =>
+      val pagesWithIndexes = pages.flatMap { page =>
         val highlightedPage = offsetToHighlightedPageMap.get(page.offset)
         highlightedPage.map(_.copy(physicalPageNumber = page.index))
-      }.flatten
+      }
 
       HighlightedDocument(
         title = title.getOrElse(""),

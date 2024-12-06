@@ -10,12 +10,28 @@ import com.joliciel.jochre.search.yiddish.lucene.tokenizer.{
   RemoveQuoteInAbbreviationFilter,
   ReverseTransliterator
 }
+import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
+import org.slf4j.LoggerFactory
 import zio.ZLayer
 
+import scala.jdk.CollectionConverters._
+
 object YiddishFilters extends LanguageSpecificFilters {
+  private val log = LoggerFactory.getLogger(getClass)
   private val yiddishConfig = YiddishConfig.fromConfig
   private val yivoLexicon = YivoLexicon.fromYiddishConfig(yiddishConfig)
+
+  private val config = ConfigFactory.load().getConfig("jochre.search.yi")
+  override val queryFindReplacePairs = config
+    .getConfigList("query-replacements")
+    .asScala
+    .map(c => c.getString("find").r -> c.getString("replace"))
+    .map { case (find, replace) =>
+      log.info(f"Added query replacement: FIND $find REPLACE $replace")
+      find -> replace
+    }
+    .toSeq
 
   override val postTokenizationFilterForSearch: Option[TokenStream => TokenStream] = Some { input: TokenStream =>
     val reverseTransliterator = new ReverseTransliterator(input)
