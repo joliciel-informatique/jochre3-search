@@ -92,7 +92,8 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
           "Hello cat.\nIs the c-\nat happy? ",
           Seq(
             Highlight("Hello ".length, "Hello cat".length),
-            Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-\nat".length)
+            Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-".length),
+            Highlight("Hello cat.\nIs the c-\n".length, "Hello cat.\nIs the c-\nat".length)
           ),
           None
         ),
@@ -142,7 +143,8 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
           "<div class=\"text-snippet\">Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? </div>",
           Seq(
             Highlight("Hello ".length, "Hello cat".length),
-            Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-\nat".length)
+            Highlight("Hello cat.\nIs the ".length, "Hello cat.\nIs the c-".length),
+            Highlight("Hello cat.\nIs the c-\n".length, "Hello cat.\nIs the c-\nat".length)
           ),
           None
         ),
