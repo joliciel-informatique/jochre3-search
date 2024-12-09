@@ -220,8 +220,19 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
                 } else {
                   sb.append(highlightText)
                 }
-                val highlight = Highlight(token.start - pageStart, token.end - pageStart)
-                val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights :+ highlight)
+
+                // If a highlight cross a newline, create a separate highlight for each split across the newline
+                val splitHighlightTexts = highlightText.split('\n')
+                val (_, splitHighlights) = splitHighlightTexts.foldLeft(token.start -> Seq.empty[Highlight]) {
+                  case ((currentStart, splitHighlights), splitHighlightText) =>
+                    val nextStart = currentStart + splitHighlightText.length + 1
+                    nextStart -> (splitHighlights :+ Highlight(
+                      currentStart - pageStart,
+                      (currentStart + splitHighlightText.length) - pageStart
+                    ))
+                }
+
+                val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights ++ splitHighlights)
                 (newPageBuilders, token.end)
               }
           }
