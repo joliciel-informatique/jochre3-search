@@ -39,12 +39,12 @@ class YiddishRegexTokenizerFilterTest extends AnyFlatSpec with Matchers with Luc
   it should "handle single quotes correctly" in {
     val analyzer: Analyzer = new TestAnalyzerForLocale(Locale.forLanguageTag("yi"))
 
-    val text = """„פאַרשכּור’טע“"""
+    val text = """„פֿאַרשכּור’טע“"""
     val tokens = tokenizeString(text, analyzer)
 
     val expected = Seq(
       "„",
-      "פאַרשכּור’טע",
+      "פֿאַרשכּור’טע",
       "“"
     )
 
