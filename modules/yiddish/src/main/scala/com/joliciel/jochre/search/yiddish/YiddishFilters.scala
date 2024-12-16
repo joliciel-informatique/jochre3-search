@@ -3,7 +3,7 @@ package com.joliciel.jochre.search.yiddish
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{SpellingAlternative, Word}
 import com.joliciel.jochre.ocr.yiddish.lexicon.YivoLexicon
-import com.joliciel.jochre.ocr.yiddish.{YiddishAltoTransformer, YiddishConfig}
+import com.joliciel.jochre.ocr.yiddish.{YiddishAltoTransformer, YiddishConfig, YiddishTextSimpifier}
 import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.joliciel.jochre.search.yiddish.lucene.tokenizer.{
   DecomposeUnicodeFilter,
@@ -21,6 +21,7 @@ object YiddishFilters extends LanguageSpecificFilters {
   private val log = LoggerFactory.getLogger(getClass)
   private val yiddishConfig = YiddishConfig.fromConfig
   private val yivoLexicon = YivoLexicon.fromYiddishConfig(yiddishConfig)
+  private val textSimplifier: YiddishTextSimpifier = YiddishTextSimpifier()
 
   private val config = ConfigFactory.load().getConfig("jochre.search.yi")
   override val queryFindReplacePairs = config
@@ -117,6 +118,8 @@ object YiddishFilters extends LanguageSpecificFilters {
       Seq(word)
     }
   }
+
+  override def normalizeText(text: String): String = textSimplifier.simplify(text)
 
   val live: ZLayer[Any, Throwable, LanguageSpecificFilters] = ZLayer.succeed(YiddishFilters)
 }

@@ -15,6 +15,8 @@ trait LanguageSpecificFilters {
   def breakWord(word: Word): Seq[Word]
 
   def queryFindReplacePairs: Seq[(Regex, String)]
+
+  def normalizeText(text: String): String
 }
 
 object LanguageSpecificFilters {
@@ -28,5 +30,7 @@ object LanguageSpecificFilters {
     override def breakWord(word: Word): Seq[Word] = Seq(word)
 
     override def queryFindReplacePairs: Seq[(Regex, String)] = Seq.empty
+
+    override def normalizeText(text: String): String = text
   }
 }

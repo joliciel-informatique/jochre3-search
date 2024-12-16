@@ -109,10 +109,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             searcher.findMatchingRefs(query)
           }.get
         }
-        textWithHtml <- searchService.getTextAsHtml(docRef2, query = None)
+        textWithHtml <- searchService.getTextAsHtml(docRef2, query = None, normalizeText = false)
         textWithHtmlHighlights <- searchService.getTextAsHtml(
           docRef2,
-          query = Some(SearchQuery(SearchCriterion.Contains(IndexField.Text, "think")))
+          query = Some(SearchQuery(SearchCriterion.Contains(IndexField.Text, "think"))),
+          normalizeText = false
         )
         _ <- searchService.removeDocument(docRef1)
         refsHelloAfterRemove <- ZIO.attempt {

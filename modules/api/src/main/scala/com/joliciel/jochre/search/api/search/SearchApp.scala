@@ -429,6 +429,13 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .in(queryInput)
       .in(strictInput)
+      .in(
+        query[Option[Boolean]]("normalize-text")
+          .description(
+            "Whether text should be normalized in term of unicode representation and unexpected diacritics. Default is false."
+          )
+          .example(Some(true))
+      )
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextHtml(),
