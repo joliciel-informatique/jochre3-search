@@ -241,7 +241,8 @@ trait SearchLogic extends HttpErrorMapper {
   def getTextAsHtmlLogic(
       docRef: DocReference,
       query: Option[String],
-      strict: Option[Boolean]
+      strict: Option[Boolean],
+      normalizeText: Option[Boolean]
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
     (for {
       searchService <- ZIO.service[SearchService]
@@ -250,7 +251,7 @@ trait SearchLogic extends HttpErrorMapper {
         strict = strict,
         matchAllDocuments = true
       )
-      textAsHtml <- searchService.getTextAsHtml(docRef, Some(searchQuery))
+      textAsHtml <- searchService.getTextAsHtml(docRef, Some(searchQuery), normalizeText.getOrElse(false))
     } yield {
       ZStream(textAsHtml)
         .via(ZPipeline.utf8Encode)

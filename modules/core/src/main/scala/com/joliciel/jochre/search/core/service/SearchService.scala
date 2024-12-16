@@ -129,7 +129,8 @@ trait SearchService {
 
   def getTextAsHtml(
       docRef: DocReference,
-      query: Option[SearchQuery]
+      query: Option[SearchQuery],
+      normalizeText: Boolean
   ): Task[String]
 
   def highlightDocument(
@@ -755,7 +756,8 @@ private[service] case class SearchServiceImpl(
     }
 
     Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val binsByCount = fields.flatMap { field =>
+      val binsByCount = fields
+        .flatMap { field =>
           val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
           searcher.aggregate(query, field, maxBins)
         }
@@ -918,7 +920,7 @@ private[service] case class SearchServiceImpl(
     }
   }
 
-  override def getTextAsHtml(docRef: DocReference, query: Option[SearchQuery]): Task[String] = {
+  override def getTextAsHtml(docRef: DocReference, query: Option[SearchQuery], normalizeText: Boolean): Task[String] = {
     for {
       docWithInfo <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
@@ -930,7 +932,7 @@ private[service] case class SearchServiceImpl(
           val title = document.metadata.title
           val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val pageOffsetsAndTexts = document.highlightPagesAsHtml(luceneQuery)
+          val pageOffsetsAndTexts = document.highlightPagesAsHtml(luceneQuery, languageSpecificFilters, normalizeText)
 
           (document.rev, title, pageOffsetsAndTexts)
         }
