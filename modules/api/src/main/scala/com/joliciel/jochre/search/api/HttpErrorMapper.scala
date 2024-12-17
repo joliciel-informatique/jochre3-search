@@ -5,9 +5,9 @@ import com.joliciel.jochre.search.core.{BadRequestException, ConflictException, 
 
 trait HttpErrorMapper {
   def mapToHttpError(exception: Throwable): HttpError = exception match {
-    case e: NotFoundException   => NotFound(e.getMessage)
-    case e: BadRequestException => BadRequest(e.getMessage)
-    case e: ConflictException   => Conflict(e.getMessage)
+    case e: NotFoundException   => NotFound(e.code, e.getMessage)
+    case e: BadRequestException => BadRequest(e.code, e.getMessage)
+    case e: ConflictException   => Conflict(e.code, e.getMessage)
     case error: Throwable       => InternalServerError(message = error.getMessage, cause = Some(error))
   }
 }

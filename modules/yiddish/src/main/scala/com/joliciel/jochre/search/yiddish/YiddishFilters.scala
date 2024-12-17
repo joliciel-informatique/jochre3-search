@@ -3,19 +3,36 @@ package com.joliciel.jochre.search.yiddish
 import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.ocr.core.model.{SpellingAlternative, Word}
 import com.joliciel.jochre.ocr.yiddish.lexicon.YivoLexicon
-import com.joliciel.jochre.ocr.yiddish.{YiddishAltoTransformer, YiddishConfig}
+import com.joliciel.jochre.ocr.yiddish.{YiddishAltoTransformer, YiddishConfig, YiddishTextSimpifier}
 import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.joliciel.jochre.search.yiddish.lucene.tokenizer.{
   DecomposeUnicodeFilter,
   RemoveQuoteInAbbreviationFilter,
   ReverseTransliterator
 }
+import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
+import org.slf4j.LoggerFactory
 import zio.ZLayer
 
+import scala.jdk.CollectionConverters._
+
 object YiddishFilters extends LanguageSpecificFilters {
+  private val log = LoggerFactory.getLogger(getClass)
   private val yiddishConfig = YiddishConfig.fromConfig
   private val yivoLexicon = YivoLexicon.fromYiddishConfig(yiddishConfig)
+  private val textSimplifier: YiddishTextSimpifier = YiddishTextSimpifier()
+
+  private val config = ConfigFactory.load().getConfig("jochre.search.yi")
+  override val queryFindReplacePairs = config
+    .getConfigList("query-replacements")
+    .asScala
+    .map(c => c.getString("find").r -> c.getString("replace"))
+    .map { case (find, replace) =>
+      log.info(f"Added query replacement: FIND $find REPLACE $replace")
+      find -> replace
+    }
+    .toSeq
 
   override val postTokenizationFilterForSearch: Option[TokenStream => TokenStream] = Some { input: TokenStream =>
     val reverseTransliterator = new ReverseTransliterator(input)
@@ -101,6 +118,8 @@ object YiddishFilters extends LanguageSpecificFilters {
       Seq(word)
     }
   }
+
+  override def normalizeText(text: String): String = textSimplifier.simplify(text)
 
   val live: ZLayer[Any, Throwable, LanguageSpecificFilters] = ZLayer.succeed(YiddishFilters)
 }

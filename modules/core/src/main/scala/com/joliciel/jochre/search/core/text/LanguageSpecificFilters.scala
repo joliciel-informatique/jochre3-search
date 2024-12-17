@@ -3,6 +3,8 @@ package com.joliciel.jochre.search.core.text
 import com.joliciel.jochre.ocr.core.model.{SpellingAlternative, Word}
 import org.apache.lucene.analysis.TokenStream
 
+import scala.util.matching.Regex
+
 trait LanguageSpecificFilters {
   def postTokenizationFilterForSearch: Option[TokenStream => TokenStream]
 
@@ -11,6 +13,10 @@ trait LanguageSpecificFilters {
   def getAlternatives(word: String): Seq[SpellingAlternative]
 
   def breakWord(word: Word): Seq[Word]
+
+  def queryFindReplacePairs: Seq[(Regex, String)]
+
+  def normalizeText(text: String): String
 }
 
 object LanguageSpecificFilters {
@@ -22,5 +28,9 @@ object LanguageSpecificFilters {
     override def getAlternatives(word: String): Seq[SpellingAlternative] = Seq.empty
 
     override def breakWord(word: Word): Seq[Word] = Seq(word)
+
+    override def queryFindReplacePairs: Seq[(Regex, String)] = Seq.empty
+
+    override def normalizeText(text: String): String = text
   }
 }

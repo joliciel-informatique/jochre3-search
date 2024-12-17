@@ -36,6 +36,21 @@ class YiddishRegexTokenizerFilterTest extends AnyFlatSpec with Matchers with Luc
     tokens.map(_.value) should equal(expected)
   }
 
+  it should "handle single quotes correctly" in {
+    val analyzer: Analyzer = new TestAnalyzerForLocale(Locale.forLanguageTag("yi"))
+
+    val text = """„פֿאַרשכּור’טע“"""
+    val tokens = tokenizeString(text, analyzer)
+
+    val expected = Seq(
+      "„",
+      "פֿאַרשכּור’טע",
+      "“"
+    )
+
+    tokens.map(_.value) should equal(expected)
+  }
+
   it should "handle multiple single quotes correctly" in {
     val analyzer: Analyzer = new TestAnalyzerForLocale(Locale.forLanguageTag("yi"))
 
