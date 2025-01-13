@@ -9,10 +9,15 @@ import org.slf4j.LoggerFactory
 import scala.util.Using
 import scala.jdk.CollectionConverters._
 
-case class TermLister(searcherManager: JochreSearcherManager) {
+case class TermLister(
+    searcherManager: JochreSearcherManager,
+    docRef: DocReference,
+    startOffset: Option[Int] = None,
+    endOffset: Option[Int] = None
+) {
   private val log = LoggerFactory.getLogger(getClass)
 
-  def listTerms(docRef: DocReference): Map[String, Seq[IndexTerm]] = {
+  def listTerms(): Map[String, Seq[IndexTerm]] = {
     Using(searcherManager.acquire()) { searcher =>
       val luceneDoc = searcher
         .getByDocRef(docRef)
@@ -81,8 +86,16 @@ case class TermLister(searcherManager: JochreSearcherManager) {
               log.trace(
                 "Found match " + position + " at luceneId " + nextId + ", field " + field + " start=" + start + ", end=" + end
               )
-            IndexTerm(term.text, start, end, position)
-          }
+            val startInRange = startOffset match {
+              case None              => true
+              case Some(startOffset) => start >= startOffset
+            }
+            val endInRange = endOffset match {
+              case None            => true
+              case Some(endOffset) => start < endOffset
+            }
+            Option.when(startInRange && endInRange)(IndexTerm(term.text, start, end, position))
+          }.flatten
         } else {
           Seq.empty
         }

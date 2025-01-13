@@ -350,7 +350,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Requirements,
     String,
     ValidToken,
-    DocReference,
+    (DocReference, Option[Int], Option[Int]),
     HttpError,
     GetTermsResponse,
     Any
@@ -371,11 +371,21 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
         path[DocReference]("docRef")
       )
       .in("terms")
+      .in(
+        query[Option[Int]]("start-offset")
+          .description("The start character offset of the first word with respect to the entire document (inclusive)")
+          .example(Some(10200))
+      )
+      .in(
+        query[Option[Int]]("end-offset")
+          .description("The end character offset of the last word with respect to the entire document (exclusive)")
+          .example(Some(10450))
+      )
       .out(jsonBody[GetTermsResponse])
       .description("List terms for a document")
 
   private val getTermsHttp: ZServerEndpoint[Requirements, Any] =
-    getTermsEndpoint.serverLogic[Requirements](_ => input => getTermsLogic(input))
+    getTermsEndpoint.serverLogic[Requirements](_ => input => (getTermsLogic _).tupled(input))
 
   private val postMarkForReindexEndpoint: ZPartialServerEndpoint[
     Requirements,
