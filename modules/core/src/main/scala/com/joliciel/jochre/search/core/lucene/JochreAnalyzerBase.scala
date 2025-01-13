@@ -14,6 +14,7 @@ import org.apache.lucene.analysis.{Analyzer, LowerCaseFilter, TokenStream}
 import org.slf4j.Logger
 
 import java.util.Locale
+import org.apache.lucene.analysis.miscellaneous.RemoveDuplicatesTokenFilter
 
 private[lucene] abstract case class JochreAnalyzerBase(locale: Locale) extends Analyzer {
   override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
@@ -33,4 +34,7 @@ private[lucene] abstract case class JochreAnalyzerBase(locale: Locale) extends A
   protected def ignorePunctuationFilter(tokens: TokenStream): TokenStream = new IgnorePunctuationFilter(tokens)
   protected def textNormalizingFilter(tokens: TokenStream): TokenStream =
     new TextNormalizingFilter(tokens, TextNormalizer(locale))
+
+  protected def removeDuplicatesFilter(tokens: TokenStream): TokenStream =
+    new RemoveDuplicatesTokenFilter(tokens)
 }
