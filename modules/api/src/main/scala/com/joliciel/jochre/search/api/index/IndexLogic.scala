@@ -168,10 +168,14 @@ trait IndexLogic extends HttpErrorMapper {
       _ <- searchService.reindexWhereRequired().forkDaemon
     } yield OkResponse()
 
-  def getTermsLogic(docRef: DocReference): ZIO[Requirements, HttpError, GetTermsResponse] =
+  def getTermsLogic(
+      docRef: DocReference,
+      startOffset: Option[Int],
+      endOffset: Option[Int]
+  ): ZIO[Requirements, HttpError, GetTermsResponse] =
     (for {
       searchService <- ZIO.service[SearchService]
-      terms <- searchService.getTerms(docRef)
+      terms <- searchService.getTerms(docRef, startOffset, endOffset)
     } yield GetTermsResponse(terms))
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get terms", error))
       .mapError(mapToHttpError)

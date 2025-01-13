@@ -1,5 +1,8 @@
 .idea
 .bsp
+.metals
+.vscode
+.bloop
 target/
 /docker-compose/jochre.conf
 /temp
@@ -15,3 +18,4 @@ target/
 /index
 /modules/core/content
 /modules/core/content2
+metals.sbt

@@ -186,7 +186,11 @@ trait SearchService {
 
   private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
 
-  def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]]
+  def getTerms(
+      docRef: DocReference,
+      startOffset: Option[Int] = None,
+      endOffset: Option[Int] = None
+  ): Task[Map[String, Seq[IndexTerm]]]
 
   def markForReindex(docRef: DocReference): Task[Unit]
 
@@ -1347,11 +1351,15 @@ private[service] case class SearchServiceImpl(
     ZIO.acquireReleaseWith(acquireTask)(releaseTask)(reindexTask)
   }
 
-  override def getTerms(docRef: DocReference): Task[Map[String, Seq[IndexTerm]]] = {
+  override def getTerms(
+      docRef: DocReference,
+      startOffset: Option[Int] = None,
+      endOffset: Option[Int] = None
+  ): Task[Map[String, Seq[IndexTerm]]] = {
     for {
       terms <- ZIO.attempt {
-        val termLister = TermLister(jochreIndex.searcherManager)
-        termLister.listTerms(docRef)
+        val termLister = TermLister(jochreIndex.searcherManager, docRef, startOffset, endOffset)
+        termLister.listTerms()
       }
     } yield terms
   }
