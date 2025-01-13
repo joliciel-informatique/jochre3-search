@@ -164,30 +164,37 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector(0 -> new StringBuilder()) -> 0) {
             case ((pageBuilders, lastPos), token) =>
-              val leftover = text.substring(lastPos, token.start)
-              val normalizedLeftover = if (normalizeText) {
-                filters.map { filters => filters.normalizeText(leftover) }.getOrElse(leftover)
-              } else {
-                leftover
-              }
-              val htmlLeftover = normalizedLeftover
-                .replaceAll("\n", "<br>")
-              val (_, sb) = pageBuilders.last
-              if (token.value == PAGE_TOKEN) {
-                sb.append(htmlLeftover)
-                (pageBuilders :+ (token.start, new StringBuilder()), token.start)
-              } else {
-                sb.append(htmlLeftover)
-                val highlight = text.substring(token.start, token.end)
-                val normalizedHighlight = if (normalizeText) {
-                  filters.map { filters => filters.normalizeText(highlight) }.getOrElse(highlight)
+              if (lastPos <= token.start) {
+                val leftover = text.substring(lastPos, token.start)
+                val normalizedLeftover = if (normalizeText) {
+                  filters.map { filters => filters.normalizeText(leftover) }.getOrElse(leftover)
                 } else {
-                  highlight
+                  leftover
                 }
-                sb.append(highlightPreTag)
-                sb.append(normalizedHighlight.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
-                sb.append(highlightPostTag)
-                (pageBuilders, token.end)
+                val htmlLeftover = normalizedLeftover
+                  .replaceAll("\n", "<br>")
+                val (_, sb) = pageBuilders.last
+                if (token.value == PAGE_TOKEN) {
+                  sb.append(htmlLeftover)
+                  (pageBuilders :+ (token.start, new StringBuilder()), token.start)
+                } else {
+                  sb.append(htmlLeftover)
+                  val highlight = text.substring(token.start, token.end)
+                  val normalizedHighlight = if (normalizeText) {
+                    filters.map { filters => filters.normalizeText(highlight) }.getOrElse(highlight)
+                  } else {
+                    highlight
+                  }
+                  sb.append(highlightPreTag)
+                  sb.append(normalizedHighlight.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
+                  sb.append(highlightPostTag)
+                  (pageBuilders, token.end)
+                }
+              } else {
+                // For some reason we got a highlight for a string we already highlighted
+                // most likely the same string highlighted twice
+                // we ignore it
+                (pageBuilders, lastPos)
               }
           }
           if (lastPos < text.length) {
@@ -224,39 +231,46 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector((0, new StringBuilder(), Seq.empty[Highlight])) -> 0) {
             case ((pageBuilders, lastPos), token) =>
-              val leftover = if (textAsHtml) {
-                text.substring(lastPos, token.start).replaceAll("\n", "<br>")
-              } else {
-                text.substring(lastPos, token.start)
-              }
-              val (pageStart, sb, highlights) = pageBuilders.last
-              if (token.value == PAGE_TOKEN) {
-                sb.append(leftover)
-                (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
-              } else {
-                sb.append(leftover)
-                val highlightText = text.substring(token.start, token.end)
-                if (textAsHtml) {
-                  sb.append(highlightPreTag)
-                  sb.append(highlightText.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
-                  sb.append(highlightPostTag)
+              if (lastPos <= token.start) {
+                val leftover = if (textAsHtml) {
+                  text.substring(lastPos, token.start).replaceAll("\n", "<br>")
                 } else {
-                  sb.append(highlightText)
+                  text.substring(lastPos, token.start)
                 }
+                val (pageStart, sb, highlights) = pageBuilders.last
+                if (token.value == PAGE_TOKEN) {
+                  sb.append(leftover)
+                  (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
+                } else {
+                  sb.append(leftover)
+                  val highlightText = text.substring(token.start, token.end)
+                  if (textAsHtml) {
+                    sb.append(highlightPreTag)
+                    sb.append(highlightText.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
+                    sb.append(highlightPostTag)
+                  } else {
+                    sb.append(highlightText)
+                  }
 
-                // If a highlight cross a newline, create a separate highlight for each split across the newline
-                val splitHighlightTexts = highlightText.split('\n')
-                val (_, splitHighlights) = splitHighlightTexts.foldLeft(token.start -> Seq.empty[Highlight]) {
-                  case ((currentStart, splitHighlights), splitHighlightText) =>
-                    val nextStart = currentStart + splitHighlightText.length + 1
-                    nextStart -> (splitHighlights :+ Highlight(
-                      currentStart - pageStart,
-                      (currentStart + splitHighlightText.length) - pageStart
-                    ))
+                  // If a highlight cross a newline, create a separate highlight for each split across the newline
+                  val splitHighlightTexts = highlightText.split('\n')
+                  val (_, splitHighlights) = splitHighlightTexts.foldLeft(token.start -> Seq.empty[Highlight]) {
+                    case ((currentStart, splitHighlights), splitHighlightText) =>
+                      val nextStart = currentStart + splitHighlightText.length + 1
+                      nextStart -> (splitHighlights :+ Highlight(
+                        currentStart - pageStart,
+                        (currentStart + splitHighlightText.length) - pageStart
+                      ))
+                  }
+
+                  val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights ++ splitHighlights)
+                  (newPageBuilders, token.end)
                 }
-
-                val newPageBuilders = pageBuilders.init :+ (pageStart, sb, highlights ++ splitHighlights)
-                (newPageBuilders, token.end)
+              } else {
+                // For some reason we got a highlight for a string we already highlighted
+                // most likely the same string highlighted twice
+                // we ignore it
+                (pageBuilders, lastPos)
               }
           }
           if (lastPos < text.length) {
