@@ -35,6 +35,7 @@ class JochreAnalyzerForIndex(locale: Locale, languageSpecificFilters: Option[Lan
     .andThen(hyphenationFilter)
     .andThen(addAlternativesFilter)
     .andThen(ignorePunctuationFilter)
+    .andThen(removeDuplicatesFilter)
     .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
     .apply(tokens)
 
