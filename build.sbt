@@ -3,14 +3,14 @@ import Libraries._
 import com.typesafe.sbt.packager.docker.Cmd
 import sbt.Keys.libraryDependencies
 
-ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / scalaVersion := "2.13.15"
 ThisBuild / organization := "com.joli-ciel"
 ThisBuild / homepage := Some(url("https://www.joli-ciel.com/"))
 ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl-3.0.en.html"))
 
 val cloakroomVersion = "0.5.15"
 val luceneVersion = "9.11.1"
-val jochre3OcrVersion = "1.0.0"
+val jochre3OcrVersion = "1.0.4-SNAPSHOT"
 val catsRetryVersion = "3.1.3"
 val jakartaMailVersion = "2.0.1"
 
