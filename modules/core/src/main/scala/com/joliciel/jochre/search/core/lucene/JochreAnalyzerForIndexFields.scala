@@ -23,6 +23,6 @@ class JochreAnalyzerForIndexFields(locale: Locale,
     .andThen(lowercaseFilter)
     .andThen(postTokenizationFilter)
     .andThen(ignorePunctuationFilter)
-    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
+    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final"))
     .apply(tokens)
 }

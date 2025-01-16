@@ -53,7 +53,7 @@ object IndexErrorTest extends JUnitRunnableSpec with DatabaseTestBase with WithT
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("IndexErrorTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("IndexErrorTest")(
     test("index alto file") {
       for {
         _ <- getSearchRepo()

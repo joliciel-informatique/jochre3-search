@@ -23,7 +23,7 @@ private[lucene] class AddAlternativesFilter(input: TokenStream, indexingHelper: 
   private val typeAttr = addAttribute(classOf[TypeAttribute])
 
   private var currentAlternatives: Seq[SpellingAlternative] = Seq.empty
-  private var attributeState: AttributeSource.State = _
+  private var attributeState: AttributeSource.State = scala.compiletime.uninitialized
 
   final override def incrementToken: Boolean = {
     if (currentAlternatives.nonEmpty) {

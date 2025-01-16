@@ -53,7 +53,7 @@ lazy val core = project
     Compile / packageDoc / mappings := Seq(),
     fork := true,
     publish / skip := true,
-    scalacOptions ++= Seq("-Xmax-inlines", "64")
+    scalacOptions ++= Seq("-Xmax-inlines", "64", "-rewrite", "-source:3.4-migration")
   )
 
 lazy val yiddish = project
@@ -65,7 +65,8 @@ lazy val yiddish = project
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
-    publish / skip := true
+    publish / skip := true,
+    scalacOptions ++= Seq("-rewrite", "-source:3.4-migration")
   )
   .dependsOn(core % "compile->compile;test->test")
 
@@ -103,6 +104,7 @@ lazy val api = project
     // do not package scaladoc
     Compile / packageDoc / mappings := Seq(),
     Compile / mainClass := Some("com.joliciel.jochre.search.api.MainApp"),
-    fork := true
+    fork := true,
+    scalacOptions ++= Seq("-rewrite", "-source:3.4-migration")
   )
   .dependsOn(core % "compile->compile;test->test", yiddish % "compile->compile;test->test")

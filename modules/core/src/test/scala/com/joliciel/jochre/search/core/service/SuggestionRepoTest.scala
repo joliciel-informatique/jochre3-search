@@ -9,7 +9,7 @@ import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import java.time.Instant
 
 object SuggestionRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SuggestionRepoTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("SuggestionRepoTest")(
     test("insert suggestion") {
       val startTime = Instant.now()
       val joe = "joe"

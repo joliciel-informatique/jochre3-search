@@ -17,7 +17,7 @@ object SearchServiceYiddishTest extends JUnitRunnableSpec with DatabaseTestBase 
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceYiddishTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("SearchServiceYiddishTest")(
     test("upload real pdf and get image snippets") {
       val docRef = DocReference("nybc200089")
       val pdfStream = getClass.getResourceAsStream("/nybc200089-11-12.pdf")
