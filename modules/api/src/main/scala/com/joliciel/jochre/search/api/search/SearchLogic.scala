@@ -409,7 +409,7 @@ trait SearchLogic extends HttpErrorMapper {
     } else if (criteria.length == 1) {
       criteria.head
     } else {
-      SearchCriterion.And(criteria: _*)
+      SearchCriterion.And(criteria*)
     }
 
     SearchQuery(criterion)

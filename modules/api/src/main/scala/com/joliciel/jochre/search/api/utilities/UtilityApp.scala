@@ -8,7 +8,6 @@ import com.joliciel.jochre.search.core.CoreProtocol
 import io.circe.Json
 import io.circe.generic.auto._
 import io.circe.literal._
-import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
 import sttp.tapir.AnyEndpoint
@@ -23,7 +22,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
     with UtilityLogic
     with TapirSchemaSupport
     with CoreProtocol {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   val putLogLevelEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -48,7 +47,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
       .out(jsonBody[OkResponse].example(OkResponse()))
 
   val putLogLevelHttp: ZServerEndpoint[Requirements, Any] =
-    putLogLevelEndpoint.serverLogic[Requirements](_ => input => (putLogLevelLogic _).tupled(input))
+    putLogLevelEndpoint.serverLogic[Requirements](_ => input => putLogLevelLogic.tupled(input))
 
   val resetLogLevelEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -80,7 +79,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
     resetLogLevelEndpoint
   ).map(_.endpoint.tag("utilities"))
 
-  val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
+  val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
     putLogLevelHttp,
     resetLogLevelHttp
   )

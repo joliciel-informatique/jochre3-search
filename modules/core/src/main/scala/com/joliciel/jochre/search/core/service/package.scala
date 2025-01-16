@@ -189,7 +189,7 @@ package object service {
     }
   }
 
-  private[core] case class DocRev(rev: Long) extends AnyVal
+  case class DocRev(rev: Long) extends AnyVal
 
   private[service] case class DbDocument(
       rev: DocRev,
@@ -255,8 +255,9 @@ package object service {
       resultCount: Int
   )
 
-  private[service] case class WordSuggestionId(id: Long) extends AnyVal
-  private[service] case class WordSuggestionRev(rev: Long) extends AnyVal
+  case class WordSuggestionId(id: Long) extends AnyVal
+  case class WordSuggestionRev(rev: Long) extends AnyVal
+
   object WordSuggestionRev {
     val ordering = new Ordering[WordSuggestionRev] {
       override def compare(x: WordSuggestionRev, y: WordSuggestionRev): Int = x.rev.compareTo(y.rev)

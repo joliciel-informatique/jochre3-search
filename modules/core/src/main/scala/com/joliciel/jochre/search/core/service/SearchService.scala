@@ -13,7 +13,7 @@ import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
 import org.slf4j.LoggerFactory
 import zio.stream.{ZSink, ZStream}
-import zio.{&, Task, URIO, ZIO, ZLayer}
+import zio.{Task, URIO, ZIO, ZLayer}
 
 import java.awt.image.BufferedImage
 import java.awt.{BasicStroke, Color}
@@ -294,7 +294,7 @@ private[service] case class SearchServiceImpl(
         }
         val bookDir = ref.getBookDir()
         if (bookDir.toFile.exists() && bookDir.toFile.isDirectory) {
-          val files = Option(bookDir.toFile.list()).getOrElse(Array.empty)
+          val files = Option(bookDir.toFile.list().toSeq).getOrElse(Seq.empty[String])
           files.foreach { fileName =>
             val currentFile = bookDir.resolve(fileName).toFile
             currentFile.delete()
@@ -1188,7 +1188,7 @@ private[service] case class SearchServiceImpl(
         pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
         _ <- searchRepo.deleteOldRevs(docRef)
       } yield pageCount)
-        .catchAll { ex: Throwable =>
+        .catchAll { (ex: Throwable) =>
           val sw = new StringWriter()
           val pw = new PrintWriter(sw)
           ex.printStackTrace(pw)
@@ -1207,6 +1207,7 @@ private[service] case class SearchServiceImpl(
               }
             )
         }
+
     } yield pageCount
   }
 
@@ -1339,8 +1340,8 @@ private[service] case class SearchServiceImpl(
             .fromIterable(docRefs)
             .mapZIOParUnordered(indexParallelism) { docRef =>
               reindex(docRef)
-                .catchAll { e: Throwable =>
-                  ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", e))
+                .catchAll { (ex: Throwable) =>
+                  ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", ex))
                 }
             }
             .run(ZSink.foreach(pageCount => ZIO.succeed(log.info(f"Indexed $pageCount pages"))))

@@ -22,7 +22,7 @@ private[lucene] class AddNewlineMarkerFilter(input: TokenStream, indexingHelper:
   private val typeAttr = addAttribute(classOf[TypeAttribute])
 
   private var isNewline: Boolean = false
-  private var attributeState: AttributeSource.State = _
+  private var attributeState: AttributeSource.State = scala.compiletime.uninitialized
 
   final override def incrementToken: Boolean = {
     if (isNewline) {

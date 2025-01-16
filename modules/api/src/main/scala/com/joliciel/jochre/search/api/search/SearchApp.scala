@@ -13,7 +13,6 @@ import com.joliciel.jochre.search.core.service.{
 }
 import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
 import io.circe.generic.auto._
-import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.{Header, MediaType, StatusCode}
 import sttp.tapir.generic.auto._
@@ -29,7 +28,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     with SearchLogic
     with SearchProtocol
     with SearchSchemaSupport {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   private val queryInput = query[Option[String]]("query")
     .description("Query string for searching in the text")
@@ -115,7 +114,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Search the OCR index.")
 
   private val getSearchHttp: ZServerEndpoint[Requirements, Any] =
-    getSearchEndpoint.zServerLogic[Requirements](input => (getSearchLogic _).tupled(input))
+    getSearchEndpoint.zServerLogic[Requirements](input => getSearchLogic.tupled(input))
 
   private val getSearchWithAuthEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -168,7 +167,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
 
   private val getSearchWithAuthHttp: ZServerEndpoint[Requirements, Any] =
     getSearchWithAuthEndpoint.serverLogic[Requirements](token =>
-      input => (getSearchWithAuthLogic _).tupled(token +: input)
+      input => getSearchWithAuthLogic.tupled(Tuple1(token) ++ input)
     )
 
   private val getImageSnippetEndpoint =
@@ -199,8 +198,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .out(streamBinaryBody(ZioStreams)(PngCodecFormat))
       .description("Return an image snippet in PNG format")
 
-  private val getImageSnippetHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getImageSnippetEndpoint.zServerLogic[Requirements](input => (getImageSnippetLogic _).tupled(input))
+  private val getImageSnippetHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
+    getImageSnippetEndpoint.zServerLogic[Requirements](input => getImageSnippetLogic.tupled(input))
 
   private val getImageSnippetWithHighlightsEndpoint =
     insecureEndpoint
@@ -231,9 +230,9 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         "Return an image snippet in PNG format converted to Base64 and a list of relative rectangles to highlight"
       )
 
-  private val getImageSnippetWithHighlightsHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
+  private val getImageSnippetWithHighlightsHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
     getImageSnippetWithHighlightsEndpoint.zServerLogic[Requirements](input =>
-      (getImageSnippetWithHighlightsLogic _).tupled(input)
+      getImageSnippetWithHighlightsLogic.tupled(input)
     )
 
   private val getAggregateEndpoint =
@@ -274,7 +273,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return aggregated bins for this search query and a given field.")
 
   private val getAggregateHttp: ZServerEndpoint[Requirements, Any] =
-    getAggregateEndpoint.zServerLogic[Requirements](input => (getAggregateLogic _).tupled(input))
+    getAggregateEndpoint.zServerLogic[Requirements](input => getAggregateLogic.tupled(input))
 
   private val getWordImageEndpoint =
     insecureEndpoint
@@ -310,8 +309,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .out(streamBinaryBody(ZioStreams)(PngCodecFormat))
       .description("Return a word image in PNG format")
 
-  private val getWordImageHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getWordImageEndpoint.zServerLogic[Requirements](input => (getWordImageLogic _).tupled(input))
+  private val getWordImageHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
+    getWordImageEndpoint.zServerLogic[Requirements](input => getWordImageLogic.tupled(input))
 
   private val getWordTextEndpoint =
     insecureEndpoint
@@ -347,7 +346,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return a word text")
 
   private val getWordTextHttp: ZServerEndpoint[Requirements, Any] =
-    getWordTextEndpoint.zServerLogic[Requirements](input => (getWordTextLogic _).tupled(input))
+    getWordTextEndpoint.zServerLogic[Requirements](input => getWordTextLogic.tupled(input))
 
   private val getTopAuthorsEndpoint =
     insecureEndpoint
@@ -378,7 +377,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("Return most common authors matching prefix in alphabetical order.")
 
   private val getTopAuthorsHttp: ZServerEndpoint[Requirements, Any] =
-    getTopAuthorsEndpoint.zServerLogic[Requirements](input => (getTopAuthorsLogic _).tupled(input))
+    getTopAuthorsEndpoint.zServerLogic[Requirements](input => getTopAuthorsLogic.tupled(input))
 
   private val getHighlightedTextEndpoint =
     insecureEndpoint.get
@@ -408,8 +407,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         "Return the highlighted document. Note that a highlight can contain a newline character, if it concerns a hyphenated word."
       )
 
-  private val getHighlightedTextHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getHighlightedTextEndpoint.zServerLogic[Requirements](input => (getHighlightedTextLogic _).tupled(input))
+  private val getHighlightedTextHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
+    getHighlightedTextEndpoint.zServerLogic[Requirements](input => getHighlightedTextLogic.tupled(input))
 
   private val getTextAsHtmlEndpoint =
     insecureEndpoint.get
@@ -444,8 +443,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       )
       .description("Return the document in HTML format")
 
-  private val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any with ZioStreams] =
-    getTextAsHtmlEndpoint.zServerLogic[Requirements](input => (getTextAsHtmlLogic _).tupled(input))
+  private val getTextAsHtmlHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
+    getTextAsHtmlEndpoint.zServerLogic[Requirements](input => getTextAsHtmlLogic.tupled(input))
 
   private val getListEndpoint =
     insecureEndpoint
@@ -471,7 +470,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .description("List documents in the OCR index.")
 
   private val getListHttp: ZServerEndpoint[Requirements, Any] =
-    getListEndpoint.zServerLogic[Requirements](input => (getListLogic _).tupled(input))
+    getListEndpoint.zServerLogic[Requirements](input => getListLogic.tupled(input))
 
   private val getSizeEndpoint =
     insecureEndpoint.get
@@ -505,7 +504,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         getWordImageEndpoint
       ).map(_.tag("search"))
 
-  val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
+  val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
     getSearchWithAuthHttp,
     getSearchHttp,
     getImageSnippetHttp,

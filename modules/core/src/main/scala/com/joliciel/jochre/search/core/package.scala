@@ -5,10 +5,11 @@ import enumeratum.{DoobieEnum, Enum, EnumEntry}
 
 import java.nio.file.Path
 import scala.jdk.CollectionConverters._
+import com.typesafe.config.Config
 
 package object core {
-  private val config = ConfigFactory.load().getConfig("jochre.search")
-  private val indexConfig = config.getConfig("index")
+  private val mainConfig: Config = ConfigFactory.load().getConfig("jochre.search")
+  private val indexConfig: Config = mainConfig.getConfig("index")
   private val contentDirectories = indexConfig
     .getConfigList("content-directories")
     .asScala
@@ -19,13 +20,15 @@ package object core {
     }
     .to(collection.immutable.SortedMap)
 
-  private val defaultBookUrl = Option.when(config.hasPath("default-book-url"))(config.getString("default-book-url"))
-  private val bookUrlsByCollection = config
+  private val defaultBookUrl =
+    Option.when(mainConfig.hasPath("default-book-url"))(mainConfig.getString("default-book-url"))
+  private val bookUrlsByCollection = mainConfig
     .getConfigList("book-urls-by-collection")
     .asScala
     .map(config => config.getString("collection") -> config.getString("url"))
-  private val defaultDeepLink = Option.when(config.hasPath("default-deep-link"))(config.getString("default-deep-link"))
-  private val deepLinksByCollection = config
+  private val defaultDeepLink =
+    Option.when(mainConfig.hasPath("default-deep-link"))(mainConfig.getString("default-deep-link"))
+  private val deepLinksByCollection = mainConfig
     .getConfigList("deep-links-by-collection")
     .asScala
     .map(config => config.getString("collection") -> config.getString("url"))

@@ -4,7 +4,7 @@ import com.joliciel.jochre.search.core.config.AppConfig
 import com.joliciel.jochre.search.core.db.PostgresDatabase
 import com.typesafe.config.ConfigFactory
 import doobie.Transactor
-import zio.{&, Config, Runtime, Scope, Task, ZIO, ZLayer}
+import zio.{Config, Runtime, Scope, Task, ZIO, ZLayer}
 import zio.config.typesafe.TypesafeConfigProvider
 
 trait DatabaseTestBase {

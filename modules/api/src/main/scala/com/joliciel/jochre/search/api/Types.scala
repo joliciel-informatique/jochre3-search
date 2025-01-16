@@ -6,7 +6,7 @@ import doobie.Transactor
 import zio.{RIO, Task}
 
 object Types {
-  type Requirements = AppConfig with Transactor[Task] with SearchService with PreferenceService
+  type Requirements = AppConfig & Transactor[Task] & SearchService & PreferenceService
 
   type AppTask[T] = RIO[Requirements, T]
 }

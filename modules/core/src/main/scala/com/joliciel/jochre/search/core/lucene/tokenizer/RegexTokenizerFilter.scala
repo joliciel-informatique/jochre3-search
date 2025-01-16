@@ -25,9 +25,9 @@ private[lucene] class RegexTokenizerFilter(input: TokenStream, regex: Regex) ext
 
   private var splits: Seq[CharSequence] = Seq.empty
   private var currentSplit: Int = 0
-  private var currentStart: Int = _
+  private var currentStart: Int = scala.compiletime.uninitialized
 
-  private var attributeState: AttributeSource.State = _
+  private var attributeState: AttributeSource.State = scala.compiletime.uninitialized
 
   final override def incrementToken: Boolean = {
     if (currentSplit < splits.length) {
