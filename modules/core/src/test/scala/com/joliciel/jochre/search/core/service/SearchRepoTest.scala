@@ -10,7 +10,7 @@ import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 import java.time.Instant
 
 object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchRepoTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("SearchRepoTest")(
     test("insert document") {
       val docRef = DocReference("doc1")
       val joe = "Joe"

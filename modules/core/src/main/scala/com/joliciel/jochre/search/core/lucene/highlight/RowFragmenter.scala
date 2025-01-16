@@ -6,7 +6,7 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.search.highlight.Fragmenter
 
 private[lucene] class RowFragmenter() extends Fragmenter {
-  private var termAtt: CharTermAttribute = _
+  private var termAtt: CharTermAttribute = scala.compiletime.uninitialized
 
   override def start(originalText: String, tokenStream: TokenStream): Unit = {
     termAtt = tokenStream.addAttribute(classOf[CharTermAttribute])

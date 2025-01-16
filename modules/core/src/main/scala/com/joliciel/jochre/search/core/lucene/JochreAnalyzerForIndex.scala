@@ -36,7 +36,7 @@ class JochreAnalyzerForIndex(locale: Locale, languageSpecificFilters: Option[Lan
     .andThen(addAlternativesFilter)
     .andThen(ignorePunctuationFilter)
     .andThen(removeDuplicatesFilter)
-    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final") _)
+    .andThenIf(log.isTraceEnabled)(tapFilter(log, "final"))
     .apply(tokens)
 
   def addDocumentReferenceFilter(tokens: TokenStream): TokenStream =

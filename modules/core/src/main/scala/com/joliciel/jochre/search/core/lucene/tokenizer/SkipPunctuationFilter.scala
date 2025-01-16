@@ -11,7 +11,7 @@ private[lucene] class SkipPunctuationFilter(input: TokenStream) extends TokenFil
 
   @tailrec
   final override def incrementToken: Boolean = {
-    if (input.incrementToken()) {
+    if (hasNextToken()) {
       val buffer = new String(charTerm.buffer()).subSequence(0, charTerm.length())
       if (punctuationRegex.matches(buffer)) {
         this.incrementToken()
@@ -21,5 +21,9 @@ private[lucene] class SkipPunctuationFilter(input: TokenStream) extends TokenFil
     } else {
       false
     }
+  }
+
+  private def hasNextToken(): Boolean = {
+    input.incrementToken()
   }
 }

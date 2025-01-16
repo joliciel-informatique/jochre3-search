@@ -15,9 +15,9 @@ case class SearchQuery(criterion: SearchCriterion) {
     def replaceCriterion(criterion: SearchCriterion): SearchCriterion = criterion match {
       case SearchCriterion.Not(criterion) => SearchCriterion.Not(replaceCriterion(criterion))
       case SearchCriterion.And(criteria: Seq[SearchCriterion]) =>
-        SearchCriterion.And(criteria.map(replaceCriterion(_)): _*)
+        SearchCriterion.And(criteria.map(replaceCriterion(_))*)
       case SearchCriterion.Or(criteria: Seq[SearchCriterion]) =>
-        SearchCriterion.Or(criteria.map(replaceCriterion(_)): _*)
+        SearchCriterion.Or(criteria.map(replaceCriterion(_))*)
       case SearchCriterion.Contains(fields, queryString, strict) =>
         SearchCriterion.Contains(fields, replaceFunction(queryString), strict)
       case other => other

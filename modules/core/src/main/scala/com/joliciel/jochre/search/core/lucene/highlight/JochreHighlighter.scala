@@ -71,7 +71,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
             builder.addGap(position - currentPos)
           }
           val termQueries = terms.map(term => new SpanTermQuery(term))
-          val synonymQuery = new SpanOrQuery(termQueries.toArray: _*)
+          val synonymQuery = new SpanOrQuery(termQueries.toArray*)
           builder.addClause(synonymQuery)
           position + 1
         }
@@ -84,7 +84,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
     case query: SynonymQuery =>
       Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.entryName) {
         val termQueries = query.getTerms.asScala.map(term => new SpanTermQuery(term))
-        new SpanOrQuery(termQueries.toArray: _*)
+        new SpanOrQuery(termQueries.toArray*)
       }
     case query: BooleanQuery =>
       val allClauses = query.clauses().asScala
@@ -96,7 +96,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
         if (positiveClauses.length == 1) {
           positiveClauses.head
         } else {
-          new SpanOrQuery(positiveClauses.toArray: _*)
+          new SpanOrQuery(positiveClauses.toArray*)
         }
       }
     case other =>

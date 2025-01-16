@@ -1,23 +1,23 @@
 import sbt._
 
 object Libraries {
-  val slf4jVersion = "2.0.12"
-  val zioVersion = "2.1.5"
-  val zioJsonVersion = "0.7.1"
+  val slf4jVersion = "2.0.16"
+  val zioVersion = "2.1.14"
+  val zioJsonVersion = "0.7.4"
   val zioNioVersion = "2.0.2"
-  val http4sVersion = "0.23.27"
-  val zioConfigVersion = "4.0.2"
-  val zioInteropCatsVersion = "23.1.0.2"
-  val tapirVersion = "1.10.10"
+  val http4sVersion = "0.23.30"
+  val zioConfigVersion = "4.0.3"
+  val zioInteropCatsVersion = "23.1.0.3"
+  val tapirVersion = "1.11.2"
   val scalaTestVersion = "3.2.19"
-  val enumeratumVersion = "1.7.3"
-  val enumeratumDoobieVersion = "1.7.5"
+  val enumeratumVersion = "1.7.5"
+  val enumeratumDoobieVersion = "1.7.7"
   val doobieVersion = "1.0.0-RC5"
-  val logbackVersion = "1.5.6"
-  val flywayVersion = "10.15.0"
+  val logbackVersion = "1.5.16"
+  val flywayVersion = "11.1.1"
   val catsVersion = "2.12.0"
-  val sttpVersion = "3.9.7"
-  val circeVersion = "0.14.9"
+  val sttpVersion = "3.10.2"
+  val circeVersion = "0.14.10"
 
   val typeDeps = Seq(
     "com.beachape" %% "enumeratum" % enumeratumVersion,

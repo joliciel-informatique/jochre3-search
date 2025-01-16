@@ -82,7 +82,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("SearchServiceTest")(
     test("index alto file") {
       for {
         _ <- getSearchRepo()

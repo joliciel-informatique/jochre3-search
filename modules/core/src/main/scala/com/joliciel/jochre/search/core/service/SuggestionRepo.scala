@@ -4,12 +4,15 @@ import com.joliciel.jochre.ocr.core.graphics.Rectangle
 import com.joliciel.jochre.search.core.{DocReference, MetadataField}
 import doobie.Transactor
 import doobie.implicits._
+import doobie.implicits.javatime._
 import doobie.postgres.implicits._
 import doobie.util.update.Update
 import zio.interop.catz._
 import zio.{Task, ZIO, ZLayer}
+import doobie.util.meta.Meta
 
-private[service] case class SuggestionRepo(transactor: Transactor[Task]) {
+private[service] case class SuggestionRepo(transactor: Transactor[Task]) extends DoobieSupport {
+
   def insertSuggestion(
       username: String,
       ipAddress: Option[String],

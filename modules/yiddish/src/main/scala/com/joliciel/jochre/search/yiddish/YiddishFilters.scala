@@ -34,14 +34,14 @@ object YiddishFilters extends LanguageSpecificFilters {
     }
     .toSeq
 
-  override val postTokenizationFilterForSearch: Option[TokenStream => TokenStream] = Some { input: TokenStream =>
+  override val postTokenizationFilterForSearch: Option[TokenStream => TokenStream] = Some { (input: TokenStream) =>
     val reverseTransliterator = new ReverseTransliterator(input)
     val decomposeUnicodeFilter = new DecomposeUnicodeFilter(reverseTransliterator)
     val removeQuoteInAbbreviationFilter = new RemoveQuoteInAbbreviationFilter(decomposeUnicodeFilter)
     removeQuoteInAbbreviationFilter
   }
 
-  override val postTokenizationFilterForIndex: Option[TokenStream => TokenStream] = Some { input: TokenStream =>
+  override val postTokenizationFilterForIndex: Option[TokenStream => TokenStream] = Some { (input: TokenStream) =>
     new RemoveQuoteInAbbreviationFilter(input)
   }
 

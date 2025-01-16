@@ -3,14 +3,14 @@ import Libraries._
 import com.typesafe.sbt.packager.docker.Cmd
 import sbt.Keys.libraryDependencies
 
-ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / scalaVersion := "3.6.2"
 ThisBuild / organization := "com.joli-ciel"
 ThisBuild / homepage := Some(url("https://www.joli-ciel.com/"))
 ThisBuild / licenses := List("AGPL-v3" -> url("https://www.gnu.org/licenses/agpl-3.0.en.html"))
 
 val cloakroomVersion = "0.5.15"
 val luceneVersion = "9.11.1"
-val jochre3OcrVersion = "1.0.0"
+val jochre3OcrVersion = "1.1.0"
 val catsRetryVersion = "3.1.3"
 val jakartaMailVersion = "2.0.1"
 
@@ -52,7 +52,8 @@ lazy val core = project
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
-    publish / skip := true
+    publish / skip := true,
+    scalacOptions ++= Seq("-Xmax-inlines", "64", "-rewrite", "-source:3.4-migration")
   )
 
 lazy val yiddish = project
@@ -64,7 +65,8 @@ lazy val yiddish = project
     ),
     Compile / packageDoc / mappings := Seq(),
     fork := true,
-    publish / skip := true
+    publish / skip := true,
+    scalacOptions ++= Seq("-rewrite", "-source:3.4-migration")
   )
   .dependsOn(core % "compile->compile;test->test")
 
@@ -102,6 +104,7 @@ lazy val api = project
     // do not package scaladoc
     Compile / packageDoc / mappings := Seq(),
     Compile / mainClass := Some("com.joliciel.jochre.search.api.MainApp"),
-    fork := true
+    fork := true,
+    scalacOptions ++= Seq("-rewrite", "-source:3.4-migration")
   )
   .dependsOn(core % "compile->compile;test->test", yiddish % "compile->compile;test->test")

@@ -53,7 +53,7 @@ private[lucene] class JochreSearcher(
 
   private def getLuceneDocument(luceneId: Int): LuceneDocument = new LuceneDocument(this, luceneId)
 
-  private def getCollectorManager(sort: Sort, first: Int, max: Int): CollectorManager[_ <: Collector, _ <: TopDocs] = {
+  private def getCollectorManager(sort: Sort, first: Int, max: Int): CollectorManager[? <: Collector, ? <: TopDocs] = {
     val maxCount = Math.max(1, indexSize)
     sort match {
       case Sort.Score => new TopScoreDocCollectorManager(first + max, maxCount)

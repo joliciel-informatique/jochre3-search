@@ -20,7 +20,7 @@ private[lucene] class HyphenationFilter(input: TokenStream, indexingHelper: Inde
   private val offsetAttr = addAttribute(classOf[OffsetAttribute])
   private val typeAttr = addAttribute(classOf[TypeAttribute])
 
-  private var attributeState: AttributeSource.State = _
+  private var attributeState: AttributeSource.State = scala.compiletime.uninitialized
   private var setAside: Seq[AttributeSource.State] = Seq.empty
   private var hasNext: Boolean = true
 

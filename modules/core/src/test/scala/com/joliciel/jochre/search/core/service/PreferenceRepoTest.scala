@@ -6,7 +6,7 @@ import zio.test.junit.JUnitRunnableSpec
 import zio.test.{Spec, TestAspect, TestEnvironment, assertTrue}
 
 object PreferenceRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("PreferenceRepoTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("PreferenceRepoTest")(
     test("insert/update/get/delete preference") {
       val username = "joe"
       val key1 = "test"

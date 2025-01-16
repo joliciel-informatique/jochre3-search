@@ -71,7 +71,7 @@ object SuggestionTest extends JUnitRunnableSpec with DatabaseTestBase with WithT
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
-  override def spec: Spec[TestEnvironment with Scope, Any] = suite("SearchServiceTest")(
+  override def spec: Spec[TestEnvironment & Scope, Any] = suite("SearchServiceTest")(
     test("make a suggestion") {
       val wordOffset = (docRef2.ref + "\n\n" +
         "Hello people.\n" +
