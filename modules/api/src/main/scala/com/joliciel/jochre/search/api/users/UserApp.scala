@@ -8,7 +8,6 @@ import com.joliciel.jochre.search.core.CoreProtocol
 import io.circe.Json
 import io.circe.generic.auto._
 import io.circe.literal._
-import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
 import sttp.tapir.AnyEndpoint
@@ -50,7 +49,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
 
   val upsertPreferenceHttp: ZServerEndpoint[Requirements, Any] =
     upsertPreferenceEndpoint.serverLogic[Requirements](token =>
-      input => (upsertPreferenceLogic _).tupled(token +: input)
+      input => upsertPreferenceLogic.tupled(Tuple1(token) ++ input)
     )
 
   val getPreferenceEndpoint: ZPartialServerEndpoint[
@@ -101,7 +100,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
     deletePreferenceEndpoint
   ).map(_.endpoint.tag("user"))
 
-  val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
+  val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
     upsertPreferenceHttp,
     getPreferenceHttp,
     deletePreferenceHttp

@@ -8,13 +8,17 @@ import doobie._
 import doobie.implicits._
 import doobie.postgres.circe.jsonb.implicits._
 import doobie.postgres.implicits._
-import io.circe.generic.auto._
+import doobie.util.meta.Meta
+import io.circe.generic.semiauto._
 import zio._
 import zio.interop.catz._
 
 import java.time.Instant
+import io.circe.Decoder
+import io.circe.Encoder
+import com.joliciel.jochre.search.core.IndexField
 
-private[service] case class SearchRepo(transactor: Transactor[Task]) {
+private[service] case class SearchRepo(transactor: Transactor[Task]) extends DoobieSupport {
   implicit val doobieMappingForIndexStatus: Meta[DocumentStatusCode] =
     pgEnumStringOpt("document_status", DocumentStatusCode.fromEnum, DocumentStatusCode.toEnum)
 
@@ -144,8 +148,17 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) {
       .unique
       .transact(transactor)
 
-  implicit val searchCriterionMeta: Meta[SearchCriterion] = new Meta(pgDecoderGet, pgEncoderPut)
-  implicit val sortMeta: Meta[Sort] = new Meta(pgDecoderGet, pgEncoderPut)
+  given Decoder[IndexField] = deriveDecoder[IndexField]
+  given Encoder[IndexField] = deriveEncoder[IndexField]
+  given Decoder[SearchCriterion] = deriveDecoder[SearchCriterion]
+  given Encoder[SearchCriterion] = deriveEncoder[SearchCriterion]
+
+  given Meta[SearchCriterion] = new Meta(pgDecoderGet, pgEncoderPut)
+
+  given Decoder[Sort] = deriveDecoder[Sort]
+  given Encoder[Sort] = deriveEncoder[Sort]
+  given Meta[Sort] = new Meta(pgDecoderGet, pgEncoderPut)
+
   def insertQuery(
       username: String,
       ipAddress: Option[String],

@@ -7,7 +7,6 @@ import com.joliciel.jochre.search.api.{HttpError, OkResponse, Roles}
 import com.joliciel.jochre.search.core.service.MetadataCorrectionId
 import com.joliciel.jochre.search.core.{CoreProtocol, DocReference, MetadataField}
 import io.circe.generic.auto._
-import shapeless.syntax.std.tuple._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.StatusCode
 import sttp.tapir.AnyEndpoint
@@ -61,7 +60,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .description("Add a new document defined by a PDF, zipped Alto XML, and optionally metadata")
 
   private[index] val putPdfHttp =
-    putPdfEndpoint.serverLogic[Requirements](token => input => (putPdfLogic _).tupled(token +: input))
+    putPdfEndpoint.serverLogic[Requirements](token => input => putPdfLogic.tupled(Tuple1(token) ++ input))
 
   private val putImageZipEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -103,7 +102,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       )
 
   private val putImageZipHttp: ZServerEndpoint[Requirements, Any] =
-    putImageZipEndpoint.serverLogic[Requirements](token => input => (putImageZipLogic _).tupled(token +: input))
+    putImageZipEndpoint.serverLogic[Requirements](token => input => putImageZipLogic.tupled(Tuple1(token) ++ input))
 
   private val postAltoEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -142,7 +141,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .description("Replace alto OCR layer for an existing document.")
 
   private val postAltoHttp: ZServerEndpoint[Requirements, Any] =
-    postAltoEndpoint.serverLogic[Requirements](token => input => (postAltoLogic _).tupled(token +: input))
+    postAltoEndpoint.serverLogic[Requirements](token => input => postAltoLogic.tupled(Tuple1(token) ++ input))
 
   private val postMetadataEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -181,7 +180,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .description("Replace metadata for an existing document.")
 
   private val postMetadataHttp: ZServerEndpoint[Requirements, Any] =
-    postMetadataEndpoint.serverLogic[Requirements](token => input => (postMetadataLogic _).tupled(token +: input))
+    postMetadataEndpoint.serverLogic[Requirements](token => input => postMetadataLogic.tupled(Tuple1(token) ++ input))
 
   private val deleteDocumentEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -212,7 +211,9 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .description("Remove an existing document")
 
   private val deleteDocumentHttp: ZServerEndpoint[Requirements, Any] =
-    deleteDocumentEndpoint.serverLogic[Requirements](token => input => (deleteDocumentLogic _).tupled(token +: input))
+    deleteDocumentEndpoint.serverLogic[Requirements](token =>
+      input => deleteDocumentLogic.tupled(Tuple1(token) ++ input)
+    )
 
   private val postWordSuggestionEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -243,7 +244,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
 
   private val postWordSuggestionHttp: ZServerEndpoint[Requirements, Any] =
     postWordSuggestionEndpoint.serverLogic[Requirements](token =>
-      input => (postWordSuggestionLogic _).tupled(token +: input)
+      input => postWordSuggestionLogic.tupled(Tuple1(token) ++ input)
     )
 
   private val postMetadataCorrectionEndpoint: ZPartialServerEndpoint[
@@ -284,7 +285,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
 
   private val postMetadataCorrectionHttp: ZServerEndpoint[Requirements, Any] =
     postMetadataCorrectionEndpoint.serverLogic[Requirements](token =>
-      input => (postMetadataCorrectionLogic _).tupled(token +: input)
+      input => postMetadataCorrectionLogic.tupled(Tuple1(token) ++ input)
     )
 
   private val postReindexEndpoint: ZPartialServerEndpoint[
@@ -385,7 +386,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .description("List terms for a document")
 
   private val getTermsHttp: ZServerEndpoint[Requirements, Any] =
-    getTermsEndpoint.serverLogic[Requirements](_ => input => (getTermsLogic _).tupled(input))
+    getTermsEndpoint.serverLogic[Requirements](_ => input => getTermsLogic.tupled(input))
 
   private val postMarkForReindexEndpoint: ZPartialServerEndpoint[
     Requirements,
@@ -462,7 +463,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     getTermsEndpoint
   ).map(_.endpoint.tag("index"))
 
-  val http: List[ZServerEndpoint[Requirements, Any with ZioStreams]] = List(
+  val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
     putPdfHttp,
     putImageZipHttp,
     postAltoHttp,
