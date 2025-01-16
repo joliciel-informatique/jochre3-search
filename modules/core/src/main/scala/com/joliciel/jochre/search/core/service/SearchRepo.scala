@@ -19,7 +19,7 @@ import io.circe.Encoder
 import com.joliciel.jochre.search.core.IndexField
 
 private[service] case class SearchRepo(transactor: Transactor[Task]) extends DoobieSupport {
-  implicit val doobieMappingForIndexStatus: Meta[DocumentStatusCode] =
+  given Meta[DocumentStatusCode] =
     pgEnumStringOpt("document_status", DocumentStatusCode.fromEnum, DocumentStatusCode.toEnum)
 
   def upsertIndexedDocument(

@@ -22,7 +22,7 @@ case class UtilityApp(override val authenticationProvider: AuthenticationProvide
     with UtilityLogic
     with TapirSchemaSupport
     with CoreProtocol {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   val putLogLevelEndpoint: ZPartialServerEndpoint[
     Requirements,

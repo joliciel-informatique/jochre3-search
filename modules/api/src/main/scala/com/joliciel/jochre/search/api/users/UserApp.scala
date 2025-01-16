@@ -22,7 +22,7 @@ case class UserApp(override val authenticationProvider: AuthenticationProvider, 
     with UserLogic
     with TapirSchemaSupport
     with CoreProtocol {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   val upsertPreferenceEndpoint: ZPartialServerEndpoint[
     Requirements,

@@ -21,7 +21,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     with IndexLogic
     with IndexSchemaSupport
     with CoreProtocol {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   private val putPdfEndpoint: ZPartialServerEndpoint[
     Requirements,

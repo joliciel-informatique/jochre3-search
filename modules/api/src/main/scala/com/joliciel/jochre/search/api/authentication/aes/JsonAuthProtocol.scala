@@ -29,8 +29,8 @@ trait JsonAuthProtocol {
     )
   }
 
-  implicit val jsonDecoder_rawJsonToken: Decoder[RawJsonToken] = deriveDecoder
-  implicit val jsonEncoder_rawJsonToken: Encoder[RawJsonToken] = deriveEncoder
+  given Decoder[RawJsonToken] = deriveDecoder
+  given Encoder[RawJsonToken] = deriveEncoder
 }
 
 object JsonAuthProtocol extends JsonAuthProtocol

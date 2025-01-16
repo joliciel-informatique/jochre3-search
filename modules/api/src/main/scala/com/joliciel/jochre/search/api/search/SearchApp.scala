@@ -28,7 +28,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     with SearchLogic
     with SearchProtocol
     with SearchSchemaSupport {
-  implicit val ec: ExecutionContext = executionContext
+  given ExecutionContext = executionContext
 
   private val queryInput = query[Option[String]]("query")
     .description("Query string for searching in the text")
