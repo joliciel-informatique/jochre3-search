@@ -1,8 +1,15 @@
 package com.joliciel.jochre.search.core.lucene
 
-import com.joliciel.jochre.search.core.{DocMetadata, DocReference, IndexField, MetadataField}
-import com.joliciel.jochre.search.core.lucene.highlight.{HighlightFragment, JochreHighlighter}
-import com.joliciel.jochre.search.core.service.{DocRev, Highlight, HighlightedPage, Snippet}
+import com.joliciel.jochre.search.core.DocMetadata
+import com.joliciel.jochre.search.core.DocReference
+import com.joliciel.jochre.search.core.IndexField
+import com.joliciel.jochre.search.core.MetadataField
+import com.joliciel.jochre.search.core.lucene.highlight.HighlightFragment
+import com.joliciel.jochre.search.core.lucene.highlight.JochreHighlighter
+import com.joliciel.jochre.search.core.service.DocRev
+import com.joliciel.jochre.search.core.service.Highlight
+import com.joliciel.jochre.search.core.service.HighlightedPage
+import com.joliciel.jochre.search.core.service.Snippet
 import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
