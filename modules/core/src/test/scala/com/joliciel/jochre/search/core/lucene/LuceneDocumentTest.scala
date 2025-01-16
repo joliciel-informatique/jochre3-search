@@ -35,6 +35,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
       DocumentIndexInfo(
         pageOffsets = Set(prefix.length, prefix.length + page1.length, prefix.length + page1.length + page2.length),
         newlineOffsets = Set(
+          prefix.length,
           prefix.length + page1line1.length,
           prefix.length + page1line1.length + page1line2.length,
           prefix.length + page1.length + page2line1.length

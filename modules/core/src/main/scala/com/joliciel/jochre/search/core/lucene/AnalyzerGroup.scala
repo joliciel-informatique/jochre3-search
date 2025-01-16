@@ -3,6 +3,7 @@ package com.joliciel.jochre.search.core.lucene
 import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.Analyzer
+import org.apache.lucene.search.IndexSearcher
 
 import java.util.Locale
 
@@ -18,6 +19,8 @@ private[search] case class AnalyzerGroup(
 private[search] object AnalyzerGroup {
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val locale: Locale = Locale.forLanguageTag(config.getString("locale"))
+  private val maxClauseCount = config.getInt("lucene-query-max-clause-count")
+  IndexSearcher.setMaxClauseCount(maxClauseCount)
 
   def generic(languageSpecificFilters: Option[LanguageSpecificFilters]): AnalyzerGroup =
     AnalyzerGroup(
