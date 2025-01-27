@@ -52,10 +52,10 @@ private[search] case class LuceneDocIndexer(
       doc.metadata.title.map(getFieldsForText(IndexField.Title, _)).getOrElse(Seq.empty),
       doc.metadata.titleEnglish.map(getFieldsForText(IndexField.TitleEnglish, _)).getOrElse(Seq.empty),
       getFieldsForText(IndexField.Text, doc.text),
-      doc.metadata.author.map(getFieldsForString(IndexField.Author, _)).getOrElse(Seq.empty),
-      doc.metadata.authorEnglish.map(getFieldsForString(IndexField.AuthorEnglish, _)).getOrElse(Seq.empty),
-      doc.metadata.publisher.map(getFieldsForString(IndexField.Publisher, _)).getOrElse(Seq.empty),
-      doc.metadata.volume.map(getFieldsForString(IndexField.Volume, _)).getOrElse(Seq.empty),
+      doc.metadata.author.map(getFieldsForUntokenizedText(IndexField.Author, _)).getOrElse(Seq.empty),
+      doc.metadata.authorEnglish.map(getFieldsForUntokenizedText(IndexField.AuthorEnglish, _)).getOrElse(Seq.empty),
+      doc.metadata.publisher.map(getFieldsForUntokenizedText(IndexField.Publisher, _)).getOrElse(Seq.empty),
+      doc.metadata.volume.map(getFieldsForUntokenizedText(IndexField.Volume, _)).getOrElse(Seq.empty),
       doc.metadata.publicationYear
         .map(getFieldsForYear(IndexField.PublicationYear, IndexField.PublicationYearAsNumber, _))
         .getOrElse(Seq.empty),
@@ -96,6 +96,24 @@ private[search] case class LuceneDocIndexer(
     Seq(Some(stringField), sortField, facetField).flatten
   }
 
+  private def getFieldsForUntokenizedText(
+      field: IndexField,
+      value: String
+  ): Seq[IndexableField] = {
+    if (field.kind != FieldKind.UntokenizedText) {
+      throw new WrongFieldTypeException(f"Cannot create untokenized text field for field ${field.entryName}")
+    }
+    val textField = new TextField(field.entryName, value, Store.YES)
+    val sortField = Option.when(field.sortable && value != null && !value.isBlank)(
+      new SortedDocValuesField(field.entryName, new BytesRef(value))
+    )
+    val facetField = Option.when(field.aggregatable && value != null && !value.isBlank)(
+      new SortedSetDocValuesFacetField(field.entryName, value)
+    )
+
+    Seq(Some(textField), sortField, facetField).flatten
+  }
+
   private def getFieldsForMultiString(
       field: IndexField,
       values: Seq[String]
@@ -115,14 +133,14 @@ private[search] case class LuceneDocIndexer(
   }
 
   private def getFieldsForYear(field: IndexField, numberField: IndexField, value: String): Seq[IndexableField] = {
-    if (field.kind != FieldKind.String) {
+    if (field.kind != FieldKind.UntokenizedText) {
       throw new WrongFieldTypeException(f"Cannot create year field for field ${field.entryName}")
     }
     if (numberField.kind != FieldKind.Integer) {
       throw new WrongFieldTypeException(f"Cannot create year field for number field ${numberField.entryName}")
     }
 
-    val stringField = new StringField(field.entryName, value, Store.YES)
+    val stringField = new TextField(field.entryName, value, Store.YES)
     val numericString = value.replaceAll(raw"\D", "")
     if (numericString.length >= 3 && numericString.length <= 4) {
       val year = (if (numericString.length == 3) { numericString + "0" }

@@ -79,7 +79,14 @@ object SearchCriterion {
       if (field.isTokenized) {
         throw new WrongFieldTypeException(f"Cannot perform ValueIn on field ${field.entryName}: field is tokenized")
       }
-      new TermInSetQuery(field.entryName, values.map(str => new BytesRef(str)).asJavaCollection)
+      new TermInSetQuery(
+        field.entryName,
+        values
+          .map(str =>
+            new BytesRef(analyzerGroup.languageSpecificFilters.map(_.normalizeText(str)).getOrElse(str).toLowerCase())
+          )
+          .asJavaCollection
+      )
     }
   }
 
@@ -88,7 +95,12 @@ object SearchCriterion {
       if (field.isTokenized) {
         throw new WrongFieldTypeException(f"Cannot perform StartsWith on field ${field.entryName}: field is tokenized")
       }
-      val prefixQuery = new PrefixQuery(new Term(field.entryName, prefix))
+      val prefixQuery = new PrefixQuery(
+        new Term(
+          field.entryName,
+          analyzerGroup.languageSpecificFilters.map(_.normalizeText(prefix)).getOrElse(prefix).toLowerCase()
+        )
+      )
       prefixQuery
     }
   }

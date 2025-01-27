@@ -15,11 +15,17 @@ import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.search.core.FieldKind.Text
+import com.joliciel.jochre.search.core.FieldKind.UntokenizedText
 
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
-  val analyzerPerField: Map[String, Analyzer] = Map(
-    IndexField.Text.entryName -> analyzerGroup.forIndexing
-  )
+  val analyzerPerField: Map[String, Analyzer] = IndexField.values.flatMap { indexField =>
+    indexField.kind match {
+      case Text if (indexField == IndexField.Text) => Some(indexField.entryName -> analyzerGroup.forIndexing)
+      case UntokenizedText => Some(indexField.entryName -> analyzerGroup.forIndexingUntokenizedFields)
+      case _               => None
+    }
+  }.toMap
 
   val indexAnalyzer: PerFieldAnalyzerWrapper =
     new PerFieldAnalyzerWrapper(analyzerGroup.forIndexingFields, analyzerPerField.asJava)

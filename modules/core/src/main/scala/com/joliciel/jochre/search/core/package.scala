@@ -91,6 +91,7 @@ package object core {
     case object String extends FieldKind
     case object Integer extends FieldKind
     case object Text extends FieldKind
+    case object UntokenizedText extends FieldKind
     case object Instant extends FieldKind
     case object MultiString extends FieldKind
   }
@@ -121,13 +122,13 @@ package object core {
     case object Author extends IndexField {
       override def aggregatable: Boolean = true
 
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
     }
 
     case object AuthorEnglish extends IndexField {
       override def aggregatable: Boolean = true
 
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
     }
 
     case object Title extends IndexField {
@@ -139,7 +140,7 @@ package object core {
     }
 
     case object Volume extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
     }
 
     case object Text extends IndexField {
@@ -151,11 +152,11 @@ package object core {
     }
 
     case object Publisher extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
     }
 
     case object PublicationYear extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
     }
 
     case object PublicationYearAsNumber extends IndexField {

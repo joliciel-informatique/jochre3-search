@@ -106,11 +106,11 @@ private[lucene] class JochreSearcher(
       addOffsets: Boolean = true
   ): SearchResponse = {
     val luceneQuery = toLuceneQuery(query)
-    if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
+    if (log.isInfoEnabled) log.info(f"query: $luceneQuery")
     val docCollectorManager = getCollectorManager(sort, first, max)
 
     val topDocs = this.search(luceneQuery, docCollectorManager)
-    if (log.isDebugEnabled) log.debug(f"Found ${topDocs.totalHits} results")
+    if (log.isInfoEnabled) log.info(f"Found ${topDocs.totalHits} results")
 
     val page = ArraySeq
       .unsafeWrapArray(topDocs.scoreDocs)
@@ -163,6 +163,8 @@ private[lucene] class JochreSearcher(
         .getOrElse(counts.getAllChildren(field.entryName))
     }
 
+    if (log.isDebugEnabled) log.debug(f"Found ${facets.size} facets for field ${field.entryName}")
+
     facets
       .map(_.labelValues.map { labelAndValue =>
         AggregationBin(labelAndValue.label, labelAndValue.value.intValue())
@@ -174,6 +176,7 @@ private[lucene] class JochreSearcher(
     val facetCollector = new FacetsCollector(true)
     val hitCountForSearchResult = 0
     val luceneQuery = this.toLuceneQuery(searchQuery)
+    if (log.isDebugEnabled) log.debug(f"facet collector query: $luceneQuery")
     FacetsCollector.search(this, luceneQuery, hitCountForSearchResult, facetCollector)
     facetCollector
   }

@@ -27,7 +27,8 @@ class ReverseTransliteratorTest extends AnyFlatSpec with Matchers with LuceneUti
     val tokens = tokenizeString(text, analyzer)
 
     val expected = Seq(
-      "ניפטר"
+      "ניפטר",
+      "nifter"
     )
 
     tokens.map(_.value) should equal(expected)
