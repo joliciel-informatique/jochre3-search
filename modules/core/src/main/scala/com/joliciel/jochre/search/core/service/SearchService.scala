@@ -418,7 +418,7 @@ private[service] case class SearchServiceImpl(
             indexData.docRev,
             indexData.wordSuggestionRev,
             indexData.corrections,
-            reindex = false
+            reindex = ReindexType.No
           )
         } yield indexData.pageCount
       }

@@ -304,11 +304,24 @@ package object service {
       rev: MetadataCorrectionRev
   )
 
+  sealed trait ReindexType extends EnumEntry
+
+  object ReindexType extends Enum[ReindexType] with DoobieEnum[ReindexType] {
+    val values = findValues
+
+    case object No extends ReindexType
+    case object Yes extends ReindexType
+    case object MetadataOnly extends ReindexType
+
+    def toEnum(code: ReindexType): String = code.entryName
+    def fromEnum(s: String): Option[ReindexType] = ReindexType.withNameOption(s)
+  }
+
   private[service] case class DbIndexedDocument(
       docRef: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      reindex: Boolean,
+      reindex: ReindexType,
       indexTime: Instant
   )
 
