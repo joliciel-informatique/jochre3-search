@@ -9,6 +9,7 @@ import org.apache.lucene.search.{BooleanQuery, MatchAllDocsQuery, PrefixQuery, Q
 import org.apache.lucene.util.BytesRef
 
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.search.core.lucene.LuceneUtilities
 
 case class SearchQuery(criterion: SearchCriterion) {
   def replaceQuery(replaceFunction: String => String): SearchQuery = {
@@ -31,7 +32,7 @@ sealed trait SearchCriterion {
   private[core] def getContains(): Option[SearchCriterion.Contains] = None
 }
 
-object SearchCriterion {
+object SearchCriterion extends LuceneUtilities {
   case object MatchAllDocuments extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = new MatchAllDocsQuery()
   }
@@ -79,12 +80,13 @@ object SearchCriterion {
       if (field.isTokenized) {
         throw new WrongFieldTypeException(f"Cannot perform ValueIn on field ${field.fieldName}: field is tokenized")
       }
+      val normalizedValues = values.map { str =>
+        asTokenizedString(str, analyzerGroup.forIndexingUntokenizedFields)
+      }
       new TermInSetQuery(
         field.fieldName,
-        values
-          .map(str =>
-            new BytesRef(analyzerGroup.languageSpecificFilters.map(_.normalizeText(str)).getOrElse(str).toLowerCase())
-          )
+        normalizedValues
+          .map(str => new BytesRef(str))
           .asJavaCollection
       )
     }
@@ -95,10 +97,11 @@ object SearchCriterion {
       if (field.isTokenized) {
         throw new WrongFieldTypeException(f"Cannot perform StartsWith on field ${field.fieldName}: field is tokenized")
       }
+      val normalizedPrefix = asTokenizedString(prefix, analyzerGroup.forIndexingUntokenizedFields)
       val prefixQuery = new PrefixQuery(
         new Term(
           field.fieldName,
-          analyzerGroup.languageSpecificFilters.map(_.normalizeText(prefix)).getOrElse(prefix).toLowerCase()
+          normalizedPrefix
         )
       )
       prefixQuery
