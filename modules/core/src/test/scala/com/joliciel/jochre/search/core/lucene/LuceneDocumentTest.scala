@@ -51,7 +51,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
       val luceneDocOpt = jochreSearcher.getByDocRef(docRef)
       assert(luceneDocOpt.isDefined)
       val luceneDoc = luceneDocOpt.get
-      val query = new TermQuery(new Term(IndexField.Text.entryName, "cat"))
+      val query = new TermQuery(new Term(IndexField.Text.fieldName, "cat"))
       val highlightedPages = luceneDoc.highlightPagesAsHtml(query)
       highlightedPages shouldEqual Seq(
         prefix.length -> "Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? ",
@@ -84,7 +84,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
       val luceneDocOpt = jochreSearcher.getByDocRef(docRef)
       assert(luceneDocOpt.isDefined)
       val luceneDoc = luceneDocOpt.get
-      val query = new TermQuery(new Term(IndexField.Text.entryName, "cat"))
+      val query = new TermQuery(new Term(IndexField.Text.fieldName, "cat"))
       val highlightedPages = luceneDoc.highlightPages(query, textAsHtml = false)
       highlightedPages shouldEqual Seq(
         HighlightedPage(
@@ -135,7 +135,7 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
       val luceneDocOpt = jochreSearcher.getByDocRef(docRef)
       assert(luceneDocOpt.isDefined)
       val luceneDoc = luceneDocOpt.get
-      val query = new TermQuery(new Term(IndexField.Text.entryName, "cat"))
+      val query = new TermQuery(new Term(IndexField.Text.fieldName, "cat"))
       val highlightedPages = luceneDoc.highlightPages(query, textAsHtml = true)
       highlightedPages shouldEqual Seq(
         HighlightedPage(

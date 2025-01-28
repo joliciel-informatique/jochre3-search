@@ -91,6 +91,7 @@ package object core {
     case object String extends FieldKind
     case object Integer extends FieldKind
     case object Text extends FieldKind
+    case object UntokenizedText extends FieldKind
     case object Instant extends FieldKind
     case object MultiString extends FieldKind
   }
@@ -101,6 +102,7 @@ package object core {
     def aggregatable: Boolean = false
     def sortable: Boolean = false
     def kind: FieldKind
+    def fieldName: String = this.entryName
   }
 
   object IndexField extends Enum[IndexField] {
@@ -121,13 +123,17 @@ package object core {
     case object Author extends IndexField {
       override def aggregatable: Boolean = true
 
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object AuthorEnglish extends IndexField {
       override def aggregatable: Boolean = true
 
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object Title extends IndexField {
@@ -139,7 +145,9 @@ package object core {
     }
 
     case object Volume extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object Text extends IndexField {
@@ -151,11 +159,14 @@ package object core {
     }
 
     case object Publisher extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object PublicationYear extends IndexField {
-      override def kind: FieldKind = FieldKind.String
+      override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object PublicationYearAsNumber extends IndexField {

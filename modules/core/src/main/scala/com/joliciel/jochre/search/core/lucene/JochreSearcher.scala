@@ -47,7 +47,7 @@ private[lucene] class JochreSearcher(
   def indexSize: Int = this.getIndexReader.numDocs
 
   def getByDocRef(docRef: DocReference): Option[LuceneDocument] = {
-    val topDocs = search(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)), 1)
+    val topDocs = search(new TermQuery(new Term(IndexField.Reference.fieldName, docRef.ref)), 1)
     topDocs.scoreDocs.headOption.map(luceneId => new LuceneDocument(this, luceneId.doc))
   }
 
@@ -59,22 +59,22 @@ private[lucene] class JochreSearcher(
       case Sort.Score => new TopScoreDocCollectorManager(first + max, maxCount)
       case Sort.Field(field, ascending) =>
         if (!field.sortable) {
-          throw new Exception(s"Cannot sort on field ${field.entryName}. Not sortable!")
+          throw new Exception(s"Cannot sort on field ${field.fieldName}. Not sortable!")
         }
 
         val sortField: SortField = field.kind match {
           case FieldKind.Integer =>
-            val sortField = new SortedNumericSortField(field.entryName, SortField.Type.INT, !ascending)
+            val sortField = new SortedNumericSortField(field.fieldName, SortField.Type.INT, !ascending)
             sortField.setMissingValue(Int.MinValue)
             sortField
           case FieldKind.String =>
-            new SortedSetSortField(field.entryName, !ascending)
+            new SortedSetSortField(field.fieldName, !ascending)
           case FieldKind.Instant =>
-            val sortField = new SortedNumericSortField(field.entryName, SortField.Type.LONG, !ascending)
+            val sortField = new SortedNumericSortField(field.fieldName, SortField.Type.LONG, !ascending)
             sortField.setMissingValue(Long.MinValue)
             sortField
           case _ =>
-            throw new Exception(s"Cannot sort on field ${field.entryName} of type ${field.kind.entryName}")
+            throw new Exception(s"Cannot sort on field ${field.fieldName} of type ${field.kind.entryName}")
         }
         val collector = new TopFieldCollectorManager(new LuceneSort(sortField), first + max, maxCount)
         collector
@@ -106,11 +106,11 @@ private[lucene] class JochreSearcher(
       addOffsets: Boolean = true
   ): SearchResponse = {
     val luceneQuery = toLuceneQuery(query)
-    if (log.isDebugEnabled) log.debug(f"query: $luceneQuery")
+    if (log.isInfoEnabled) log.info(f"query: $luceneQuery")
     val docCollectorManager = getCollectorManager(sort, first, max)
 
     val topDocs = this.search(luceneQuery, docCollectorManager)
-    if (log.isDebugEnabled) log.debug(f"Found ${topDocs.totalHits} results")
+    if (log.isInfoEnabled) log.info(f"Found ${topDocs.totalHits} results")
 
     val page = ArraySeq
       .unsafeWrapArray(topDocs.scoreDocs)
@@ -158,10 +158,12 @@ private[lucene] class JochreSearcher(
       )
       maxBins
         .map {
-          counts.getTopChildren(_, field.entryName)
+          counts.getTopChildren(_, field.fieldName)
         }
-        .getOrElse(counts.getAllChildren(field.entryName))
+        .getOrElse(counts.getAllChildren(field.fieldName))
     }
+
+    if (log.isDebugEnabled) log.debug(f"Found ${facets.size} facets for field ${field.fieldName}")
 
     facets
       .map(_.labelValues.map { labelAndValue =>
@@ -174,6 +176,7 @@ private[lucene] class JochreSearcher(
     val facetCollector = new FacetsCollector(true)
     val hitCountForSearchResult = 0
     val luceneQuery = this.toLuceneQuery(searchQuery)
+    if (log.isDebugEnabled) log.debug(f"facet collector query: $luceneQuery")
     FacetsCollector.search(this, luceneQuery, hitCountForSearchResult, facetCollector)
     facetCollector
   }

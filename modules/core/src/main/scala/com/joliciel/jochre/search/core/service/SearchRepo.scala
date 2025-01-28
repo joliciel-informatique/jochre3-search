@@ -22,12 +22,19 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
   given Meta[DocumentStatusCode] =
     pgEnumStringOpt("document_status", DocumentStatusCode.fromEnum, DocumentStatusCode.toEnum)
 
+  given Meta[ReindexType] =
+    pgEnumStringOpt("reindex_type", ReindexType.fromEnum, ReindexType.toEnum)
+
+  val reindexNo: ReindexType = ReindexType.No
+  val reindexYes: ReindexType = ReindexType.Yes
+  val reindexMetadataOnly: ReindexType = ReindexType.MetadataOnly
+
   def upsertIndexedDocument(
       ref: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
       metadataCorrections: Seq[DbMetadataCorrection],
-      reindex: Boolean
+      reindex: ReindexType
   ): Task[Int] = {
     val actions = for {
       result <- upsertIndexedDocumentInternal(ref, docRev, wordSuggestionRev, reindex)
@@ -41,7 +48,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
       ref: DocReference,
       docRev: DocRev,
       wordSuggestionRev: Option[WordSuggestionRev],
-      reindex: Boolean
+      reindex: ReindexType
   ): doobie.ConnectionIO[Int] =
     sql"""INSERT INTO indexed_document (reference, doc_rev, word_suggestion_rev, reindex)
          | VALUES (${ref.ref}, ${docRev.rev}, ${wordSuggestionRev.map(_.rev)}, $reindex)
@@ -65,7 +72,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
   def insertDocument(ref: DocReference, username: String, ipAddress: Option[String]): Task[DocRev] = {
     for {
       docRev <- insertDocumentInternal(ref, username, ipAddress)
-      _ <- upsertIndexedDocument(ref, DocRev(0), None, Seq.empty, reindex = false)
+      _ <- upsertIndexedDocument(ref, DocRev(0), None, Seq.empty, reindex = ReindexType.No)
     } yield docRev
   }
 
@@ -78,19 +85,23 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
       .unique
       .transact(transactor)
 
-  def markForReindex(docRef: DocReference): Task[Int] = {
-    sql"""UPDATE indexed_document d1 SET reindex=${true}
+  def markForReindex(docRef: DocReference, metaDataOnly: Boolean = false): Task[Int] = {
+    val reindexType: ReindexType = if (metaDataOnly) { ReindexType.MetadataOnly }
+    else { ReindexType.Yes }
+    sql"""UPDATE indexed_document d1 SET reindex=$reindexType
           | WHERE reference=${docRef.ref}
        """.stripMargin.update.run
       .transact(transactor)
   }
-  def markAllForReindex(): Task[Int] = {
-    sql"""UPDATE indexed_document d1 SET reindex=${true}
+  def markAllForReindex(metaDataOnly: Boolean = false): Task[Int] = {
+    val reindexType: ReindexType = if (metaDataOnly) { ReindexType.MetadataOnly }
+    else { ReindexType.Yes }
+    sql"""UPDATE indexed_document d1 SET reindex=$reindexType
        """.stripMargin.update.run
       .transact(transactor)
   }
   def unmarkForReindex(docRef: DocReference): Task[Int] = {
-    sql"""UPDATE indexed_document d1 SET reindex=${false}
+    sql"""UPDATE indexed_document d1 SET reindex=$reindexNo
          | WHERE reference=${docRef.ref}
        """.stripMargin.update.run
       .transact(transactor)
@@ -255,7 +266,8 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
          |       )
          |     )
          |   )
-         |   OR reindex
+         |   OR reindex = $reindexYes
+         |   OR reindex = $reindexMetadataOnly
          | )
          | ORDER BY reference
        """.stripMargin
@@ -266,6 +278,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
 
   def isContentUpdated(docRef: DocReference): Task[Boolean] = {
     val completeStatus: DocumentStatusCode = DocumentStatusCode.Complete
+
     sql"""SELECT indexdoc.reference
          | FROM indexed_document AS indexdoc
          | WHERE indexdoc.reference = ${docRef.ref}
@@ -275,7 +288,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
          |     AND d.rev > indexdoc.doc_rev)
          |   OR EXISTS (SELECT rev FROM word_suggestion w WHERE w.doc_ref = indexdoc.reference
          |     AND w.rev > coalesce(indexdoc.word_suggestion_rev, 0))
-         |   OR reindex
+         |   OR reindex = $reindexYes
          | )
        """.stripMargin
       .query[DocReference]
@@ -456,7 +469,7 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
     val actions = for {
       _ <-
         sql"""UPDATE indexed_document
-             | SET reindex=${true}
+             | SET reindex=$reindexYes
              | WHERE reference IN (
              |   SELECT reference FROM document WHERE document.status=$underwayCode
              | )

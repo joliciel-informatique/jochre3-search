@@ -37,13 +37,13 @@ case class JochreHighlighter(query: Query, field: IndexField) {
   private def toSpanQuery(query: Query): Option[SpanQuery] = query match {
     case query: SpanQuery => Some(query)
     case query: PhraseQuery =>
-      Option.when(query.getField == field.entryName) {
+      Option.when(query.getField == field.fieldName) {
         val hasWildcard = query.getPositions.length > 0 && query.getPositions
           .zip(query.getPositions.tail)
           .map { case (p1, p2) => p2 - p1 }
           .exists(_ > 1)
         val strictOrder = hasWildcard || query.getSlop == 0
-        val builder = new SpanNearQuery.Builder(field.entryName, strictOrder)
+        val builder = new SpanNearQuery.Builder(field.fieldName, strictOrder)
         builder.setSlop(query.getSlop)
         val termsAndPositions = query.getTerms.zip(query.getPositions)
         termsAndPositions.foldLeft(0) { case (currentPos, (term, position)) =>
@@ -57,13 +57,13 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       }
     case query: MultiPhraseQuery =>
       val termArrays = query.getTermArrays.toSeq
-      Option.when(!termArrays.isEmpty && !termArrays(0).isEmpty && termArrays(0)(0).field() == field.entryName) {
+      Option.when(!termArrays.isEmpty && !termArrays(0).isEmpty && termArrays(0)(0).field() == field.fieldName) {
         val hasWildcard = query.getPositions.length > 0 && query.getPositions
           .zip(query.getPositions.tail)
           .map { case (p1, p2) => p2 - p1 }
           .exists(_ > 1)
         val strictOrder = hasWildcard || query.getSlop == 0
-        val builder = new SpanNearQuery.Builder(field.entryName, strictOrder)
+        val builder = new SpanNearQuery.Builder(field.fieldName, strictOrder)
         builder.setSlop(query.getSlop)
         val termsAndPositions = termArrays.zip(query.getPositions)
         termsAndPositions.foldLeft(0) { case (currentPos, (terms, position)) =>
@@ -78,11 +78,11 @@ case class JochreHighlighter(query: Query, field: IndexField) {
         builder.build()
       }
     case query: TermQuery =>
-      Option.when(query.getTerm.field() == field.entryName) {
+      Option.when(query.getTerm.field() == field.fieldName) {
         new SpanTermQuery(query.getTerm)
       }
     case query: SynonymQuery =>
-      Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.entryName) {
+      Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.fieldName) {
         val termQueries = query.getTerms.asScala.map(term => new SpanTermQuery(term))
         new SpanOrQuery(termQueries.toArray*)
       }
@@ -105,7 +105,7 @@ case class JochreHighlighter(query: Query, field: IndexField) {
   }
 
   private val scorer = {
-    val scorer = new QueryScorer(highlightQuery, field.entryName)
+    val scorer = new QueryScorer(highlightQuery, field.fieldName)
     scorer.setExpandMultiTermQuery(true)
     scorer
   }

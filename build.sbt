@@ -44,6 +44,7 @@ lazy val core = project
       "org.apache.lucene" % "lucene-facet" % luceneVersion,
       "org.apache.lucene" % "lucene-queryparser" % luceneVersion,
       "org.apache.lucene" % "lucene-analysis-common" % luceneVersion,
+      "org.apache.lucene" % "lucene-analysis-icu" % luceneVersion,
       "org.apache.lucene" % "lucene-highlighter" % luceneVersion,
       "org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
       "org.apache.lucene" % "lucene-test-framework" % luceneVersion % "test",

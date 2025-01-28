@@ -429,9 +429,9 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(queryInput)
       .in(strictInput)
       .in(
-        query[Option[Boolean]]("normalize-text")
+        query[Option[Boolean]]("simplify-text")
           .description(
-            "Whether text should be normalized in term of unicode representation and unexpected diacritics. Default is false."
+            "Whether text should be simplified in term of unicode representation and unexpected diacritics. Default is false."
           )
           .example(Some(true))
       )
