@@ -19,7 +19,7 @@ private[search] case class LuceneDocIndexer(
   def indexDocument(doc: AltoDocument): Unit = {
     try {
       log.info(f"Indexing ${doc.ref.ref}")
-      val docTerm = new Term(IndexField.Reference.entryName, doc.ref.ref)
+      val docTerm = new Term(IndexField.Reference.fieldName, doc.ref.ref)
       val fields = toLuceneDoc(doc)
       indexWriter.updateDocument(docTerm, fields)
       log.info(f"Indexed ${doc.ref.ref}")
@@ -48,7 +48,7 @@ private[search] case class LuceneDocIndexer(
   ): IndexDocument = fieldsToLuceneDoc(
     Seq(
       getFieldsForString(IndexField.Reference, doc.ref.ref),
-      Seq(new StringField(IndexField.Revision.entryName, doc.rev.rev.toString, Store.YES)),
+      Seq(new StringField(IndexField.Revision.fieldName, doc.rev.rev.toString, Store.YES)),
       doc.metadata.title.map(getFieldsForText(IndexField.Title, _)).getOrElse(Seq.empty),
       doc.metadata.titleEnglish.map(getFieldsForText(IndexField.TitleEnglish, _)).getOrElse(Seq.empty),
       getFieldsForText(IndexField.Text, doc.text),
@@ -71,10 +71,10 @@ private[search] case class LuceneDocIndexer(
       text: String
   ): Seq[IndexableField] = {
     if (field.kind != FieldKind.Text) {
-      throw new WrongFieldTypeException(f"Cannot create text field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create text field for field ${field.fieldName}")
     }
     Seq(
-      new StoredTextField(field.entryName, text)
+      new StoredTextField(field.fieldName, text)
     )
   }
 
@@ -83,14 +83,14 @@ private[search] case class LuceneDocIndexer(
       value: String
   ): Seq[IndexableField] = {
     if (field.kind != FieldKind.String) {
-      throw new WrongFieldTypeException(f"Cannot create string field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create string field for field ${field.fieldName}")
     }
-    val stringField = new StringField(field.entryName, value, Store.YES)
+    val stringField = new StringField(field.fieldName, value, Store.YES)
     val sortField = Option.when(field.sortable && value != null && !value.isBlank)(
-      new SortedDocValuesField(field.entryName, new BytesRef(value))
+      new SortedDocValuesField(field.fieldName, new BytesRef(value))
     )
     val facetField = Option.when(field.aggregatable && value != null && !value.isBlank)(
-      new SortedSetDocValuesFacetField(field.entryName, value)
+      new SortedSetDocValuesFacetField(field.fieldName, value)
     )
 
     Seq(Some(stringField), sortField, facetField).flatten
@@ -101,14 +101,14 @@ private[search] case class LuceneDocIndexer(
       value: String
   ): Seq[IndexableField] = {
     if (field.kind != FieldKind.UntokenizedText) {
-      throw new WrongFieldTypeException(f"Cannot create untokenized text field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create untokenized text field for field ${field.fieldName}")
     }
-    val textField = new TextField(field.entryName, value, Store.YES)
+    val textField = new TextField(field.fieldName, value, Store.YES)
     val sortField = Option.when(field.sortable && value != null && !value.isBlank)(
-      new SortedDocValuesField(field.entryName, new BytesRef(value))
+      new SortedDocValuesField(field.fieldName, new BytesRef(value))
     )
     val facetField = Option.when(field.aggregatable && value != null && !value.isBlank)(
-      new SortedSetDocValuesFacetField(field.entryName, value)
+      new SortedSetDocValuesFacetField(field.fieldName, value)
     )
 
     Seq(Some(textField), sortField, facetField).flatten
@@ -119,36 +119,36 @@ private[search] case class LuceneDocIndexer(
       values: Seq[String]
   ): Seq[IndexableField] = {
     if (field.kind != FieldKind.MultiString) {
-      throw new WrongFieldTypeException(f"Cannot create multi-string field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create multi-string field for field ${field.fieldName}")
     }
-    values.map(new StringField(field.entryName, _, Store.YES))
+    values.map(new StringField(field.fieldName, _, Store.YES))
   }
 
   private def getFieldsForInstant(field: IndexField, instant: Instant): Seq[IndexableField] = {
     if (field.kind != FieldKind.Instant) {
-      throw new WrongFieldTypeException(f"Cannot create instant field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create instant field for field ${field.fieldName}")
     }
     val dateAsLong = instant.toEpochMilli
-    Seq(new LongPoint(field.entryName, dateAsLong), new NumericDocValuesField(field.entryName, dateAsLong))
+    Seq(new LongPoint(field.fieldName, dateAsLong), new NumericDocValuesField(field.fieldName, dateAsLong))
   }
 
   private def getFieldsForYear(field: IndexField, numberField: IndexField, value: String): Seq[IndexableField] = {
     if (field.kind != FieldKind.UntokenizedText) {
-      throw new WrongFieldTypeException(f"Cannot create year field for field ${field.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create year field for field ${field.fieldName}")
     }
     if (numberField.kind != FieldKind.Integer) {
-      throw new WrongFieldTypeException(f"Cannot create year field for number field ${numberField.entryName}")
+      throw new WrongFieldTypeException(f"Cannot create year field for number field ${numberField.fieldName}")
     }
 
-    val stringField = new TextField(field.entryName, value, Store.YES)
+    val stringField = new TextField(field.fieldName, value, Store.YES)
     val numericString = value.replaceAll(raw"\D", "")
     if (numericString.length >= 3 && numericString.length <= 4) {
       val year = (if (numericString.length == 3) { numericString + "0" }
                   else { numericString }).toInt
       Seq(
         stringField,
-        new IntPoint(numberField.entryName, year),
-        new NumericDocValuesField(numberField.entryName, year)
+        new IntPoint(numberField.fieldName, year),
+        new NumericDocValuesField(numberField.fieldName, year)
       )
     } else {
       Seq(stringField)

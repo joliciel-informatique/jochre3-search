@@ -21,8 +21,8 @@ import com.joliciel.jochre.search.core.FieldKind.UntokenizedText
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
   val analyzerPerField: Map[String, Analyzer] = IndexField.values.flatMap { indexField =>
     indexField.kind match {
-      case Text if (indexField == IndexField.Text) => Some(indexField.entryName -> analyzerGroup.forIndexing)
-      case UntokenizedText => Some(indexField.entryName -> analyzerGroup.forIndexingUntokenizedFields)
+      case Text if (indexField == IndexField.Text) => Some(indexField.fieldName -> analyzerGroup.forIndexing)
+      case UntokenizedText => Some(indexField.fieldName -> analyzerGroup.forIndexingUntokenizedFields)
       case _               => None
     }
   }.toMap
@@ -43,7 +43,7 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
   def refresh: Boolean = searcherManager.refreshIndex()
 
   def deleteDocument(docRef: DocReference): Unit =
-    indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)))
+    indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.fieldName, docRef.ref)))
 
   def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter, analyzerGroup.forIndexing.indexingHelper)
 

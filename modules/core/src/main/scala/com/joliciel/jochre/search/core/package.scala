@@ -102,6 +102,7 @@ package object core {
     def aggregatable: Boolean = false
     def sortable: Boolean = false
     def kind: FieldKind
+    def fieldName: String = this.entryName
   }
 
   object IndexField extends Enum[IndexField] {
@@ -123,12 +124,16 @@ package object core {
       override def aggregatable: Boolean = true
 
       override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object AuthorEnglish extends IndexField {
       override def aggregatable: Boolean = true
 
       override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object Title extends IndexField {
@@ -141,6 +146,8 @@ package object core {
 
     case object Volume extends IndexField {
       override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object Text extends IndexField {
@@ -153,10 +160,13 @@ package object core {
 
     case object Publisher extends IndexField {
       override def kind: FieldKind = FieldKind.UntokenizedText
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object PublicationYear extends IndexField {
       override def kind: FieldKind = FieldKind.UntokenizedText
+
+      override val fieldName: String = f"${this.entryName}_text"
     }
 
     case object PublicationYearAsNumber extends IndexField {

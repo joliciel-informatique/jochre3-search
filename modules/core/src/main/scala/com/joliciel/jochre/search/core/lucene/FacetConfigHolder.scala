@@ -7,7 +7,7 @@ private[lucene] object FacetConfigHolder {
   val facetsConfig: FacetsConfig = new FacetsConfig()
 
   IndexField.values.filter(_.aggregatable).foreach { field =>
-    val dimConfig = facetsConfig.getDimConfig(field.entryName)
+    val dimConfig = facetsConfig.getDimConfig(field.fieldName)
     dimConfig.multiValued = field.isMultiValue
     dimConfig.requireDimCount = true
   }

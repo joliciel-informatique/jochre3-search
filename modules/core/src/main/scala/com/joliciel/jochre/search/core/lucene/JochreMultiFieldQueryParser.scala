@@ -10,7 +10,7 @@ private[core] class JochreMultiFieldQueryParser(
     fields: Seq[IndexField],
     termAnalyzer: Analyzer,
     phraseAnalyzer: Analyzer
-) extends MultiFieldQueryParser(fields.map(_.entryName).toArray, phraseAnalyzer)
+) extends MultiFieldQueryParser(fields.map(_.fieldName).toArray, phraseAnalyzer)
     with LuceneUtilities {
   private val log = LoggerFactory.getLogger(getClass)
 

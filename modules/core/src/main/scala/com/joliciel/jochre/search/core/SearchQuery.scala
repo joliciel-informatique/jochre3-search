@@ -41,7 +41,7 @@ object SearchCriterion {
       fields.foreach { field =>
         if (!field.isTokenized) {
           throw new WrongFieldTypeException(
-            f"Cannot perform Contains on field ${field.entryName} - field not tokenized"
+            f"Cannot perform Contains on field ${field.fieldName} - field not tokenized"
           )
         }
       }
@@ -77,10 +77,10 @@ object SearchCriterion {
   case class ValueIn(field: IndexField, values: Seq[String]) extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = {
       if (field.isTokenized) {
-        throw new WrongFieldTypeException(f"Cannot perform ValueIn on field ${field.entryName}: field is tokenized")
+        throw new WrongFieldTypeException(f"Cannot perform ValueIn on field ${field.fieldName}: field is tokenized")
       }
       new TermInSetQuery(
-        field.entryName,
+        field.fieldName,
         values
           .map(str =>
             new BytesRef(analyzerGroup.languageSpecificFilters.map(_.normalizeText(str)).getOrElse(str).toLowerCase())
@@ -93,11 +93,11 @@ object SearchCriterion {
   case class StartsWith(field: IndexField, prefix: String) extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = {
       if (field.isTokenized) {
-        throw new WrongFieldTypeException(f"Cannot perform StartsWith on field ${field.entryName}: field is tokenized")
+        throw new WrongFieldTypeException(f"Cannot perform StartsWith on field ${field.fieldName}: field is tokenized")
       }
       val prefixQuery = new PrefixQuery(
         new Term(
-          field.entryName,
+          field.fieldName,
           analyzerGroup.languageSpecificFilters.map(_.normalizeText(prefix)).getOrElse(prefix).toLowerCase()
         )
       )
@@ -108,18 +108,18 @@ object SearchCriterion {
   case class GreaterThanOrEqualTo(field: IndexField, value: Int) extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = {
       if (field.kind != FieldKind.Integer) {
-        throw new WrongFieldTypeException(f"Field ${field.entryName} is not an integer, cannot do GreaterThanOrEqualTo")
+        throw new WrongFieldTypeException(f"Field ${field.fieldName} is not an integer, cannot do GreaterThanOrEqualTo")
       }
-      IntPoint.newRangeQuery(field.entryName, value, Int.MaxValue)
+      IntPoint.newRangeQuery(field.fieldName, value, Int.MaxValue)
     }
   }
 
   case class LessThanOrEqualTo(field: IndexField, value: Int) extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = {
       if (field.kind != FieldKind.Integer) {
-        throw new WrongFieldTypeException(f"Field ${field.entryName} is not an integer, cannot do LessThanOrEqualTo")
+        throw new WrongFieldTypeException(f"Field ${field.fieldName} is not an integer, cannot do LessThanOrEqualTo")
       }
-      IntPoint.newRangeQuery(field.entryName, Int.MinValue, value)
+      IntPoint.newRangeQuery(field.fieldName, Int.MinValue, value)
     }
   }
 

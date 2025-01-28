@@ -731,7 +731,7 @@ private[service] case class SearchServiceImpl(
   ): Task[AggregationBins] =
     ZIO.attempt {
       if (!field.aggregatable) {
-        throw new IndexFieldNotAggregatable(f"Field ${field.entryName} is not aggregatable.")
+        throw new IndexFieldNotAggregatable(f"Field ${field.fieldName} is not aggregatable.")
       }
       val fixedQuery = replaceQuery(query)
       Using(jochreIndex.searcherManager.acquire()) { searcher =>

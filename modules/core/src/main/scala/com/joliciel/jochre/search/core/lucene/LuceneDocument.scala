@@ -29,8 +29,8 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   private val snippetClass = config.getString("snippet-class")
 
   lazy val doc: Document = indexSearcher.storedFields.document(luceneId)
-  lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.entryName))
-  lazy val rev: DocRev = DocRev(doc.get(IndexField.Revision.entryName).toLong)
+  lazy val ref: DocReference = DocReference(doc.get(IndexField.Reference.fieldName))
+  lazy val rev: DocRev = DocRev(doc.get(IndexField.Revision.fieldName).toLong)
   lazy val termVector: Option[Fields] = Option {
     val termVectors = indexSearcher.getIndexReader.termVectors()
     termVectors.get(luceneId)
@@ -38,29 +38,29 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
 
   lazy val metadata: DocMetadata =
     DocMetadata(
-      title = Option(doc.get(IndexField.Title.entryName)),
-      titleEnglish = Option(doc.get(IndexField.TitleEnglish.entryName)),
-      author = Option(doc.get(IndexField.Author.entryName)),
-      authorEnglish = Option(doc.get(IndexField.AuthorEnglish.entryName)),
-      publisher = Option(doc.get(IndexField.Publisher.entryName)),
-      publicationYear = Option(doc.get(IndexField.PublicationYear.entryName)),
-      volume = Option(doc.get(IndexField.Volume.entryName)),
-      url = Option(doc.get(IndexField.URL.entryName)),
-      collections = doc.getValues(IndexField.Collection.entryName)
+      title = Option(doc.get(IndexField.Title.fieldName)),
+      titleEnglish = Option(doc.get(IndexField.TitleEnglish.fieldName)),
+      author = Option(doc.get(IndexField.Author.fieldName)),
+      authorEnglish = Option(doc.get(IndexField.AuthorEnglish.fieldName)),
+      publisher = Option(doc.get(IndexField.Publisher.fieldName)),
+      publicationYear = Option(doc.get(IndexField.PublicationYear.fieldName)),
+      volume = Option(doc.get(IndexField.Volume.fieldName)),
+      url = Option(doc.get(IndexField.URL.fieldName)),
+      collections = doc.getValues(IndexField.Collection.fieldName)
     )
 
-  lazy val ocrSoftware: Option[String] = Option(doc.get(IndexField.OCRSoftware.entryName))
+  lazy val ocrSoftware: Option[String] = Option(doc.get(IndexField.OCRSoftware.fieldName))
 
   private def getTokenStream(field: IndexField): Option[TokenStream] = {
     val maxStartOffset = -1
     termVector.flatMap { termVector =>
-      Option(TokenSources.getTermVectorTokenStreamOrNull(field.entryName, termVector, maxStartOffset))
+      Option(TokenSources.getTermVectorTokenStreamOrNull(field.fieldName, termVector, maxStartOffset))
     }
   }
 
-  def getMetaValue(field: MetadataField): Option[String] = Option(doc.get(field.indexField.entryName))
+  def getMetaValue(field: MetadataField): Option[String] = Option(doc.get(field.indexField.fieldName))
 
-  def getText(field: IndexField): Option[String] = Option(doc.get(field.entryName))
+  def getText(field: IndexField): Option[String] = Option(doc.get(field.fieldName))
 
   private def getTokenStreamAndText(field: IndexField): (Option[TokenStream], Option[String]) = {
     this.getTokenStream(field) -> this.getText(field);
