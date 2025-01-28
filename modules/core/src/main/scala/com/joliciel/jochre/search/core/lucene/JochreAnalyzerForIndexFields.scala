@@ -23,7 +23,7 @@ class JochreAnalyzerForIndexFields(
     maybePostTokenizationFilter.map(_(tokens)).getOrElse(tokens)
   }
 
-  override val baseTokenizer: Tokenizer = if (tokenize) {
+  override def baseTokenizer: Tokenizer = if (tokenize) {
     super.baseTokenizer
   } else {
     new KeywordTokenizer()

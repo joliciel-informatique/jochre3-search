@@ -17,9 +17,10 @@ import org.slf4j.Logger
 import java.util.Locale
 import org.apache.lucene.analysis.miscellaneous.RemoveDuplicatesTokenFilter
 import org.apache.lucene.analysis.Tokenizer
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters.default
 
 private[lucene] abstract case class JochreAnalyzerBase(locale: Locale) extends Analyzer {
-  val whitespaceTokenizer = new WhitespaceTokenizer()
+  def whitespaceTokenizer = new WhitespaceTokenizer()
   def baseTokenizer: Tokenizer = whitespaceTokenizer
 
   override def createComponents(fieldName: String): Analyzer.TokenStreamComponents = {
