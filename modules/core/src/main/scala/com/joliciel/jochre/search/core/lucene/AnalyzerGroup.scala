@@ -10,10 +10,12 @@ import java.util.Locale
 private[search] case class AnalyzerGroup(
     forIndexing: JochreAnalyzerForIndex,
     forIndexingFields: Analyzer,
+    forIndexingUntokenizedFields: Analyzer,
     forSearch: Analyzer,
     forSearchPhrases: Analyzer,
     forStrictSearch: Analyzer,
-    forStrictSearchPhrases: Analyzer
+    forStrictSearchPhrases: Analyzer,
+    languageSpecificFilters: Option[LanguageSpecificFilters]
 )
 
 private[search] object AnalyzerGroup {
@@ -25,13 +27,16 @@ private[search] object AnalyzerGroup {
   def generic(languageSpecificFilters: Option[LanguageSpecificFilters]): AnalyzerGroup =
     AnalyzerGroup(
       forIndexing = new JochreAnalyzerForIndex(locale, languageSpecificFilters),
-      forIndexingFields = new JochreAnalyzerForIndexFields(locale, languageSpecificFilters),
+      forIndexingFields = new JochreAnalyzerForIndexFields(locale, tokenize = true, languageSpecificFilters),
+      forIndexingUntokenizedFields =
+        new JochreAnalyzerForIndexFields(locale, tokenize = false, languageSpecificFilters),
       forSearch = new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = true, languageSpecificFilters),
       forSearchPhrases =
         new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = true, languageSpecificFilters),
       forStrictSearch =
         new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = false, languageSpecificFilters),
       forStrictSearchPhrases =
-        new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false, languageSpecificFilters)
+        new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false, languageSpecificFilters),
+      languageSpecificFilters
     )
 }

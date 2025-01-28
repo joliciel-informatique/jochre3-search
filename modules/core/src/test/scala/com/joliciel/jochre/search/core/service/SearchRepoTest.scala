@@ -49,7 +49,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
           docRev,
           Some(WordSuggestionRev(42)),
           corrections,
-          reindex = true
+          reindex = ReindexType.Yes
         )
         indexedDoc2 <- searchRepo.getIndexedDocument(docRef)
         indexedCorrections <- searchRepo.getIndexedDocumentCorrections(docRef)
@@ -63,11 +63,11 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(docsToReindex == Seq(docRef)) &&
         assertTrue(indexedDoc1.isDefined) &&
         assertTrue(indexedDoc1.get.docRev == DocRev(0)) &&
-        assertTrue(!indexedDoc1.get.reindex) &&
+        assertTrue(indexedDoc1.get.reindex == ReindexType.No) &&
         assertTrue(indexedDoc2.isDefined) &&
         assertTrue(indexedDoc2.get.wordSuggestionRev.contains(WordSuggestionRev(42))) &&
         assertTrue(indexedCorrections.map(_.field) == Seq(MetadataField.Author, MetadataField.Publisher)) &&
-        assertTrue(indexedDoc2.get.reindex) &&
+        assertTrue(indexedDoc2.get.reindex == ReindexType.Yes) &&
         assertTrue(indexedDoc2.get.docRev == docRev)
       }
     },

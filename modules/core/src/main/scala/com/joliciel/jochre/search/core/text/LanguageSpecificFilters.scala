@@ -16,6 +16,12 @@ trait LanguageSpecificFilters {
 
   def queryFindReplacePairs: Seq[(Regex, String)]
 
+  /** Simplify text so that all possible ways of writing a certain character use the same encoding.
+    */
+  def simplifyText(text: String): String
+
+  /** Normalize text for searching, e.g. by removing all diacritics.
+    */
   def normalizeText(text: String): String
 }
 
@@ -30,6 +36,8 @@ object LanguageSpecificFilters {
     override def breakWord(word: Word): Seq[Word] = Seq(word)
 
     override def queryFindReplacePairs: Seq[(Regex, String)] = Seq.empty
+
+    override def simplifyText(text: String): String = text
 
     override def normalizeText(text: String): String = text
   }

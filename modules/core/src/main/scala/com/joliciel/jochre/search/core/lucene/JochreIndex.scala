@@ -15,11 +15,17 @@ import zio.{ZIO, ZLayer}
 
 import java.nio.file.Path
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.search.core.FieldKind.Text
+import com.joliciel.jochre.search.core.FieldKind.UntokenizedText
 
 case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) {
-  val analyzerPerField: Map[String, Analyzer] = Map(
-    IndexField.Text.entryName -> analyzerGroup.forIndexing
-  )
+  val analyzerPerField: Map[String, Analyzer] = IndexField.values.flatMap { indexField =>
+    indexField.kind match {
+      case Text if (indexField == IndexField.Text) => Some(indexField.fieldName -> analyzerGroup.forIndexing)
+      case UntokenizedText => Some(indexField.fieldName -> analyzerGroup.forIndexingUntokenizedFields)
+      case _               => None
+    }
+  }.toMap
 
   val indexAnalyzer: PerFieldAnalyzerWrapper =
     new PerFieldAnalyzerWrapper(analyzerGroup.forIndexingFields, analyzerPerField.asJava)
@@ -37,7 +43,7 @@ case class JochreIndex(indexDirectory: Directory, analyzerGroup: AnalyzerGroup) 
   def refresh: Boolean = searcherManager.refreshIndex()
 
   def deleteDocument(docRef: DocReference): Unit =
-    indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.entryName, docRef.ref)))
+    indexWriter.deleteDocuments(new TermQuery(new Term(IndexField.Reference.fieldName, docRef.ref)))
 
   def indexer: LuceneDocIndexer = LuceneDocIndexer(indexWriter, analyzerGroup.forIndexing.indexingHelper)
 
