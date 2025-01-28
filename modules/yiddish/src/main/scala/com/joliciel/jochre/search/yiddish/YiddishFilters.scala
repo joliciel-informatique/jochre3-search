@@ -16,12 +16,15 @@ import org.slf4j.LoggerFactory
 import zio.ZLayer
 
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.search.core.text.TextNormalizer
+import java.util.Locale
 
 object YiddishFilters extends LanguageSpecificFilters {
   private val log = LoggerFactory.getLogger(getClass)
   private val yiddishConfig = YiddishConfig.fromConfig
   private val yivoLexicon = YivoLexicon.fromYiddishConfig(yiddishConfig)
   private val textSimplifier: YiddishTextSimpifier = YiddishTextSimpifier()
+  private val textNormalizer: TextNormalizer = TextNormalizer(Locale.forLanguageTag("yi"))
 
   private val config = ConfigFactory.load().getConfig("jochre.search.yi")
   override val queryFindReplacePairs = config
@@ -119,7 +122,9 @@ object YiddishFilters extends LanguageSpecificFilters {
     }
   }
 
-  override def normalizeText(text: String): String = textSimplifier.simplify(text)
+  override def normalizeText(text: String): String = textNormalizer.normalize(text)
+
+  override def simplifyText(text: String): String = textSimplifier.simplify(text)
 
   val live: ZLayer[Any, Throwable, LanguageSpecificFilters] = ZLayer.succeed(YiddishFilters)
 }

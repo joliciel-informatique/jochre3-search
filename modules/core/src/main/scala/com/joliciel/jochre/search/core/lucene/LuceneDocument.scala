@@ -161,7 +161,7 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
   def highlightPagesAsHtml(
       query: Query,
       filters: Option[LanguageSpecificFilters] = None,
-      normalizeText: Boolean = false
+      simplifyText: Boolean = false
   ): Seq[(Int, String)] = {
     val highlighter = JochreHighlighter(query, IndexField.Text)
 
@@ -173,12 +173,12 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
             case ((pageBuilders, lastPos), token) =>
               if (lastPos <= token.start) {
                 val leftover = text.substring(lastPos, token.start)
-                val normalizedLeftover = if (normalizeText) {
-                  filters.map { filters => filters.normalizeText(leftover) }.getOrElse(leftover)
+                val simplifiedLeftover = if (simplifyText) {
+                  filters.map { filters => filters.simplifyText(leftover) }.getOrElse(leftover)
                 } else {
                   leftover
                 }
-                val htmlLeftover = normalizedLeftover
+                val htmlLeftover = simplifiedLeftover
                   .replaceAll("\n", "<br>")
                 val (_, sb) = pageBuilders.last
                 if (token.value == PAGE_TOKEN) {
@@ -187,13 +187,13 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
                 } else {
                   sb.append(htmlLeftover)
                   val highlight = text.substring(token.start, token.end)
-                  val normalizedHighlight = if (normalizeText) {
-                    filters.map { filters => filters.normalizeText(highlight) }.getOrElse(highlight)
+                  val simplifiedHighlight = if (simplifyText) {
+                    filters.map { filters => filters.simplifyText(highlight) }.getOrElse(highlight)
                   } else {
                     highlight
                   }
                   sb.append(highlightPreTag)
-                  sb.append(normalizedHighlight.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
+                  sb.append(simplifiedHighlight.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
                   sb.append(highlightPostTag)
                   (pageBuilders, token.end)
                 }
@@ -207,12 +207,12 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           if (lastPos < text.length) {
             val (_, sb) = pageBuilders.last
             val leftover = text.substring(lastPos, text.length)
-            val normalizedLeftover = if (normalizeText) {
-              filters.map { filters => filters.normalizeText(leftover) }.getOrElse(leftover)
+            val simplifiedLeftover = if (simplifyText) {
+              filters.map { filters => filters.simplifyText(leftover) }.getOrElse(leftover)
             } else {
               leftover
             }
-            val htmlLeftover = normalizedLeftover
+            val htmlLeftover = simplifiedLeftover
               .replaceAll("\n", "<br>")
             sb.append(htmlLeftover)
           }
