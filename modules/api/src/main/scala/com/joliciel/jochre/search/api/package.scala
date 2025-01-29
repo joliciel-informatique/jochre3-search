@@ -8,6 +8,7 @@ package object api {
   object Roles {
     val index = RoleName("index")
     val maintenance = RoleName("maintenance")
+    val stats = RoleName("stats")
   }
 
   val PngCodecFormat: CodecFormat = new CodecFormat {
