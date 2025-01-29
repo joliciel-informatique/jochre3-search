@@ -38,6 +38,8 @@ import zio.stream.{ZSink, ZStream}
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import com.joliciel.jochre.search.api.stats.StatsApp
+import com.joliciel.jochre.search.core.service.StatsService
+import com.joliciel.jochre.search.core.service.StatsRepo
 
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
@@ -155,7 +157,9 @@ object MainApp extends ZIOAppDefault {
         JochreIndex.live,
         SearchService.live,
         PreferenceRepo.live,
-        PreferenceService.live
+        PreferenceService.live,
+        StatsRepo.live,
+        StatsService.live
       )
   }
 

@@ -40,4 +40,11 @@ trait DatabaseTestBase {
       suggestionRepo <- ZIO.service[SuggestionRepo]
       _ <- suggestionRepo.deleteAll
     } yield suggestionRepo
+
+  val statsRepoLayer = transactorLayer >>> StatsRepo.live
+
+  def getStatsRepo() =
+    for {
+      statsRepo <- ZIO.service[StatsRepo]
+    } yield statsRepo
 }

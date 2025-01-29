@@ -1,6 +1,7 @@
 package com.joliciel.jochre.search.api.stats
 
 import com.joliciel.jochre.search.api.TapirSchemaSupport
+import com.joliciel.jochre.search.core.TimeUnit
 import com.joliciel.jochre.search.core.service.{DocRev, Highlight, SearchProtocol, Snippet}
 import io.circe.parser._
 import io.circe.syntax._
