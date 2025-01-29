@@ -5,7 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import com.joliciel.jochre.search.yiddish.YiddishFilters
 
 class YiddishAnalyzerTest extends AnyFlatSpec with Matchers with LuceneUtilities {
-  "A Yiddish index field analyzer" should "transform hyphens" in {
+  "A Yiddish index field analyzer" should "correctly handle Latin alphabet text" in {
     val analyzerGroup = AnalyzerGroup.generic(Some(YiddishFilters))
     val analyzer = analyzerGroup.forIndexingUntokenizedFields
 
