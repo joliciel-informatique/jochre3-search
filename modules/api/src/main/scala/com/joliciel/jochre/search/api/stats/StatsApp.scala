@@ -45,7 +45,7 @@ case class StatsApp(override val authenticationProvider: AuthenticationProvider,
       .in("usage")
       .in(query[TimeUnit]("time-unit").example(TimeUnit.Month))
       .in(query[String]("start-date").example("2025-01-01").description("Start date (inclusive)"))
-      .in(query[String]("end-date").example("2026-01-01").description("End date (exclusive)"))
+      .in(query[String]("end-date").example("2025-12-31").description("End date (inclusive)"))
       .out(jsonBody[UsageStats].example(StatsHelper.usageStatsExample))
       .description("Get usage statistics for a given period by time unit.")
 
