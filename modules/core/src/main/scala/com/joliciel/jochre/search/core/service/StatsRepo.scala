@@ -16,6 +16,7 @@ import java.time.ZoneOffset
 import doobie.util.fragment.Fragment
 import org.slf4j.LoggerFactory
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 private[service] case class StatsRepo(transactor: Transactor[Task]) extends DoobieSupport {
   private val log = LoggerFactory.getLogger(getClass)
@@ -48,7 +49,9 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
         .map { instant =>
           val userCount = userStats.getOrElse(instant, 0)
           val queryCount = queryStats.getOrElse(instant, 0)
-          log.info(f"At ${instant.toString()} found $userCount users and $queryCount queries")
+          if (log.isDebugEnabled) {
+            log.debug(f"At ${instant.toString()} found $userCount users and $queryCount queries")
+          }
           (instant, userCount, queryCount)
         }
         .toSeq
@@ -66,12 +69,13 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       case TimeUnit.Month => "month"
       case TimeUnit.Year  => "year"
     }
+    val endDateExclusive = endDate.plus(1, ChronoUnit.DAYS)
     (fr"SELECT date_trunc(" ++ Fragment.const(
       f"'$sqlTimeUnit'"
     ) ++ fr""", executed) as time_unit, COUNT(distinct username) AS users
       | FROM query
       | WHERE executed >= $startDate
-      | AND executed < $endDate
+      | AND executed < $endDateExclusive
       | GROUP BY time_unit
       | ORDER BY time_unit ASC
     """.stripMargin)
@@ -87,12 +91,13 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       case TimeUnit.Month => "month"
       case TimeUnit.Year  => "year"
     }
+    val endDateExclusive = endDate.plus(1, ChronoUnit.DAYS)
     (fr"SELECT date_trunc(" ++ Fragment.const(
       f"'$sqlTimeUnit'"
     ) ++ fr""", executed) as time_unit, COUNT(distinct id) AS queries
       | FROM query
       | WHERE executed >= $startDate
-      | AND executed < $endDate
+      | AND executed < $endDateExclusive
       | GROUP BY time_unit
       | ORDER BY time_unit ASC
     """.stripMargin)

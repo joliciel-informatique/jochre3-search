@@ -25,7 +25,6 @@ object StatsRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         .ofPattern("yyyy-MM-dd")
         .withZone(ZoneId.systemDefault())
       val startTime = Instant.now()
-      println(f"Start time: ${startTime.toString()}, ${dayFormatter.format(startTime)}")
       val joe = "Joe"
       val joeIp = Some("127.0.0.1")
       val jim = "Jim"
@@ -40,7 +39,11 @@ object StatsRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         _ <- searchRepo.insertQuery(joe, joeIp, criteria, sort, 20, 42, 72)
         _ <- searchRepo.insertQuery(joe, joeIp, criteria, sort, 30, 42, 72)
         _ <- searchRepo.insertQuery(jim, joeIp, criteria, sort, 20, 42, 72)
-        usageStats <- statsRepo.getUsageStats(TimeUnit.Day, startTime, startTime.plus(1, ChronoUnit.DAYS))
+        usageStats <- statsRepo.getUsageStats(
+          TimeUnit.Day,
+          startTime,
+          startTime
+        ) // Note endTime will get one day added inside.
       } yield {
         assertTrue(
           usageStats == UsageStats(
