@@ -37,6 +37,9 @@ import zio.stream.{ZSink, ZStream}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.search.api.stats.StatsApp
+import com.joliciel.jochre.search.core.service.StatsService
+import com.joliciel.jochre.search.core.service.StatsRepo
 
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
@@ -59,6 +62,8 @@ object MainApp extends ZIOAppDefault {
     val indexRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(indexDirectives.http).toRoutes
     val userDirectives: UserApp = UserApp(authenticationProvider, executor.asExecutionContext)
     val userRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(userDirectives.http).toRoutes
+    val statsDirectives: StatsApp = StatsApp(authenticationProvider, executor.asExecutionContext)
+    val statsRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(statsDirectives.http).toRoutes
     val utilityDirectives: UtilityApp = UtilityApp(authenticationProvider, executor.asExecutionContext)
     val utilityRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(utilityDirectives.http).toRoutes
 
@@ -70,13 +75,13 @@ object MainApp extends ZIOAppDefault {
     val swaggerDirectives =
       SwaggerInterpreter(swaggerUIOptions = swaggerUIOptions)
         .fromEndpoints[AppTask](
-          searchDirectives.endpoints ++ indexDirectives.endpoints ++ userDirectives.endpoints ++ utilityDirectives.endpoints,
+          searchDirectives.endpoints ++ indexDirectives.endpoints ++ userDirectives.endpoints ++ statsDirectives.endpoints ++ utilityDirectives.endpoints,
           "Jochre Search Server",
           version
         )
     val swaggerRoutes: HttpRoutes[AppTask] = ZHttp4sServerInterpreter().from(swaggerDirectives).toRoutes
 
-    val routes = searchRoutes <+> indexRoutes <+> userRoutes <+> utilityRoutes <+> swaggerRoutes
+    val routes = searchRoutes <+> indexRoutes <+> userRoutes <+> statsRoutes <+> utilityRoutes <+> swaggerRoutes
 
     val httpApp = Router("/" -> routes).orNotFound
 
@@ -152,7 +157,9 @@ object MainApp extends ZIOAppDefault {
         JochreIndex.live,
         SearchService.live,
         PreferenceRepo.live,
-        PreferenceService.live
+        PreferenceService.live,
+        StatsRepo.live,
+        StatsService.live
       )
   }
 
