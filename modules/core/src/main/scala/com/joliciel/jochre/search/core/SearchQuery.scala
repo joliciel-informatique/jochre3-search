@@ -13,23 +13,14 @@ import com.joliciel.jochre.search.core.lucene.LuceneUtilities
 
 case class SearchQuery(criterion: SearchCriterion) {
   def replaceQuery(replaceFunction: String => String): SearchQuery = {
-    def replaceCriterion(criterion: SearchCriterion): SearchCriterion = criterion match {
-      case SearchCriterion.Not(criterion) => SearchCriterion.Not(replaceCriterion(criterion))
-      case SearchCriterion.And(criteria: Seq[SearchCriterion]) =>
-        SearchCriterion.And(criteria.map(replaceCriterion(_))*)
-      case SearchCriterion.Or(criteria: Seq[SearchCriterion]) =>
-        SearchCriterion.Or(criteria.map(replaceCriterion(_))*)
-      case SearchCriterion.Contains(fields, queryString, strict) =>
-        SearchCriterion.Contains(fields, replaceFunction(queryString), strict)
-      case other => other
-    }
-    this.copy(replaceCriterion(criterion))
+    this.copy(criterion.replaceCriterion(replaceFunction))
   }
 }
 
 sealed trait SearchCriterion {
   private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query
   private[core] def getContains(): Option[SearchCriterion.Contains] = None
+  def replaceCriterion(replaceFunction: String => String): SearchCriterion = this
 }
 
 object SearchCriterion extends LuceneUtilities {
@@ -46,6 +37,12 @@ object SearchCriterion extends LuceneUtilities {
           )
         }
       }
+      val fixedCriterion = analyzerGroup.preformatCriterion(this)
+      val fixedQueryString = fixedCriterion match {
+        case Contains(_, fixedQueryString, _) => fixedQueryString
+        case _                                => queryString
+      }
+
       val parser = if (strict) {
         new JochreMultiFieldQueryParser(
           fields = fields,
@@ -60,7 +57,7 @@ object SearchCriterion extends LuceneUtilities {
         )
       }
       try {
-        parser.parse(queryString)
+        parser.parse(fixedQueryString)
       } catch {
         case pe: ParseException =>
           throw new UnparsableQueryException(pe.getMessage)
@@ -68,6 +65,9 @@ object SearchCriterion extends LuceneUtilities {
     }
 
     override private[core] def getContains(): Option[Contains] = Some(this)
+
+    override def replaceCriterion(replaceFunction: String => String): Contains =
+      Contains(fields, replaceFunction(queryString), strict)
   }
 
   object Contains {
@@ -135,6 +135,10 @@ object SearchCriterion extends LuceneUtilities {
     }
 
     override private[core] def getContains(): Option[Contains] = criterion.getContains()
+
+    override def replaceCriterion(replaceFunction: String => String): Not = Not(
+      criterion.replaceCriterion(replaceFunction)
+    )
   }
 
   case class And(criteria: SearchCriterion*) extends SearchCriterion {
@@ -147,6 +151,10 @@ object SearchCriterion extends LuceneUtilities {
     }
 
     override private[core] def getContains(): Option[Contains] = criteria.map(_.getContains()).flatten.headOption
+
+    override def replaceCriterion(replaceFunction: String => String): And = And(
+      criteria.map(_.replaceCriterion(replaceFunction))*
+    )
   }
 
   case class Or(criteria: SearchCriterion*) extends SearchCriterion {
@@ -159,5 +167,9 @@ object SearchCriterion extends LuceneUtilities {
     }
 
     override private[core] def getContains(): Option[Contains] = criteria.map(_.getContains()).flatten.headOption
+
+    override def replaceCriterion(replaceFunction: String => String): Or = Or(
+      criteria.map(_.replaceCriterion(replaceFunction))*
+    )
   }
 }
