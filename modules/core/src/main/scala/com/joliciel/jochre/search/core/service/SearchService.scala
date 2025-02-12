@@ -211,15 +211,6 @@ private[service] case class SearchServiceImpl(
   private val config = ConfigFactory.load().getConfig("jochre.search")
   private val indexParallelism = config.getInt("index-parallelism")
   private val snippetClass = config.getString("highlighter.snippet-class")
-  private val queryFindReplacePairs = config
-    .getConfigList("query-replacements")
-    .asScala
-    .map(c => c.getString("find").r -> c.getString("replace"))
-    .map { case (find, replace) =>
-      log.info(f"Added query replacement: FIND $find REPLACE $replace")
-      find -> replace
-    }
-    .toSeq ++ languageSpecificFilters.map(_.queryFindReplacePairs).getOrElse(Seq.empty)
 
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
@@ -638,12 +629,6 @@ private[service] case class SearchServiceImpl(
     ZIO.acquireReleaseWith(acquire)(release)(readImages)
   }
 
-  private def replaceQuery(query: SearchQuery): SearchQuery = {
-    queryFindReplacePairs.foldLeft(query) { case (query, (find, replace)) =>
-      query.replaceQuery((s: String) => find.replaceAllIn(s, replace))
-    }
-  }
-
   override def search(
       query: SearchQuery,
       sort: Sort,
@@ -657,12 +642,9 @@ private[service] case class SearchServiceImpl(
       physicalNewLines: Boolean
   ): Task[SearchResponse] = {
     for {
-      fixedQuery <- ZIO.attempt {
-        replaceQuery(query)
-      }
       initialResponse <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.search(fixedQuery, sort, first, max, maxSnippets, rowPadding, addOffsets)
+          searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
         }
       }
       _ <- searchRepo.insertQuery(
@@ -712,12 +694,9 @@ private[service] case class SearchServiceImpl(
       sort: Sort
   ): Task[Seq[DocReference]] = {
     for {
-      fixedQuery <- ZIO.attempt {
-        replaceQuery(query)
-      }
       docRefs <- ZIO.fromTry {
         Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.findMatchingRefs(fixedQuery, sort = sort)
+          searcher.findMatchingRefs(query, sort = sort)
         }
       }
     } yield docRefs
@@ -733,9 +712,8 @@ private[service] case class SearchServiceImpl(
       if (!field.aggregatable) {
         throw new IndexFieldNotAggregatable(f"Field ${field.fieldName} is not aggregatable.")
       }
-      val fixedQuery = replaceQuery(query)
       Using(jochreIndex.searcherManager.acquire()) { searcher =>
-        val bins = searcher.aggregate(fixedQuery, field, maxBins)
+        val bins = searcher.aggregate(query, field, maxBins)
         val sortedBins = if (sortByLabel) {
           bins.sortBy(_.label)
         } else {
@@ -934,7 +912,7 @@ private[service] case class SearchServiceImpl(
               throw new DocumentNotFoundInIndexException(docRef)
             )
           val title = document.metadata.title
-          val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
+          val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
           val pageOffsetsAndTexts = document.highlightPagesAsHtml(luceneQuery, languageSpecificFilters, simplifyText)
 
@@ -978,7 +956,7 @@ private[service] case class SearchServiceImpl(
               throw new DocumentNotFoundInIndexException(docRef)
             )
           val title = document.metadata.title
-          val queryToUse = replaceQuery(query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments)))
+          val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
           val highlightedPages = document.highlightPages(luceneQuery, textAsHtml = textAsHtml)
 
