@@ -55,7 +55,7 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
           (instant, userCount, queryCount)
         }
         .toSeq
-        .sortBy(_._1)
+        .sortBy(_._1)(Ordering[Instant].reverse)
         .map { case (instant, userCount, queryCount) =>
           UsageStatsBin(toLabel(timeUnit, instant), userCount, queryCount)
         }
@@ -77,7 +77,7 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       | WHERE executed >= $startDate
       | AND executed < $endDateExclusive
       | GROUP BY time_unit
-      | ORDER BY time_unit ASC
+      | ORDER BY time_unit DESC
     """.stripMargin)
       .query[(Instant, Int)]
       .to[Seq]
@@ -99,7 +99,7 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       | WHERE executed >= $startDate
       | AND executed < $endDateExclusive
       | GROUP BY time_unit
-      | ORDER BY time_unit ASC
+      | ORDER BY time_unit DESC
     """.stripMargin)
       .query[(Instant, Int)]
       .to[Seq]
