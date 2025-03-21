@@ -17,6 +17,8 @@ import doobie.util.fragment.Fragment
 import org.slf4j.LoggerFactory
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import com.joliciel.jochre.search.core.TopUserStats
+import com.joliciel.jochre.search.core.TopUserStatsBin
 
 private[service] case class StatsRepo(transactor: Transactor[Task]) extends DoobieSupport {
   private val log = LoggerFactory.getLogger(getClass)
@@ -106,6 +108,24 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       .transact(transactor)
       .map(_.toMap)
   }
+
+  def getTopUsers(startDate: Instant, endDate: Instant, maxBins: Int): Task[TopUserStats] = {
+    val endDateExclusive = endDate.plus(1, ChronoUnit.DAYS)
+    (sql"""SELECT username, count(id) as queries FROM query
+      | WHERE executed >= $startDate
+      | AND executed < $endDateExclusive
+      | GROUP BY username
+      | ORDER BY queries desc
+      | LIMIT $maxBins""".stripMargin)
+      .query[(String, Int)]
+      .to[Seq]
+      .transact(transactor)
+      .map { results =>
+        val bins = results.map { case (username, count) => TopUserStatsBin(username, count) }
+        TopUserStats(bins)
+      }
+  }
+
 }
 
 object StatsRepo {

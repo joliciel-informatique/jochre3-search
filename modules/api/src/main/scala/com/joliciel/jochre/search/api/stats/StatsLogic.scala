@@ -15,6 +15,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeParseException
 import java.time.LocalDate
 import java.time.ZoneId
+import com.joliciel.jochre.search.core.TopUserStats
 
 trait StatsLogic extends HttpErrorMapper {
   def getUsageStatsLogic(
@@ -30,6 +31,21 @@ trait StatsLogic extends HttpErrorMapper {
       usageStats <- statsService.getUsageStats(timeUnit, startDateAsInstant, endDateAsInstant)
     } yield usageStats
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get usage stats", error))
+    .mapError(mapToHttpError)
+
+  def getTopUserStatsLogic(
+      token: ValidToken,
+      startDate: String,
+      endDate: String,
+      maxBins: Int
+  ): ZIO[Requirements, HttpError, TopUserStats] = {
+    for {
+      statsService <- ZIO.service[StatsService]
+      startDateAsInstant <- ZIO.attempt(stringToInstant(startDate))
+      endDateAsInstant <- ZIO.attempt(stringToInstant(endDate))
+      topUserStats <- statsService.getTopUsers(startDateAsInstant, endDateAsInstant, maxBins)
+    } yield topUserStats
+  }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get top user stats", error))
     .mapError(mapToHttpError)
 
   private val dayFormatter = DateTimeFormatter

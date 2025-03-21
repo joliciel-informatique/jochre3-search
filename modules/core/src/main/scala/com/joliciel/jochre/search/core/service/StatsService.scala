@@ -7,9 +7,12 @@ import zio.{Task, ZIO, ZLayer}
 import com.joliciel.jochre.search.core.TimeUnit
 import com.joliciel.jochre.search.core.UsageStats
 import java.time.Instant
+import com.joliciel.jochre.search.core.TopUserStats
 
 trait StatsService {
   def getUsageStats(timeUnit: TimeUnit, startDate: Instant, endDate: Instant): Task[UsageStats]
+
+  def getTopUsers(startDate: Instant, endDate: Instant, maxBins: Int): Task[TopUserStats]
 }
 
 private[service] case class StatsServiceImpl(
@@ -19,6 +22,9 @@ private[service] case class StatsServiceImpl(
 
   override def getUsageStats(timeUnit: TimeUnit, startDate: Instant, endDate: Instant): Task[UsageStats] =
     statsRepo.getUsageStats(timeUnit, startDate, endDate)
+
+  override def getTopUsers(startDate: Instant, endDate: Instant, maxBins: Int): Task[TopUserStats] =
+    statsRepo.getTopUsers(startDate, endDate, maxBins)
 }
 
 object StatsService {
