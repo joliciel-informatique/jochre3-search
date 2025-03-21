@@ -17,10 +17,12 @@ import com.joliciel.jochre.search.core.IndexField
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.time.ZoneId
+import com.joliciel.jochre.search.core.TopUserStats
+import com.joliciel.jochre.search.core.TopUserStatsBin
 
 object StatsRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
   override def spec: Spec[TestEnvironment & Scope, Any] = suite("StatsRepoTest")(
-    test("get usage stats") {
+    test("get usage and top user stats") {
       val dayFormatter = DateTimeFormatter
         .ofPattern("yyyy-MM-dd")
         .withZone(ZoneId.systemDefault())
@@ -44,11 +46,20 @@ object StatsRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
           startTime,
           startTime
         ) // Note endTime will get one day added inside.
+        topUserSTats <- statsRepo.getTopUsers(startTime, startTime, 30)
       } yield {
         assertTrue(
           usageStats == UsageStats(
             Seq(
               UsageStatsBin(dayFormatter.format(startTime), 2, 3)
+            )
+          )
+        ) &&
+        assertTrue(
+          topUserSTats == TopUserStats(
+            Seq(
+              TopUserStatsBin(joe, 2),
+              TopUserStatsBin(jim, 1)
             )
           )
         )
