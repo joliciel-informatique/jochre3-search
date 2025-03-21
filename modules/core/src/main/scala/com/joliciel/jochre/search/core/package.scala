@@ -298,11 +298,27 @@ package object core {
       bins: Seq[UsageStatsBin]
   )
 
+  case class TopUserStatsBin(
+      username: String,
+      queries: Int
+  )
+
+  case class TopUserStats(
+      bins: Seq[TopUserStatsBin]
+  )
+
   object StatsHelper {
     val usageStatsExample: UsageStats = UsageStats(
       Seq(
         UsageStatsBin("2025-01-14", 41, 735),
         UsageStatsBin("2025-01-15", 63, 938)
+      )
+    )
+
+    val topUserStatsExample: TopUserStats = TopUserStats(
+      Seq(
+        TopUserStatsBin("jim@example.com", 42),
+        TopUserStatsBin("george@example.com", 17)
       )
     )
   }
