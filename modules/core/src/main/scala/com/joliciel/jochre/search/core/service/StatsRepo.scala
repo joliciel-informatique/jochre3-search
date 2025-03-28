@@ -115,7 +115,7 @@ private[service] case class StatsRepo(transactor: Transactor[Task]) extends Doob
       | WHERE executed >= $startDate
       | AND executed < $endDateExclusive
       | GROUP BY username
-      | ORDER BY queries desc
+      | ORDER BY queries DESC, username ASC
       | LIMIT $maxBins""".stripMargin)
       .query[(String, Int)]
       .to[Seq]
