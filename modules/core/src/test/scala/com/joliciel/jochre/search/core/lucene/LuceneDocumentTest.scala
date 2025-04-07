@@ -27,40 +27,6 @@ class LuceneDocumentTest extends AnyFlatSpec with Matchers with LuceneUtilities 
     DocMetadata(title = Some("The cat"))
   )
 
-  "highlightPagesAsHtml" should "correctly highlight pages" in {
-    val jochreIndex = getJochreIndex
-
-    jochreIndex.addDocumentInfo(
-      docRef,
-      DocumentIndexInfo(
-        pageOffsets = Set(prefix.length, prefix.length + page1.length, prefix.length + page1.length + page2.length),
-        newlineOffsets = Set(
-          prefix.length,
-          prefix.length + page1line1.length,
-          prefix.length + page1line1.length + page1line2.length,
-          prefix.length + page1.length + page2line1.length
-        ),
-        hyphenatedWordOffsets = Set(prefix.length + page1line1.length + "Is the ".length),
-        offsetToAlternativeMap = Map.empty
-      )
-    )
-    jochreIndex.indexer.indexDocument(doc)
-    jochreIndex.refresh
-
-    Using.resource(jochreIndex.searcherManager.acquire()) { jochreSearcher =>
-      val luceneDocOpt = jochreSearcher.getByDocRef(docRef)
-      assert(luceneDocOpt.isDefined)
-      val luceneDoc = luceneDocOpt.get
-      val query = new TermQuery(new Term(IndexField.Text.fieldName, "cat"))
-      val highlightedPages = luceneDoc.highlightPagesAsHtml(query)
-      highlightedPages shouldEqual Seq(
-        prefix.length -> "Hello <b>cat</b>.<br>Is the <b>c-</b><br><b>at</b> happy? ",
-        prefix.length + page1.length -> "Yes, the <b>cat</b> is happy.<br>Oh good. ",
-        prefix.length + page1.length + page2.length -> "Life is good."
-      )
-    }
-  }
-
   "highlightPages" should "correctly highlight pages" in {
     val jochreIndex = getJochreIndex
 
