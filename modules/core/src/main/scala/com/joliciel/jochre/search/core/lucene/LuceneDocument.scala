@@ -19,8 +19,11 @@ import org.apache.lucene.search.Query
 import org.apache.lucene.search.highlight.TokenSources
 
 import scala.util.Using
+import org.slf4j.LoggerFactory
 
 private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher, val luceneId: Int) {
+  private val log = LoggerFactory.getLogger(getClass)
+
   private val config = ConfigFactory.load().getConfig("jochre.search.highlighter")
   private val highlightPreTag = config.getString("formatter-pre-tag")
   private val highlightPostTag = config.getString("formatter-post-tag")
@@ -171,6 +174,9 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector(0 -> new StringBuilder()) -> 0) {
             case ((pageBuilders, lastPos), token) =>
+              if (log.isTraceEnabled()) {
+                log.trace(f"Token ${token.value} from ${token.start} to ${token.end}. LastPos: $lastPos")
+              }
               if (lastPos <= token.start) {
                 val leftover = text.substring(lastPos, token.start)
                 val simplifiedLeftover = if (simplifyText) {
@@ -238,6 +244,9 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
           val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
           val (pageBuilders, lastPos) = terms.foldLeft(Vector((0, new StringBuilder(), Seq.empty[Highlight])) -> 0) {
             case ((pageBuilders, lastPos), token) =>
+              if (log.isTraceEnabled()) {
+                log.trace(f"Token ${token.value} from ${token.start} to ${token.end}. LastPos: $lastPos")
+              }
               if (lastPos <= token.start) {
                 val leftover = if (textAsHtml) {
                   text.substring(lastPos, token.start).replaceAll("\n", "<br>")
