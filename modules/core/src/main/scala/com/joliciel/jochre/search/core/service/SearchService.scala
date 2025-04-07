@@ -967,11 +967,26 @@ private[service] case class SearchServiceImpl(
     } yield {
       val (_, title, highlightedPages) = docWithInfo
 
-      val offsetToHighlightedPageMap = highlightedPages.map(p => p.startOffset -> p).toMap
+      // If several pages have the same offset (empty pages), toMap below will automatically take the last page, which is what we want
+      val offsetToPageMap = pages.map(p => p.offset -> p).toMap
 
-      val pagesWithIndexes = pages.flatMap { page =>
-        val highlightedPage = offsetToHighlightedPageMap.get(page.offset)
-        highlightedPage.map(_.copy(physicalPageNumber = page.index))
+      val (pagesWithIndexes, _) = highlightedPages.foldLeft(Seq.empty[HighlightedPage] -> -1) {
+        case ((highlightedPagesWithIndex, lastIndex), highlightedPage) =>
+          // Try to find the last database page starting at the same offset
+          val page = offsetToPageMap.get(highlightedPage.startOffset)
+          val pageIndex = page.map(_.index).getOrElse(-1)
+          val withIndex = highlightedPage.copy(physicalPageNumber = pageIndex)
+
+          // Add any missing pages
+          val missingPages = Option
+            .when(pageIndex >= 0 && lastIndex >= 0 && pageIndex - lastIndex > 1) {
+              ((lastIndex + 1) until pageIndex).map { missingIndex =>
+                HighlightedPage(missingIndex, highlightedPage.startOffset, "", Seq.empty, None)
+              }
+            }
+            .getOrElse(Seq.empty[HighlightedPage])
+
+          (highlightedPagesWithIndex ++ missingPages :+ withIndex, if (pageIndex >= 0) pageIndex else lastIndex)
       }
 
       HighlightedDocument(
