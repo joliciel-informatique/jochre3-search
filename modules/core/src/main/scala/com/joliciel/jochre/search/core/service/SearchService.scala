@@ -136,7 +136,8 @@ trait SearchService {
   def highlightDocument(
       docRef: DocReference,
       query: Option[SearchQuery],
-      textAsHtml: Boolean
+      textAsHtml: Boolean,
+      simplifyText: Boolean
   ): Task[HighlightedDocument]
 
   def getWordText(
@@ -904,40 +905,17 @@ private[service] case class SearchServiceImpl(
 
   override def getTextAsHtml(docRef: DocReference, query: Option[SearchQuery], simplifyText: Boolean): Task[String] = {
     for {
-      docWithInfo <- ZIO.fromTry {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          val document = searcher
-            .getByDocRef(docRef)
-            .getOrElse(
-              throw new DocumentNotFoundInIndexException(docRef)
-            )
-          val title = document.metadata.title
-          val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
-          val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val pageOffsetsAndTexts = document.highlightPagesAsHtml(luceneQuery, languageSpecificFilters, simplifyText)
-
-          (document.rev, title, pageOffsetsAndTexts)
-        }
-      }
-      pages <- searchRepo.getPages(docWithInfo._1)
+      highlightedDoc <- highlightDocument(docRef, query, textAsHtml = true, simplifyText)
     } yield {
-      val (_, title, pageOffsetsAndTexts) = docWithInfo
-
-      val offsetToTextMap = pageOffsetsAndTexts.toMap
-
-      val pagesWithText = pages.map { page =>
-        page.index -> offsetToTextMap.getOrElse(page.offset, "")
-      }
-
-      val html = if (pagesWithText.isEmpty) {
+      val html = if (highlightedDoc.pages.isEmpty) {
         ""
       } else {
-        pagesWithText.map { case (pageIndex, text) =>
-          f"""<div id="page$pageIndex">$text<hr></div>"""
+        highlightedDoc.pages.map { case page =>
+          f"""<div id="page${page.physicalPageNumber}">${page.text}<hr></div>"""
         }.mkString
       }
 
-      val response = title.map(t => f"<h1>$t</h1>").getOrElse("") + html
+      val response = f"<h1>${highlightedDoc.title}</h1>" + html
       response
     }
   }
@@ -945,7 +923,8 @@ private[service] case class SearchServiceImpl(
   override def highlightDocument(
       docRef: DocReference,
       query: Option[SearchQuery],
-      textAsHtml: Boolean
+      textAsHtml: Boolean,
+      simplifyText: Boolean
   ): Task[HighlightedDocument] = {
     for {
       docWithInfo <- ZIO.fromTry {
@@ -958,7 +937,12 @@ private[service] case class SearchServiceImpl(
           val title = document.metadata.title
           val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
           val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val highlightedPages = document.highlightPages(luceneQuery, textAsHtml = textAsHtml)
+          val highlightedPages = document.highlightPages(
+            luceneQuery,
+            textAsHtml = textAsHtml,
+            filters = languageSpecificFilters,
+            simplifyText = simplifyText
+          )
 
           (document.rev, title, highlightedPages)
         }

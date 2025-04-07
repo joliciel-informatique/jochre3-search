@@ -157,84 +157,12 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
     }
   }
 
-  /** Returns, for each page, the start offset and the highlighted text.
-    * @param query
-    *   the query to use for highlighting
-    */
-  def highlightPagesAsHtml(
-      query: Query,
-      filters: Option[LanguageSpecificFilters] = None,
-      simplifyText: Boolean = false
-  ): Seq[(Int, String)] = {
-    val highlighter = JochreHighlighter(query, IndexField.Text)
-
-    this.getTokenStreamAndText(IndexField.Text) match {
-      case (Some(tokenStream), Some(text)) =>
-        Using.resource(tokenStream) { tokenStream =>
-          val terms = highlighter.findTerms(tokenStream, includePageBreaks = true)
-          val (pageBuilders, lastPos) = terms.foldLeft(Vector(0 -> new StringBuilder()) -> 0) {
-            case ((pageBuilders, lastPos), token) =>
-              if (log.isTraceEnabled()) {
-                log.trace(f"Token ${token.value} from ${token.start} to ${token.end}. LastPos: $lastPos")
-              }
-              if (lastPos <= token.start) {
-                val leftover = text.substring(lastPos, token.start)
-                val simplifiedLeftover = if (simplifyText) {
-                  filters.map { filters => filters.simplifyText(leftover) }.getOrElse(leftover)
-                } else {
-                  leftover
-                }
-                val htmlLeftover = simplifiedLeftover
-                  .replaceAll("\n", "<br>")
-                val (_, sb) = pageBuilders.last
-                if (token.value == PAGE_TOKEN) {
-                  sb.append(htmlLeftover)
-                  (pageBuilders :+ (token.start, new StringBuilder()), token.start)
-                } else {
-                  sb.append(htmlLeftover)
-                  val highlight = text.substring(token.start, token.end)
-                  val simplifiedHighlight = if (simplifyText) {
-                    filters.map { filters => filters.simplifyText(highlight) }.getOrElse(highlight)
-                  } else {
-                    highlight
-                  }
-                  sb.append(highlightPreTag)
-                  sb.append(simplifiedHighlight.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))
-                  sb.append(highlightPostTag)
-                  (pageBuilders, token.end)
-                }
-              } else {
-                // For some reason we got a highlight for a string we already highlighted
-                // most likely the same string highlighted twice
-                // we ignore it
-                (pageBuilders, lastPos)
-              }
-          }
-          if (lastPos < text.length) {
-            val (_, sb) = pageBuilders.last
-            val leftover = text.substring(lastPos, text.length)
-            val simplifiedLeftover = if (simplifyText) {
-              filters.map { filters => filters.simplifyText(leftover) }.getOrElse(leftover)
-            } else {
-              leftover
-            }
-            val htmlLeftover = simplifiedLeftover
-              .replaceAll("\n", "<br>")
-            sb.append(htmlLeftover)
-          }
-          // We take the tail to skip the "fake" page containing the document reference
-          val pageTexts = pageBuilders.tail.map { case (startOffset, sb) => startOffset -> sb.toString() }
-          pageTexts
-        }
-      case _ =>
-        Seq.empty
-    }
-  }
-
   private val numberRegex = raw"\d+".r
   def highlightPages(
       query: Query,
-      textAsHtml: Boolean
+      textAsHtml: Boolean,
+      filters: Option[LanguageSpecificFilters] = None,
+      simplifyText: Boolean = false
   ): Seq[HighlightedPage] = {
     val highlighter = JochreHighlighter(query, IndexField.Text)
 
@@ -248,18 +176,34 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
                 log.trace(f"Token ${token.value} from ${token.start} to ${token.end}. LastPos: $lastPos")
               }
               if (lastPos <= token.start) {
-                val leftover = if (textAsHtml) {
-                  text.substring(lastPos, token.start).replaceAll("\n", "<br>")
+                val initialLeftover = text.substring(lastPos, token.start)
+
+                val simplifiedLeftover = if (simplifyText) {
+                  filters.map { filters => filters.simplifyText(initialLeftover) }.getOrElse(initialLeftover)
                 } else {
-                  text.substring(lastPos, token.start)
+                  initialLeftover
                 }
+
+                val leftover = if (textAsHtml) {
+                  simplifiedLeftover.replaceAll("\n", "<br>")
+                } else {
+                  simplifiedLeftover
+                }
+
                 val (pageStart, sb, highlights) = pageBuilders.last
                 if (token.value == PAGE_TOKEN) {
                   sb.append(leftover)
                   (pageBuilders :+ (token.start, new StringBuilder(), Seq.empty[Highlight]), token.start)
                 } else {
                   sb.append(leftover)
-                  val highlightText = text.substring(token.start, token.end)
+                  val initialHighlightText = text.substring(token.start, token.end)
+                  val highlightText = if (simplifyText) {
+                    filters
+                      .map { filters => filters.simplifyText(initialHighlightText) }
+                      .getOrElse(initialHighlightText)
+                  } else {
+                    initialHighlightText
+                  }
                   if (textAsHtml) {
                     sb.append(highlightPreTag)
                     sb.append(highlightText.replaceAll("\n", f"$highlightPostTag<br>$highlightPreTag"))

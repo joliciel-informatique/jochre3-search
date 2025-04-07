@@ -164,7 +164,7 @@ object SearchServiceAnomalyTest
         _ <- getSuggestionRepo()
         searchService <- ZIO.service[SearchService]
         _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
-        highlighted <- searchService.highlightDocument(docRef3, query = None, textAsHtml = false)
+        highlighted <- searchService.highlightDocument(docRef3, query = None, textAsHtml = false, simplifyText = false)
       } yield {
         assertTrue(
           highlighted.pages.map { p => (p.physicalPageNumber, p.text.trim()) } ==

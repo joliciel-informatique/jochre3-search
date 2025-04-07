@@ -272,7 +272,12 @@ trait SearchLogic extends HttpErrorMapper {
         strict = strict,
         matchAllDocuments = true
       )
-      highlightedDoc <- searchService.highlightDocument(docRef, Some(searchQuery), textAsHtml.getOrElse(false))
+      highlightedDoc <- searchService.highlightDocument(
+        docRef,
+        Some(searchQuery),
+        textAsHtml.getOrElse(false),
+        simplifyText = false
+      )
     } yield {
       highlightedDoc
     })
