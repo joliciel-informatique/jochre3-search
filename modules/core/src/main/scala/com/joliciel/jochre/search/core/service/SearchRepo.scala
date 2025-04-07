@@ -341,6 +341,18 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
       .to[Seq]
       .transact(transactor)
 
+  def getNonEmptyPages(docRev: DocRev): Task[Seq[DbPage]] =
+    getPages(docRev).map { pages =>
+      val (nonEmptyPages, _) = pages.foldLeft(Seq.empty[DbPage] -> -1) { case ((nonEmptyPages, lastOffset), page) =>
+        if (page.offset > lastOffset) {
+          (nonEmptyPages :+ page, page.offset)
+        } else {
+          (nonEmptyPages.init :+ page, page.offset)
+        }
+      }
+      nonEmptyPages
+    }
+
   def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
     sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height
          | FROM row

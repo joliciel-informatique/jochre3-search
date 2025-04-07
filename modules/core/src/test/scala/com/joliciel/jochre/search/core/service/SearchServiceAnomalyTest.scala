@@ -22,7 +22,11 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
+object SearchServiceAnomalyTest
+    extends JUnitRunnableSpec
+    with DatabaseTestBase
+    with WithTestIndexLayer
+    with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
 
   private val docRef1 = DocReference("doc1")
@@ -52,6 +56,23 @@ object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase 
     "Cat Mouse\n" +
       "Horse Wolf\n" +
       "\n\n" +
+      "Spider Bat\n",
+    Map.empty
+  )
+
+  private val docRef3 = DocReference("doc3")
+  private val metadata3 =
+    DocMetadata(title = Some("Hi everyone"), author = Some("Joe Schmoe"), publicationYear = Some("1937"))
+
+  private val alto3 = textToAlto(
+    "doc3",
+    "Cat Mouse\n" +
+      "\n\n" +
+      "\n\n\n" +
+      "Horse Wolf\n" +
+      "\n\n" +
+      "\n\n\n" +
+      "\n\n\n" +
       "Spider Bat\n",
     Map.empty
   )
@@ -134,6 +155,27 @@ object SearchServiceAnomalyTest extends JUnitRunnableSpec with DatabaseTestBase 
           resultsDoc2.results.flatMap(_.snippets.map(_.text)) == Seq(
             "<div class=\"text-snippet\">Cat Mouse<br>Horse Wolf</div>"
           )
+        )
+      }
+    },
+    test("add missing pages") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef3, username, ipAddress, alto3, metadata3)
+        highlighted <- searchService.highlightDocument(docRef3, query = None, textAsHtml = false)
+      } yield {
+        assertTrue(
+          highlighted.pages.map { p => (p.physicalPageNumber, p.text.trim()) } ==
+            Seq(
+              (0, "Cat Mouse"),
+              (1, ""),
+              (2, "Horse Wolf"),
+              (3, ""),
+              (4, ""),
+              (5, "Spider Bat")
+            )
         )
       }
     }

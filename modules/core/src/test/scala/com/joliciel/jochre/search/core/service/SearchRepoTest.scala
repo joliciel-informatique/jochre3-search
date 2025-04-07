@@ -77,6 +77,7 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
       val joeIp = Some("127.0.0.1")
       val pageToInsert = Page("page_1", 200, 100, 42, 0.17, "yi", 0.9, Seq.empty)
       val page2ToInsert = Page("page_2", 200, 100, 43, 0.17, "yi", 0.9, Seq.empty)
+      val page3ToInsert = Page("page_3", 200, 100, 44, 0.17, "yi", 0.9, Seq.empty)
       for {
         searchRepo <- getSearchRepo()
         docRev <- searchRepo.insertDocument(docRef, joe, joeIp)
@@ -84,7 +85,9 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         page <- searchRepo.getPage(docRev, 42).map(_.get)
         pageById <- searchRepo.getPage(pageId)
         page2Id <- searchRepo.insertPage(docRev, page2ToInsert, 20)
+        page3Id <- searchRepo.insertPage(docRev, page3ToInsert, 20)
         pages <- searchRepo.getPages(docRev)
+        nonEmptyPages <- searchRepo.getNonEmptyPages(docRev)
       } yield {
         assertTrue(page.id == pageId) &&
         assertTrue(page.docRev == docRev) &&
@@ -93,7 +96,8 @@ object SearchRepoTest extends JUnitRunnableSpec with DatabaseTestBase {
         assertTrue(page.offset == 10) &&
         assertTrue(page.index == 42) &&
         assertTrue(page == pageById) &&
-        assertTrue(pages.map(_.id) == Seq(pageId, page2Id))
+        assertTrue(pages.map(_.id) == Seq(pageId, page2Id, page3Id)) &&
+        assertTrue(nonEmptyPages.map(_.id) == Seq(pageId, page3Id))
       }
     },
     test("insert row") {
