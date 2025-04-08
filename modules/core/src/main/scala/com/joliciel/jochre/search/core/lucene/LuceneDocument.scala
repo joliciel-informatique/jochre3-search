@@ -249,11 +249,11 @@ private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher
             val paragraphs = initialText.split(paragraphRegex)
 
             val logicalPageNumber = if (paragraphs.length > 0 && numberRegex.matches(paragraphs.head)) {
-              Some(paragraphs.head.toInt)
+              paragraphs.head.toIntOption
             } else if (paragraphs.length > 1 && numberRegex.matches(paragraphs(1))) {
-              Some(paragraphs(1).toInt)
+              paragraphs(1).toIntOption
             } else if (paragraphs.length > 0 && numberRegex.matches(paragraphs.last)) {
-              Some(paragraphs.last.toInt)
+              paragraphs.last.toIntOption
             } else {
               None
             }
