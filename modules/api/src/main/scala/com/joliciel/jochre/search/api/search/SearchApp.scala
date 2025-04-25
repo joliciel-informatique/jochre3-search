@@ -12,6 +12,7 @@ import com.joliciel.jochre.search.core.service.{
   SearchResponse
 }
 import com.joliciel.jochre.search.core.{AggregationBins, DocReference, IndexField}
+import com.typesafe.config.ConfigFactory
 import io.circe.generic.auto._
 import sttp.capabilities.zio.ZioStreams
 import sttp.model.{Header, MediaType, StatusCode}
@@ -29,6 +30,9 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     with SearchProtocol
     with SearchSchemaSupport {
   given ExecutionContext = executionContext
+
+  private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val allowSearchWithoutAuth = config.getBoolean("allow-search-without-auth")
 
   private val queryInput = query[Option[String]]("query")
     .description("Query string for searching in the text")
@@ -491,31 +495,31 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       getSearchWithAuthHttp
     ).map(_.endpoint.tag("search")) ++
       List(
-        getSearchEndpoint,
-        getImageSnippetEndpoint,
-        getImageSnippetWithHighlightsEndpoint,
-        getAggregateEndpoint,
-        getTopAuthorsEndpoint,
-        getHighlightedTextEndpoint,
-        getTextAsHtmlEndpoint,
-        getListEndpoint,
-        getSizeEndpoint,
-        getWordTextEndpoint,
-        getWordImageEndpoint
-      ).map(_.tag("search"))
+        Option.when(allowSearchWithoutAuth)(getSearchEndpoint),
+        Some(getImageSnippetEndpoint),
+        Some(getImageSnippetWithHighlightsEndpoint),
+        Some(getAggregateEndpoint),
+        Some(getTopAuthorsEndpoint),
+        Some(getHighlightedTextEndpoint),
+        Some(getTextAsHtmlEndpoint),
+        Some(getListEndpoint),
+        Some(getSizeEndpoint),
+        Some(getWordTextEndpoint),
+        Some(getWordImageEndpoint)
+      ).flatten.map(_.tag("search"))
 
   val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
-    getSearchWithAuthHttp,
-    getSearchHttp,
-    getImageSnippetHttp,
-    getImageSnippetWithHighlightsHttp,
-    getAggregateHttp,
-    getTopAuthorsHttp,
-    getHighlightedTextHttp,
-    getTextAsHtmlHttp,
-    getListHttp,
-    getSizeHttp,
-    getWordTextHttp,
-    getWordImageHttp
-  )
+    Some(getSearchWithAuthHttp),
+    Option.when(allowSearchWithoutAuth)(getSearchHttp),
+    Some(getImageSnippetHttp),
+    Some(getImageSnippetWithHighlightsHttp),
+    Some(getAggregateHttp),
+    Some(getTopAuthorsHttp),
+    Some(getHighlightedTextHttp),
+    Some(getTextAsHtmlHttp),
+    Some(getListHttp),
+    Some(getSizeHttp),
+    Some(getWordTextHttp),
+    Some(getWordImageHttp)
+  ).flatten
 }
