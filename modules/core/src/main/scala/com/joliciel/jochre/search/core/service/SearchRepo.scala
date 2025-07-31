@@ -331,16 +331,6 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
       .option
       .transact(transactor)
 
-  def getPages(docRev: DocRev): Task[Seq[DbPage]] =
-    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height, page.start_offset
-         | FROM page
-         | WHERE page.doc_rev = ${docRev.rev}
-         | ORDER BY page.index
-       """.stripMargin
-      .query[DbPage]
-      .to[Seq]
-      .transact(transactor)
-
   def getNonEmptyPages(docRev: DocRev): Task[Seq[DbPage]] =
     getPages(docRev).map { pages =>
       val (nonEmptyPages, _) = pages.foldLeft(Seq.empty[DbPage] -> -1) { case ((nonEmptyPages, lastOffset), page) =>
@@ -352,6 +342,16 @@ private[service] case class SearchRepo(transactor: Transactor[Task]) extends Doo
       }
       nonEmptyPages
     }
+
+  def getPages(docRev: DocRev): Task[Seq[DbPage]] =
+    sql"""SELECT page.id, page.doc_rev, page.index, page.width, page.height, page.start_offset
+         | FROM page
+         | WHERE page.doc_rev = ${docRev.rev}
+         | ORDER BY page.index
+       """.stripMargin
+      .query[DbPage]
+      .to[Seq]
+      .transact(transactor)
 
   def getRow(docRev: DocRev, pageNumber: Int, rowIndex: Int): Task[Option[DbRow]] =
     sql"""SELECT row.id, row.page_id, row.index, row.lft, row.top, row.width, row.height

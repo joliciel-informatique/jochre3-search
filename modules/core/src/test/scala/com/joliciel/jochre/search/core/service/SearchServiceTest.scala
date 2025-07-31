@@ -344,6 +344,30 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
+    test("search with wildcard in word") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef4, username, ipAddress, alto4, metadata4)
+        phraseResult <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "plea*")),
+          Sort.Score,
+          0,
+          100,
+          Some(100),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">With <b>pleasure</b>.<br>" +
+            "With great <b>pleasure</b>.<br>" +
+            "Really.</div>"
+        )
+      }
+    },
     test("correctly highlight synonyms if both are matched") {
       for {
         _ <- getSearchRepo()
