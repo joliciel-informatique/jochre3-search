@@ -55,6 +55,18 @@ object SearchServiceYiddishTest
           addOffsets = false
         )
         topResult <- ZIO.attempt(searchResults.results.head)
+        prefixResults <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "פֿאַרשװ*")),
+          Sort.Score,
+          0,
+          10,
+          Some(20),
+          Some(1),
+          username,
+          ipAddress,
+          addOffsets = false
+        )
+        topPrefixResult <- ZIO.attempt(prefixResults.results.head)
         imageSnippet <- searchService.getImageSnippet(
           topResult.docRef,
           topResult.snippets.head.start,
@@ -117,6 +129,12 @@ object SearchServiceYiddishTest
         assertTrue(pageCount == 2) &&
         assertTrue(
           topResult.snippets.head.text == "<div class=\"text-snippet\">דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
+            "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
+            "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
+            "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־</div>"
+        ) &&
+        assertTrue(
+          topPrefixResult.snippets.head.text == "<div class=\"text-snippet\">דאָרט װאו די שיטערע רױכיגע װאָלקענס שװעבען, דאָרט װאו<br>" +
             "די װײסע פױנלען טוקען זיך, באַװײזען זיך און װערען <b>פאַרשװאונ־</b><br>" +
             "<b>דען</b> מיט אַ קװיטש און מיט אַ צװיטשער, און עס רײסט זיך<br>" +
             "אַרױס פון מײן אָנגעפילטער ברוסט, אָהן מײן װיסען, אַ מין גע־</div>"
