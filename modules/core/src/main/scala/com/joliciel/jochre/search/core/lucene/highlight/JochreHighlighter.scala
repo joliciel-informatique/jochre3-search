@@ -22,6 +22,11 @@ import org.slf4j.LoggerFactory
 
 import scala.collection.immutable.ArraySeq
 import scala.jdk.CollectionConverters._
+import org.apache.lucene.search.WildcardQuery
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper
+import org.apache.lucene.search.PrefixQuery
+import org.apache.lucene.search.RegexpQuery
+import org.apache.lucene.search.FuzzyQuery
 
 case class JochreHighlighter(query: Query, field: IndexField) {
   private val log = LoggerFactory.getLogger(getClass)
@@ -85,6 +90,22 @@ case class JochreHighlighter(query: Query, field: IndexField) {
       Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.fieldName) {
         val termQueries = query.getTerms.asScala.map(term => new SpanTermQuery(term))
         new SpanOrQuery(termQueries.toArray*)
+      }
+    case query: WildcardQuery =>
+      Option.when(query.getField() == field.fieldName) {
+        new SpanMultiTermQueryWrapper[WildcardQuery](query)
+      }
+    case query: PrefixQuery =>
+      Option.when(query.getField() == field.fieldName) {
+        new SpanMultiTermQueryWrapper[PrefixQuery](query)
+      }
+    case query: RegexpQuery =>
+      Option.when(query.getField() == field.fieldName) {
+        new SpanMultiTermQueryWrapper[RegexpQuery](query)
+      }
+    case query: FuzzyQuery =>
+      Option.when(query.getField() == field.fieldName) {
+        new SpanMultiTermQueryWrapper[FuzzyQuery](query)
       }
     case query: BooleanQuery =>
       val allClauses = query.clauses().asScala
