@@ -47,13 +47,15 @@ object SearchCriterion extends LuceneUtilities {
         new JochreMultiFieldQueryParser(
           fields = fields,
           termAnalyzer = analyzerGroup.forStrictSearch,
-          phraseAnalyzer = analyzerGroup.forStrictSearchPhrases
+          phraseAnalyzer = analyzerGroup.forStrictSearchPhrases,
+          analyzerGroup = analyzerGroup
         )
       } else {
         new JochreMultiFieldQueryParser(
           fields = fields,
           termAnalyzer = analyzerGroup.forSearch,
-          phraseAnalyzer = analyzerGroup.forSearchPhrases
+          phraseAnalyzer = analyzerGroup.forSearchPhrases,
+          analyzerGroup = analyzerGroup
         )
       }
       try {
