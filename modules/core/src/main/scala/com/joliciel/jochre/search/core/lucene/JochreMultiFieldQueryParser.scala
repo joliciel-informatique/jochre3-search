@@ -1,27 +1,90 @@
 package com.joliciel.jochre.search.core.lucene
 
 import com.joliciel.jochre.search.core.IndexField
+import com.joliciel.jochre.search.core.lucene.QueryExtensions.*
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser
 import org.apache.lucene.search.Query
 import org.slf4j.LoggerFactory
+import scala.util.matching.Regex
+import org.apache.lucene.search.PhraseQuery
+import org.apache.lucene.queries.spans.SpanTermQuery
+import org.apache.lucene.queries.spans.SpanQuery
+import org.apache.lucene.queries.spans.SpanNearQuery
+import org.apache.lucene.queries.spans.SpanOrQuery
 
 private[core] class JochreMultiFieldQueryParser(
     fields: Seq[IndexField],
     termAnalyzer: Analyzer,
     phraseAnalyzer: Analyzer,
     analyzerGroup: AnalyzerGroup
-) extends MultiFieldQueryParser(fields.map(_.fieldName).toArray, phraseAnalyzer)
+) extends MultiFieldQueryParser(fields.map(_.fieldName).toArray, termAnalyzer)
     with LuceneUtilities {
   private val log = LoggerFactory.getLogger(getClass)
 
-  override def newFieldQuery(analyzer: Analyzer, field: String, queryText: String, quoted: Boolean): Query = {
-    if (quoted) {
-      if (log.isDebugEnabled) log.debug(f"Analyzing quoted phrase: $queryText")
-      super.newFieldQuery(phraseAnalyzer, field, queryText, quoted)
+  private val wildcardPlaceholder = "wildcard42"
+
+  private val innerPhraseAnalyzer = new MultiFieldQueryParser(fields.map(_.fieldName).toArray, phraseAnalyzer)
+  innerPhraseAnalyzer.setAllowLeadingWildcard(true)
+
+  override def getFieldQuery(field: String, queryText: String, slop: Int): Query = {
+    // This override is only called for phrase queries
+    // Instead of building a phrase query, it builds a SpanNearQuery,
+    // which allows us to integrate wildcard queries inside the phrase
+    if (log.isDebugEnabled) log.debug(f"Analyzing quoted phrase: $queryText")
+
+    val myFields = if (Option(field).isEmpty) {
+      fields.map(_.fieldName)
     } else {
-      if (log.isDebugEnabled) log.debug(f"Analyzing unquoted text: $queryText")
-      super.newFieldQuery(termAnalyzer, field, queryText, quoted)
+      Seq(field)
+    }
+
+    // Parse query text as if it was outside of a phrase
+    val textWithWildcards = queryText.replaceAll("""\B\*\B""", wildcardPlaceholder)
+    val phraseQuery = innerPhraseAnalyzer.parse(textWithWildcards)
+    val clauses = phraseQuery.extractClauses()
+
+    val spanQueries = myFields.flatMap { myField =>
+      val spanClauses = clauses.flatMap(_.toSpanQuery(myField))
+      val clausesWithPositionsAndWildcards: Seq[Option[(SpanQuery, Int)]] = spanClauses.zipWithIndex.map {
+        case (clause, i) =>
+          clause match {
+            case spanTermQuery: SpanTermQuery if spanTermQuery.getTerm().text() == wildcardPlaceholder =>
+              None
+            case other =>
+              Some(clause, i)
+          }
+      }
+      val clausesWithPositions = clausesWithPositionsAndWildcards.flatten
+
+      val hasWildcard = clausesWithPositionsAndWildcards.exists(element => element.isEmpty)
+      val strictOrder = hasWildcard || slop == 0
+      Option.when(clausesWithPositions.nonEmpty) {
+        if (clausesWithPositions.size == 1) {
+          clausesWithPositions.head._1
+        } else {
+          val builder = new SpanNearQuery.Builder(myField, strictOrder)
+          builder.setSlop(slop)
+
+          clausesWithPositions.foldLeft(0) { case (currentPos, (clause, position)) =>
+            if (position > currentPos) {
+              builder.addGap(position - currentPos)
+            }
+            builder.addClause(clause)
+            position + 1
+          }
+
+          val spanQuery = builder.build()
+          if (log.isDebugEnabled) log.debug(f"After conversion to span query: $spanQuery")
+          spanQuery
+        }
+      }
+    }
+
+    if (spanQueries.size == 1) {
+      spanQueries.head
+    } else {
+      new SpanOrQuery(spanQueries*)
     }
   }
 

@@ -368,6 +368,54 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         )
       }
     },
+    test("search with wildcard in phrase") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef4, username, ipAddress, alto4, metadata4)
+        phraseResult <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"With gr* pleasure\"")),
+          Sort.Score,
+          0,
+          100,
+          Some(100),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">With pleasure.<br>" +
+            "<b>With</b> <b>great</b> <b>pleasure</b>.<br>" +
+            "Really.</div>"
+        )
+      }
+    },
+    test("search with wildcard in a phrase that starts with a *") {
+      for {
+        _ <- getSearchRepo()
+        _ <- getSuggestionRepo()
+        searchService <- ZIO.service[SearchService]
+        _ <- searchService.addFakeDocument(docRef4, username, ipAddress, alto4, metadata4)
+        phraseResult <- searchService.search(
+          SearchQuery(SearchCriterion.Contains(IndexField.Text, "\"With *eat pleasure\"")),
+          Sort.Score,
+          0,
+          100,
+          Some(100),
+          Some(1),
+          "test",
+          addOffsets = false
+        )
+      } yield {
+        assertTrue(
+          phraseResult.results.head.snippets.head.text == "<div class=\"text-snippet\">With pleasure.<br>" +
+            "<b>With</b> <b>great</b> <b>pleasure</b>.<br>" +
+            "Really.</div>"
+        )
+      }
+    },
     test("correctly highlight synonyms if both are matched") {
       for {
         _ <- getSearchRepo()
