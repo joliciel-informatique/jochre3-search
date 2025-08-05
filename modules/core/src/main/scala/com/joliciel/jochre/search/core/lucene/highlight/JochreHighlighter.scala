@@ -2,6 +2,7 @@ package com.joliciel.jochre.search.core.lucene.highlight
 
 import com.joliciel.jochre.search.core.IndexField
 import com.joliciel.jochre.search.core.lucene.{NEWLINE_TOKEN, PAGE_TOKEN, Token}
+import com.joliciel.jochre.search.core.lucene.QueryExtensions.toSpanQuery
 import com.typesafe.config.ConfigFactory
 import org.apache.lucene.analysis.TokenStream
 import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute}
@@ -36,94 +37,8 @@ case class JochreHighlighter(query: Query, field: IndexField) {
 
   private val initialRowsToShowIfNoSnippets = config.getInt("initial-rows-to-show-if-no-snippets")
 
-  private val highlightQuery = toSpanQuery(query).getOrElse(new MatchNoDocsQuery())
-
   // Highlighter only works correctly with span queries, especially in the case of PhraseQuery with wildcards
-  private def toSpanQuery(query: Query): Option[SpanQuery] = query match {
-    case query: SpanQuery => Some(query)
-    case query: PhraseQuery =>
-      Option.when(query.getField == field.fieldName) {
-        val hasWildcard = query.getPositions.length > 0 && query.getPositions
-          .zip(query.getPositions.tail)
-          .map { case (p1, p2) => p2 - p1 }
-          .exists(_ > 1)
-        val strictOrder = hasWildcard || query.getSlop == 0
-        val builder = new SpanNearQuery.Builder(field.fieldName, strictOrder)
-        builder.setSlop(query.getSlop)
-        val termsAndPositions = query.getTerms.zip(query.getPositions)
-        termsAndPositions.foldLeft(0) { case (currentPos, (term, position)) =>
-          if (position > currentPos) {
-            builder.addGap(position - currentPos)
-          }
-          builder.addClause(new SpanTermQuery(term))
-          position + 1
-        }
-        builder.build()
-      }
-    case query: MultiPhraseQuery =>
-      val termArrays = query.getTermArrays.toSeq
-      Option.when(!termArrays.isEmpty && !termArrays(0).isEmpty && termArrays(0)(0).field() == field.fieldName) {
-        val hasWildcard = query.getPositions.length > 0 && query.getPositions
-          .zip(query.getPositions.tail)
-          .map { case (p1, p2) => p2 - p1 }
-          .exists(_ > 1)
-        val strictOrder = hasWildcard || query.getSlop == 0
-        val builder = new SpanNearQuery.Builder(field.fieldName, strictOrder)
-        builder.setSlop(query.getSlop)
-        val termsAndPositions = termArrays.zip(query.getPositions)
-        termsAndPositions.foldLeft(0) { case (currentPos, (terms, position)) =>
-          if (position > currentPos) {
-            builder.addGap(position - currentPos)
-          }
-          val termQueries = terms.map(term => new SpanTermQuery(term))
-          val synonymQuery = new SpanOrQuery(termQueries.toArray*)
-          builder.addClause(synonymQuery)
-          position + 1
-        }
-        builder.build()
-      }
-    case query: TermQuery =>
-      Option.when(query.getTerm.field() == field.fieldName) {
-        new SpanTermQuery(query.getTerm)
-      }
-    case query: SynonymQuery =>
-      Option.when(!query.getTerms.isEmpty && query.getTerms.get(0).field() == field.fieldName) {
-        val termQueries = query.getTerms.asScala.map(term => new SpanTermQuery(term))
-        new SpanOrQuery(termQueries.toArray*)
-      }
-    case query: WildcardQuery =>
-      Option.when(query.getField() == field.fieldName) {
-        new SpanMultiTermQueryWrapper[WildcardQuery](query)
-      }
-    case query: PrefixQuery =>
-      Option.when(query.getField() == field.fieldName) {
-        new SpanMultiTermQueryWrapper[PrefixQuery](query)
-      }
-    case query: RegexpQuery =>
-      Option.when(query.getField() == field.fieldName) {
-        new SpanMultiTermQueryWrapper[RegexpQuery](query)
-      }
-    case query: FuzzyQuery =>
-      Option.when(query.getField() == field.fieldName) {
-        new SpanMultiTermQueryWrapper[FuzzyQuery](query)
-      }
-    case query: BooleanQuery =>
-      val allClauses = query.clauses().asScala
-      val positiveClauses = allClauses
-        .filter(clause => clause.getOccur == Occur.SHOULD || clause.getOccur == Occur.MUST)
-        .flatMap(clause => toSpanQuery(clause.getQuery))
-
-      Option.when(positiveClauses.nonEmpty) {
-        if (positiveClauses.length == 1) {
-          positiveClauses.head
-        } else {
-          new SpanOrQuery(positiveClauses.toArray*)
-        }
-      }
-    case other =>
-      if (log.isDebugEnabled) log.debug(f"Cannot convert ${other.getClass.getName}: $other to span query")
-      None
-  }
+  private val highlightQuery = query.toSpanQuery(field.fieldName).getOrElse(new MatchNoDocsQuery())
 
   private val scorer = {
     val scorer = new QueryScorer(highlightQuery, field.fieldName)
