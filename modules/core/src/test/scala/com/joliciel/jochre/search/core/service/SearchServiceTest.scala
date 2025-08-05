@@ -20,7 +20,8 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
   private val docRef1 = DocReference("doc1")
   private val metadata1 =
     DocMetadata(
-      title = Some("Hello World"),
+      title = Some("שלום־עליכם װעלט"),
+      titleEnglish = Some("Hello World"),
       author = Some("Joe Schmoe"),
       authorEnglish = Some("דשאָו שמאָו"),
       publicationYear = Some("1917")
@@ -505,6 +506,11 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
         titleContainsWorld <- searchService.search(
           SearchQuery(SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), "world", strict = false))
         )
+        titleContainsHelloWorld <- searchService.search(
+          SearchQuery(
+            SearchCriterion.Contains(Seq(IndexField.Title, IndexField.TitleEnglish), "\"hello world\"", strict = false)
+          )
+        )
         authorInJoe <- searchService.search(SearchQuery(SearchCriterion.ValueIn(IndexField.Author, Seq("Joe Schmoe"))))
         authorStartsWithJo <- searchService.search(SearchQuery(SearchCriterion.StartsWith(IndexField.Author, "Jo")))
         yearBefore1920 <- searchService.search(
@@ -529,14 +535,28 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
             )
           )
         )
+        titleAndTextCombined <- searchService.search(
+          SearchQuery(
+            SearchCriterion.And(
+              SearchCriterion.Contains(
+                Seq(IndexField.Title, IndexField.TitleEnglish),
+                "\"hello world\"",
+                strict = false
+              ),
+              SearchCriterion.Contains(IndexField.Text, "\"hello world\"", strict = false)
+            )
+          )
+        )
       } yield {
         assertTrue(titleContainsWorld.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1)) &&
+        assertTrue(titleContainsHelloWorld.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1)) &&
         assertTrue(authorInJoe.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef3)) &&
         assertTrue(authorStartsWithJo.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef3)) &&
         assertTrue(yearBefore1920.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1, docRef2)) &&
         assertTrue(yearAfter1920.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2, docRef3)) &&
         assertTrue(notAuthorInJoe.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2)) &&
-        assertTrue(andYear.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2))
+        assertTrue(andYear.results.map(_.docRef).sortBy(_.ref) == Seq(docRef2)) &&
+        assertTrue(titleAndTextCombined.results.map(_.docRef).sortBy(_.ref) == Seq(docRef1))
       }
     },
     test("aggregate") {
