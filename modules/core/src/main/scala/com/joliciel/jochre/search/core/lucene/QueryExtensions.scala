@@ -35,7 +35,10 @@ object QueryExtensions {
   private val log = LoggerFactory.getLogger(getClass)
 
   private def buildSpanQuery(query: Query, field: String): Option[SpanQuery] = query match {
-    case query: SpanQuery => Some(query)
+    case query: SpanQuery =>
+      Option.when(query.getField() == field) {
+        query
+      }
     case query: PhraseQuery =>
       Option.when(query.getField == field) {
         val hasWildcard = query.getPositions.length > 0 && query.getPositions
@@ -131,7 +134,7 @@ object QueryExtensions {
           .asScala
           .map { clause =>
             clause.getQuery() match {
-              case clauseQuery: BooleanQuery =>
+              case clauseQuery: BooleanQuery if clauseQuery.clauses().size() == 1 =>
                 clauseQuery.clauses().asScala.head.getQuery()
               case other => other
             }

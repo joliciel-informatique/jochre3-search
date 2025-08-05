@@ -12,6 +12,8 @@ import org.apache.lucene.queries.spans.SpanTermQuery
 import org.apache.lucene.queries.spans.SpanQuery
 import org.apache.lucene.queries.spans.SpanNearQuery
 import org.apache.lucene.queries.spans.SpanOrQuery
+import org.apache.lucene.queryparser.classic.QueryParser
+import org.apache.lucene.queries.spans.FieldMaskingSpanQuery
 
 private[core] class JochreMultiFieldQueryParser(
     fields: Seq[IndexField],
@@ -24,8 +26,11 @@ private[core] class JochreMultiFieldQueryParser(
 
   private val wildcardPlaceholder = "wildcard42"
 
-  private val innerPhraseAnalyzer = new MultiFieldQueryParser(fields.map(_.fieldName).toArray, phraseAnalyzer)
-  innerPhraseAnalyzer.setAllowLeadingWildcard(true)
+  private val innerPhraseAnalyzers = fields.map { field =>
+    val parser = new QueryParser(field.fieldName, phraseAnalyzer)
+    parser.setAllowLeadingWildcard(true)
+    field.fieldName -> parser
+  }.toMap
 
   override def getFieldQuery(field: String, queryText: String, slop: Int): Query = {
     // This override is only called for phrase queries
@@ -41,10 +46,12 @@ private[core] class JochreMultiFieldQueryParser(
 
     // Parse query text as if it was outside of a phrase
     val textWithWildcards = queryText.replaceAll("""\B\*\B""", wildcardPlaceholder)
-    val phraseQuery = innerPhraseAnalyzer.parse(textWithWildcards)
-    val clauses = phraseQuery.extractClauses()
 
+    val firstField = myFields.head
     val spanQueries = myFields.flatMap { myField =>
+      val parser = innerPhraseAnalyzers.get(myField).get
+      val phraseQuery = parser.parse(textWithWildcards)
+      val clauses = phraseQuery.extractClauses()
       val spanClauses = clauses.flatMap(_.toSpanQuery(myField))
       val clausesWithPositionsAndWildcards: Seq[Option[(SpanQuery, Int)]] = spanClauses.zipWithIndex.map {
         case (clause, i) =>
@@ -76,7 +83,11 @@ private[core] class JochreMultiFieldQueryParser(
 
           val spanQuery = builder.build()
           if (log.isDebugEnabled) log.debug(f"After conversion to span query: $spanQuery")
-          spanQuery
+          if (myField != firstField) {
+            new FieldMaskingSpanQuery(spanQuery, firstField)
+          } else {
+            spanQuery
+          }
         }
       }
     }
