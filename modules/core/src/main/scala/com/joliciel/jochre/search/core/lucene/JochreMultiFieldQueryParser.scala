@@ -28,7 +28,9 @@ private[core] class JochreMultiFieldQueryParser(
 
   private val innerPhraseAnalyzers = fields.map { field =>
     val parser = new QueryParser(field.fieldName, phraseAnalyzer)
-    parser.setAllowLeadingWildcard(true)
+    // Behind the scenes, wildcard queries are converted into boolean queries with all possible terms that match
+    // So allowing leading wildcard is almost guaranteed to result in "TooManyNestedClauses: Query contains too many nested clauses"
+    // parser.setAllowLeadingWildcard(true)
     field.fieldName -> parser
   }.toMap
 
@@ -45,7 +47,8 @@ private[core] class JochreMultiFieldQueryParser(
     }
 
     // Parse query text as if it was outside of a phrase
-    val textWithWildcards = queryText.replaceAll("""\B\*\B""", wildcardPlaceholder)
+    val normalizedText = analyzerGroup.languageSpecificFilters.map(_.normalizeText(queryText)).getOrElse(queryText)
+    val textWithWildcards = normalizedText.replaceAll("""\B\*\B""", wildcardPlaceholder)
 
     val firstField = myFields.head
     val spanQueries = myFields.flatMap { myField =>
