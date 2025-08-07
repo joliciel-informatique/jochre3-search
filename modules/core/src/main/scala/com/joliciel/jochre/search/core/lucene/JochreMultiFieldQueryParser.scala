@@ -14,6 +14,7 @@ import org.apache.lucene.queries.spans.SpanNearQuery
 import org.apache.lucene.queries.spans.SpanOrQuery
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.queries.spans.FieldMaskingSpanQuery
+import com.typesafe.config.ConfigFactory
 
 private[core] class JochreMultiFieldQueryParser(
     fields: Seq[IndexField],
@@ -23,14 +24,19 @@ private[core] class JochreMultiFieldQueryParser(
 ) extends MultiFieldQueryParser(fields.map(_.fieldName).toArray, termAnalyzer)
     with LuceneUtilities {
   private val log = LoggerFactory.getLogger(getClass)
+  private val config = ConfigFactory.load().getConfig("jochre.search")
+  private val allowLeadingWildcard = config.getBoolean("allow-leading-wildcard")
+  private val allowLeadingWildcardInPhrases = config.getBoolean("allow-leading-wildcard-in-phrases")
 
   private val wildcardPlaceholder = "wildcard42"
+
+  this.setAllowLeadingWildcard(allowLeadingWildcard)
 
   private val innerPhraseAnalyzers = fields.map { field =>
     val parser = new QueryParser(field.fieldName, phraseAnalyzer)
     // Behind the scenes, wildcard queries are converted into boolean queries with all possible terms that match
     // So allowing leading wildcard is almost guaranteed to result in "TooManyNestedClauses: Query contains too many nested clauses"
-    // parser.setAllowLeadingWildcard(true)
+    parser.setAllowLeadingWildcard(allowLeadingWildcardInPhrases)
     field.fieldName -> parser
   }.toMap
 

@@ -10,6 +10,7 @@ import org.apache.lucene.util.BytesRef
 
 import scala.jdk.CollectionConverters._
 import com.joliciel.jochre.search.core.lucene.LuceneUtilities
+import org.apache.lucene.search.IndexSearcher
 
 case class SearchQuery(criterion: SearchCriterion) {
   def replaceQuery(replaceFunction: String => String): SearchQuery = {
@@ -61,6 +62,10 @@ object SearchCriterion extends LuceneUtilities {
       try {
         parser.parse(fixedQueryString)
       } catch {
+        case tmce: IndexSearcher.TooManyClauses =>
+          throw new QueryTooComplexException(tmce.getMessage())
+        case tmce: BooleanQuery.TooManyClauses =>
+          throw new QueryTooComplexException(tmce.getMessage())
         case pe: ParseException =>
           throw new UnparsableQueryException(pe.getMessage)
       }
