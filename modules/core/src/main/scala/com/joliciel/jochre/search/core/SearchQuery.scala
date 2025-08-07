@@ -11,6 +11,7 @@ import org.apache.lucene.util.BytesRef
 import scala.jdk.CollectionConverters._
 import com.joliciel.jochre.search.core.lucene.LuceneUtilities
 import org.apache.lucene.search.IndexSearcher
+import org.slf4j.LoggerFactory
 
 case class SearchQuery(criterion: SearchCriterion) {
   def replaceQuery(replaceFunction: String => String): SearchQuery = {
@@ -25,6 +26,8 @@ sealed trait SearchCriterion {
 }
 
 object SearchCriterion extends LuceneUtilities {
+  private val log = LoggerFactory.getLogger(getClass)
+
   case object MatchAllDocuments extends SearchCriterion {
     override private[core] def toLuceneQuery(analyzerGroup: AnalyzerGroup): Query = new MatchAllDocsQuery()
   }
@@ -63,10 +66,13 @@ object SearchCriterion extends LuceneUtilities {
         parser.parse(fixedQueryString)
       } catch {
         case tmce: IndexSearcher.TooManyClauses =>
+          log.error("Unable to parse query", tmce)
           throw new QueryTooComplexException(tmce.getMessage())
         case tmce: BooleanQuery.TooManyClauses =>
+          log.error("Unable to parse query", tmce)
           throw new QueryTooComplexException(tmce.getMessage())
         case pe: ParseException =>
+          log.error("Unable to parse query", pe)
           throw new UnparsableQueryException(pe.getMessage)
       }
     }
