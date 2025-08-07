@@ -23,6 +23,8 @@ import org.apache.lucene.search.{
 import org.slf4j.LoggerFactory
 
 import scala.collection.compat.immutable.ArraySeq
+import org.checkerframework.checker.units.qual.t
+import com.joliciel.jochre.search.core.QueryTooComplexException
 
 /** If retrieved with a [[JochreSearcherManager]], should give an immutable view of the index.
   */
@@ -109,7 +111,14 @@ private[lucene] class JochreSearcher(
     if (log.isInfoEnabled) log.info(f"query: $luceneQuery")
     val docCollectorManager = getCollectorManager(sort, first, max)
 
-    val topDocs = this.search(luceneQuery, docCollectorManager)
+    val topDocs =
+      try {
+        this.search(luceneQuery, docCollectorManager)
+      } catch {
+        case tmce: IndexSearcher.TooManyClauses =>
+          throw new QueryTooComplexException(tmce.getMessage())
+      }
+
     if (log.isInfoEnabled) log.info(f"Found ${topDocs.totalHits} results")
 
     val page = ArraySeq
