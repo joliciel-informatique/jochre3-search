@@ -16,6 +16,7 @@ object SearchServiceYiddishTest
     extends JUnitRunnableSpec
     with DatabaseTestBase
     with WithYiddishTestIndexLayer
+    with WithDehyphenatorLayer
     with AltoHelper {
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -222,7 +223,7 @@ object SearchServiceYiddishTest
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ YiddishFilters.live) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ YiddishFilters.live ++ dehyphenatorLayer) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer.service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential
 }

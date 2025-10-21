@@ -27,6 +27,8 @@ import scala.io.Source
 import scala.util.Using
 import scala.xml.{Node, PrettyPrinter, XML}
 import scala.jdk.CollectionConverters._
+import com.joliciel.jochre.ocr.core.text.Dehyphenator
+import org.scalactic.Bool
 
 trait SearchService {
 
@@ -140,6 +142,8 @@ trait SearchService {
       simplifyText: Boolean
   ): Task[HighlightedDocument]
 
+  def getText(docRef: DocReference, dehyphenate: Boolean): Task[String]
+
   def getWordText(
       docRef: DocReference,
       wordOffset: Int
@@ -205,7 +209,8 @@ private[service] case class SearchServiceImpl(
     searchRepo: SearchRepo,
     suggestionRepo: SuggestionRepo,
     metadataReader: MetadataReader = MetadataReader.default,
-    languageSpecificFilters: Option[LanguageSpecificFilters] = None
+    languageSpecificFilters: Option[LanguageSpecificFilters] = None,
+    dehyphenator: Option[Dehyphenator] = None
 ) extends SearchService
     with ImageUtils {
   private val log = LoggerFactory.getLogger(getClass)
@@ -980,6 +985,23 @@ private[service] case class SearchServiceImpl(
     }
   }
 
+  override def getText(docRef: DocReference, dehyphenate: Boolean): Task[String] = {
+    for {
+      highlightedDoc <- highlightDocument(docRef, None, textAsHtml = false, simplifyText = false)
+      dehyphenated <- ZIO.attempt {
+        val myText = highlightedDoc.pages.map(_.text).mkString("\n")
+        if (dehyphenate) {
+          val dehyphenator = this.dehyphenator.getOrElse(throw new Exception("Cannot dehyphenate without dehyphenator"))
+          dehyphenator.dehyphenate(myText)
+        } else {
+          myText
+        }
+      }
+    } yield {
+      dehyphenated
+    }
+  }
+
   private def getWordGroup(wordsInRow: Seq[DbWord], wordOffset: Int): Seq[DbWord] = {
     val (wordsBefore, wordsAfter) = wordsInRow.span(_.startOffset < wordOffset)
     val word = wordsAfter.head
@@ -1359,18 +1381,24 @@ private[service] case class SearchServiceImpl(
 }
 
 object SearchService {
-  lazy val live: ZLayer[JochreIndex & SearchRepo & SuggestionRepo & LanguageSpecificFilters, Nothing, SearchService] =
+  lazy val live: ZLayer[
+    JochreIndex & SearchRepo & SuggestionRepo & LanguageSpecificFilters & Dehyphenator,
+    Nothing,
+    SearchService
+  ] =
     ZLayer {
       for {
         index <- ZIO.service[JochreIndex]
         searchRepo <- ZIO.service[SearchRepo]
         suggestionRepo <- ZIO.service[SuggestionRepo]
         languageSpecificFilters <- ZIO.service[LanguageSpecificFilters]
+        dehyphenator <- ZIO.service[Dehyphenator]
       } yield SearchServiceImpl(
         index,
         searchRepo,
         suggestionRepo,
-        languageSpecificFilters = Some(languageSpecificFilters)
+        languageSpecificFilters = Some(languageSpecificFilters),
+        dehyphenator = Some(dehyphenator)
       )
     }
 }

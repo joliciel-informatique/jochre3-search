@@ -9,9 +9,16 @@ import zio.{Scope, ZIO, ZLayer}
 
 import java.time.Instant
 import scala.util.Using
+import com.joliciel.jochre.ocr.core.text.Dehyphenator
 
-object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
+object SearchServiceTest
+    extends JUnitRunnableSpec
+    with DatabaseTestBase
+    with WithTestIndexLayer
+    with WithDehyphenatorLayer
+    with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
+
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
     "nice" -> Seq("pleasant", "lovely")
@@ -116,6 +123,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           query = Some(SearchQuery(SearchCriterion.Contains(IndexField.Text, "think"))),
           simplifyText = false
         )
+        text <- searchService.getText(docRef2, dehyphenate = false)
         _ <- searchService.removeDocument(docRef1)
         refsHelloAfterRemove <- ZIO.attempt {
           val query = SearchQuery(SearchCriterion.Contains(IndexField.Text, "Hello"))
@@ -136,6 +144,9 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
           // Remove all HTML except for highlights marked with <b>word</b>
           textWithHtmlHighlights
             .replaceAll("<((?!b\\b|\\/b\\b).+?)>", "") == f"${metadata2.title.get}${text2.replaceAll("\n", "").replaceAll("([Tt]hink)", "<b>$1</b>")}"
+        ) &&
+        assertTrue(
+          text.replaceAll("\n", "") == text2.replaceAll("\n", "")
         ) &&
         assertTrue(refsHelloAfterRemove == Seq(docRef2))
       }
@@ -633,7 +644,7 @@ object SearchServiceTest extends JUnitRunnableSpec with DatabaseTestBase with Wi
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer ++ dehyphenatorLayer) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer
       .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential

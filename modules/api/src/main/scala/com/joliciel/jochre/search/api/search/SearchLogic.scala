@@ -259,6 +259,20 @@ trait SearchLogic extends HttpErrorMapper {
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
       .mapError(mapToHttpError)
 
+  def getTextLogic(
+      docRef: DocReference,
+      dehyphenate: Option[Boolean]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    (for {
+      searchService <- ZIO.service[SearchService]
+      text <- searchService.getText(docRef, dehyphenate.getOrElse(false))
+    } yield {
+      ZStream(text)
+        .via(ZPipeline.utf8Encode)
+    })
+      .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
+      .mapError(mapToHttpError)
+
   def getHighlightedTextLogic(
       docRef: DocReference,
       query: Option[String],
