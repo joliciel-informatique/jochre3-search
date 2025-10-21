@@ -116,6 +116,7 @@ private[lucene] class JochreSearcher(
         this.search(luceneQuery, docCollectorManager)
       } catch {
         case tmce: IndexSearcher.TooManyClauses =>
+          log.error("Unable to run search", tmce)
           throw new QueryTooComplexException(tmce.getMessage())
       }
 
