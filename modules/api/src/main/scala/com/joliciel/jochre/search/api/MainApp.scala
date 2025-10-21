@@ -40,6 +40,8 @@ import scala.jdk.CollectionConverters._
 import com.joliciel.jochre.search.api.stats.StatsApp
 import com.joliciel.jochre.search.core.service.StatsService
 import com.joliciel.jochre.search.core.service.StatsRepo
+import com.joliciel.jochre.ocr.yiddish.YiddishDehyphenator
+import com.joliciel.jochre.ocr.yiddish.YiddishConfig
 
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
@@ -159,7 +161,9 @@ object MainApp extends ZIOAppDefault {
         PreferenceRepo.live,
         PreferenceService.live,
         StatsRepo.live,
-        StatsService.live
+        StatsService.live,
+        YiddishConfig.configLayer,
+        YiddishDehyphenator.live
       )
   }
 

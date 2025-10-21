@@ -10,7 +10,12 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object MetadataCorrectionTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
+object MetadataCorrectionTest
+    extends JUnitRunnableSpec
+    with DatabaseTestBase
+    with WithTestIndexLayer
+    with WithDehyphenatorLayer
+    with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
@@ -68,7 +73,6 @@ object MetadataCorrectionTest extends JUnitRunnableSpec with DatabaseTestBase wi
     alternativeMap
   )
 
-
   private val username = "jimi@hendrix.org"
   private val ipAddress = Some("127.0.0.1")
 
@@ -108,7 +112,7 @@ object MetadataCorrectionTest extends JUnitRunnableSpec with DatabaseTestBase wi
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer ++ dehyphenatorLayer) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer
       .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential

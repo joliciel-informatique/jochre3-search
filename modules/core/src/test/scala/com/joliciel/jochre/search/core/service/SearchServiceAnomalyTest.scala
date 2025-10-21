@@ -26,6 +26,7 @@ object SearchServiceAnomalyTest
     extends JUnitRunnableSpec
     with DatabaseTestBase
     with WithTestIndexLayer
+    with WithDehyphenatorLayer
     with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
 
@@ -180,7 +181,7 @@ object SearchServiceAnomalyTest
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer ++ dehyphenatorLayer) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer
       .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential
