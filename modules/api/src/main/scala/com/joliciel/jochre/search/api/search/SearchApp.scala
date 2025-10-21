@@ -414,6 +414,38 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
   private val getHighlightedTextHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
     getHighlightedTextEndpoint.zServerLogic[Requirements](input => getHighlightedTextLogic.tupled(input))
 
+  private val getTextEndpoint =
+    insecureEndpoint.get
+      .errorOut(
+        oneOf[HttpError](
+          oneOfVariant[NotFound](
+            StatusCode.NotFound,
+            jsonBody[NotFound].description("Document reference not found in index")
+          )
+        )
+      )
+      .in("text")
+      .in(
+        query[DocReference]("doc-ref")
+          .description("Document reference whose text we want.")
+          .example(DocReference("nybc200089"))
+      )
+      .in(
+        query[Option[Boolean]]("dehyphenqte")
+          .description("Should the text be dehyphenqted. Defaults to false.")
+          .example(Some(true))
+      )
+      .out(
+        streamTextBody(ZioStreams)(
+          CodecFormat.TextPlain(),
+          Some(StandardCharsets.UTF_8)
+        )
+      )
+      .description("Return the document in plain text format, with possible de-hyphenation.")
+
+  private val getTextHttp: ZServerEndpoint[Requirements, Any & ZioStreams] =
+    getTextEndpoint.zServerLogic[Requirements](input => getTextLogic.tupled(input))
+
   private val getTextAsHtmlEndpoint =
     insecureEndpoint.get
       .errorOut(
@@ -501,6 +533,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Some(getAggregateEndpoint),
         Some(getTopAuthorsEndpoint),
         Some(getHighlightedTextEndpoint),
+        Some(getTextEndpoint),
         Some(getTextAsHtmlEndpoint),
         Some(getListEndpoint),
         Some(getSizeEndpoint),
@@ -516,6 +549,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     Some(getAggregateHttp),
     Some(getTopAuthorsHttp),
     Some(getHighlightedTextHttp),
+    Some(getTextHttp),
     Some(getTextAsHtmlHttp),
     Some(getListHttp),
     Some(getSizeHttp),

@@ -10,7 +10,12 @@ import zio.{Scope, ZIO, ZLayer}
 import java.time.Instant
 import scala.util.Using
 
-object SuggestionTest extends JUnitRunnableSpec with DatabaseTestBase with WithTestIndexLayer with AltoHelper {
+object SuggestionTest
+    extends JUnitRunnableSpec
+    with DatabaseTestBase
+    with WithTestIndexLayer
+    with WithDehyphenatorLayer
+    with AltoHelper {
   private val languageSpecificFilterLayer = ZLayer.succeed(LanguageSpecificFilters.default)
   private val alternativeMap = Map(
     "hello" -> Seq("hi", "howdy"),
@@ -154,7 +159,7 @@ object SuggestionTest extends JUnitRunnableSpec with DatabaseTestBase with WithT
       }
     }
   ).provideLayer(
-    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer) >>> SearchService.live ++ ZLayer
+    (searchRepoLayer ++ suggestionRepoLayer ++ indexLayer ++ languageSpecificFilterLayer ++ dehyphenatorLayer) >>> SearchService.live ++ ZLayer
       .service[SearchRepo] ++ ZLayer
       .service[SuggestionRepo] ++ ZLayer.service[JochreIndex]
   ) @@ TestAspect.sequential
