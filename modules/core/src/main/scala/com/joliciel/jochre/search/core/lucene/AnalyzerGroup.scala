@@ -20,6 +20,7 @@ private[search] case class AnalyzerGroup(
     forSearchPhrases: Analyzer,
     forStrictSearch: Analyzer,
     forStrictSearchPhrases: Analyzer,
+    forWords: Analyzer,
     languageSpecificFilters: Option[LanguageSpecificFilters]
 ) {
   private val log = LoggerFactory.getLogger(getClass)
@@ -67,6 +68,7 @@ private[search] object AnalyzerGroup {
         new JochreAnalyzerForSearch(locale, forPhrases = false, addSynonyms = false, languageSpecificFilters),
       forStrictSearchPhrases =
         new JochreAnalyzerForSearch(locale, forPhrases = true, addSynonyms = false, languageSpecificFilters),
+      forWords = new JochreAnalyzerForWords(locale),
       languageSpecificFilters
     )
 }

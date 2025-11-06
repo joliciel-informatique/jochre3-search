@@ -54,35 +54,40 @@ private[core] class JochreMultiFieldQueryParser(
 
     // Parse query text as if it was outside of a phrase
     val normalizedText = analyzerGroup.languageSpecificFilters.map(_.normalizeText(queryText)).getOrElse(queryText)
-    val textWithWildcards = normalizedText.replaceAll("""\B\*\B""", wildcardPlaceholder)
+    val textWithWildcards = normalizedText.replaceAll("""\*""", wildcardPlaceholder)
 
     val firstField = myFields.head
     val spanQueries = myFields.flatMap { myField =>
       val parser = innerPhraseAnalyzers.get(myField).get
-      val phraseQuery = parser.parse(textWithWildcards)
-      val clauses = phraseQuery.extractClauses()
-      val spanClauses = clauses.flatMap(_.toSpanQuery(myField))
-      val clausesWithPositionsAndWildcards: Seq[Option[(SpanQuery, Int)]] = spanClauses.zipWithIndex.map {
-        case (clause, i) =>
-          clause match {
-            case spanTermQuery: SpanTermQuery if spanTermQuery.getTerm().text() == wildcardPlaceholder =>
-              None
-            case other =>
-              Some(clause, i)
-          }
-      }
-      val clausesWithPositions = clausesWithPositionsAndWildcards.flatten
 
-      val hasWildcard = clausesWithPositionsAndWildcards.exists(element => element.isEmpty)
+      val phraseQuery = parser.parse(textWithWildcards)
+
+      val spanQueries = tokenizeString(textWithWildcards, analyzerGroup.forWords)
+        .map(_.value)
+        .zipWithIndex
+        .map { case (token, i) =>
+          log.debug(f"Token $i: $token")
+          token match {
+            case token if token == wildcardPlaceholder => None
+            case _ =>
+              val fixedToken = token.replaceAll(wildcardPlaceholder, "*")
+              val query = parser.parse(fixedToken)
+              query.toSpanQuery(myField).map(spanQuery => spanQuery -> i)
+          }
+        }
+
+      val spanQueriesWithPositions = spanQueries.flatten
+
+      val hasWildcard = spanQueries.exists(element => element.isEmpty)
       val strictOrder = hasWildcard || slop == 0
-      Option.when(clausesWithPositions.nonEmpty) {
-        if (clausesWithPositions.size == 1) {
-          clausesWithPositions.head._1
+      Option.when(spanQueriesWithPositions.nonEmpty) {
+        if (spanQueriesWithPositions.size == 1) {
+          spanQueriesWithPositions.head._1
         } else {
           val builder = new SpanNearQuery.Builder(myField, strictOrder)
           builder.setSlop(slop)
 
-          clausesWithPositions.foldLeft(0) { case (currentPos, (clause, position)) =>
+          spanQueriesWithPositions.foldLeft(0) { case (currentPos, (clause, position)) =>
             if (position > currentPos) {
               builder.addGap(position - currentPos)
             }

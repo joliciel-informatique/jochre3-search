@@ -431,8 +431,11 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
           .example(DocReference("nybc200089"))
       )
       .in(
-        query[Option[Boolean]]("dehyphenqte")
-          .description("Should the text be dehyphenqted. Defaults to false.")
+        query[Option[Boolean]]("dehyphenate")
+          .description(
+            "Should the text be dehyphenated, with physical newlines removed and end-of-line hyphenated words dehyphenated if required." +
+              " Defaults to false."
+          )
           .example(Some(true))
       )
       .out(
