@@ -139,7 +139,7 @@ object QueryExtensions {
               case other => other
             }
           }
-          .toSeq
+          .toVector
       case _ => Seq(query)
     }
   }
