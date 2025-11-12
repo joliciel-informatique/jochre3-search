@@ -7,7 +7,7 @@ variables:
 services:
   - docker:dind
 default:
-  image: docker:24
+  image: docker:29
 before_script:
   - docker-compose version
   - docker info

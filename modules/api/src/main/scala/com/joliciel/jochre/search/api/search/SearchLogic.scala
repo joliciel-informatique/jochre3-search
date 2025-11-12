@@ -19,9 +19,14 @@ import zio.{Task, ZIO}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 import javax.imageio.ImageIO
+import sttp.tapir.model.ServerRequest
+import com.joliciel.jochre.search.core.service.HttpRequestService
+import com.joliciel.jochre.search.core.HttpRequestData
 
 trait SearchLogic extends HttpErrorMapper {
-  def getSearchLogic(
+  private val defaultIp = "127.0.0.1"
+
+  def getSearchLogicNoAuth(
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -53,10 +58,10 @@ trait SearchLogic extends HttpErrorMapper {
     sort,
     physicalNewlines,
     ipAddress,
-    ipAddress.getOrElse("127.0.0.1")
+    ipAddress.getOrElse(defaultIp)
   )
 
-  def getSearchWithAuthLogic(
+  def getSearchLogic(
       token: ValidToken,
       query: Option[String],
       title: Option[String],
@@ -140,15 +145,68 @@ trait SearchLogic extends HttpErrorMapper {
         ipAddress,
         physicalNewLines = physicalNewlines.getOrElse(true)
       )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /search",
+          Seq(
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}")
+          ).flatten.mkString("&")
+        )
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
     .mapError(mapToHttpError)
 
   def getImageSnippetLogic(
+      token: ValidToken,
       docRef: DocReference,
       startOffset: Int,
       endOffset: Int,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getImageSnippetLogicInternal(
+      docRef,
+      startOffset,
+      endOffset,
+      highlights,
+      ipAddress,
+      token.username
+    )
+
+  def getImageSnippetLogicNoAuth(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getImageSnippetLogicInternal(
+      docRef,
+      startOffset,
+      endOffset,
+      highlights,
+      ipAddress,
+      ipAddress.getOrElse(defaultIp)
+    )
+
+  private def getImageSnippetLogicInternal(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] = {
     for {
       searchService <- ZIO.service[SearchService]
@@ -159,15 +217,57 @@ trait SearchLogic extends HttpErrorMapper {
         val in = new ByteArrayInputStream(out.toByteArray)
         ZStream.fromInputStream(in)
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /image-snippet",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"startOffset=$startOffset"),
+            Some(f"endOffset=$endOffset"),
+            Option.when(highlights.nonEmpty)(f"higlights=...")
+          ).flatten.mkString("&")
+        )
+      )
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
     .mapError(mapToHttpError)
 
   def getImageSnippetWithHighlightsLogic(
+      token: ValidToken,
       docRef: DocReference,
       startOffset: Int,
       endOffset: Int,
-      highlights: Seq[Highlight]
+      highlights: Seq[Highlight],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ImageSnippetResponse] =
+    getImageSnippetWithHighlightsLogicInternal(docRef, startOffset, endOffset, highlights, ipAddress, token.username)
+
+  def getImageSnippetWithHighlightsLogicNoAuth(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ImageSnippetResponse] =
+    getImageSnippetWithHighlightsLogicInternal(
+      docRef,
+      startOffset,
+      endOffset,
+      highlights,
+      ipAddress,
+      ipAddress.getOrElse(defaultIp)
+    )
+
+  private def getImageSnippetWithHighlightsLogicInternal(
+      docRef: DocReference,
+      startOffset: Int,
+      endOffset: Int,
+      highlights: Seq[Highlight],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, ImageSnippetResponse] = {
     for {
       searchService <- ZIO.service[SearchService]
@@ -188,11 +288,26 @@ trait SearchLogic extends HttpErrorMapper {
             ImageSnippetResponse(base64Image, highlights)
         }
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /image-snippet-with-highlights",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"startOffset=$startOffset"),
+            Some(f"endOffset=$endOffset"),
+            Option.when(highlights.nonEmpty)(f"higlights=...")
+          ).flatten.mkString("&")
+        )
+      )
     } yield response
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet with highlights", error))
     .mapError(mapToHttpError)
 
   def getAggregateLogic(
+      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -203,7 +318,69 @@ trait SearchLogic extends HttpErrorMapper {
       docRefs: List[String],
       field: String,
       maxBins: Option[Int],
-      sortByLabel: Option[Boolean]
+      sortByLabel: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, AggregationBins] =
+    getAggregateLogicInternal(
+      query,
+      title,
+      authors,
+      authorInclude,
+      strict,
+      fromYear,
+      toYear,
+      docRefs,
+      field,
+      maxBins,
+      sortByLabel,
+      ipAddress,
+      token.username
+    )
+
+  def getAggregateLogicNoAuth(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      field: String,
+      maxBins: Option[Int],
+      sortByLabel: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, AggregationBins] =
+    getAggregateLogicInternal(
+      query,
+      title,
+      authors,
+      authorInclude,
+      strict,
+      fromYear,
+      toYear,
+      docRefs,
+      field,
+      maxBins,
+      sortByLabel,
+      ipAddress,
+      ipAddress.getOrElse(defaultIp)
+    )
+
+  private def getAggregateLogicInternal(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      field: String,
+      maxBins: Option[Int],
+      sortByLabel: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, AggregationBins] = {
     for {
       indexField <- ZIO.attempt {
@@ -216,15 +393,64 @@ trait SearchLogic extends HttpErrorMapper {
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
       searchService <- ZIO.service[SearchService]
       searchResponse <- searchService.aggregate(searchQuery, indexField, maxBins, sortByLabel.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /aggregate",
+          Seq(
+            Some(f"field=$field"),
+            maxBins.map(p => f"maxBins=$p"),
+            sortByLabel.map(p => f"sortByLabel=$p"),
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}")
+          ).flatten.mkString("&")
+        )
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to aggregate", error))
     .mapError(mapToHttpError)
 
   def getTopAuthorsLogic(
+      token: ValidToken,
       prefix: String,
       maxBins: Option[Int],
       includeAuthor: Option[Boolean],
-      includeAuthorInTranscription: Option[Boolean]
+      includeAuthorInTranscription: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, AggregationBins] =
+    getTopAuthorsLogicInternal(prefix, maxBins, includeAuthor, includeAuthorInTranscription, ipAddress, token.username)
+
+  def getTopAuthorsLogicNoAuth(
+      prefix: String,
+      maxBins: Option[Int],
+      includeAuthor: Option[Boolean],
+      includeAuthorInTranscription: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, AggregationBins] =
+    getTopAuthorsLogicInternal(
+      prefix,
+      maxBins,
+      includeAuthor,
+      includeAuthorInTranscription,
+      ipAddress,
+      ipAddress.getOrElse(defaultIp)
+    )
+
+  private def getTopAuthorsLogicInternal(
+      prefix: String,
+      maxBins: Option[Int],
+      includeAuthor: Option[Boolean],
+      includeAuthorInTranscription: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, AggregationBins] = {
     for {
       searchService <- ZIO.service[SearchService]
@@ -239,10 +465,31 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getTextAsHtmlLogic(
+      token: ValidToken,
       docRef: DocReference,
       query: Option[String],
       strict: Option[Boolean],
-      simplifyText: Option[Boolean]
+      simplifyText: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getTextAsHtmlLogicInternal(docRef, query, strict, simplifyText, ipAddress, token.username)
+
+  def getTextAsHtmlLogicNoAuth(
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean],
+      simplifyText: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getTextAsHtmlLogicInternal(docRef, query, strict, simplifyText, ipAddress, ipAddress.getOrElse(defaultIp))
+
+  private def getTextAsHtmlLogicInternal(
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean],
+      simplifyText: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
     (for {
       searchService <- ZIO.service[SearchService]
@@ -252,6 +499,20 @@ trait SearchLogic extends HttpErrorMapper {
         matchAllDocuments = true
       )
       textAsHtml <- searchService.getTextAsHtml(docRef, Some(searchQuery), simplifyText.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /text-as-html",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            query.map(p => f"query=$p"),
+            strict.map(p => f"strict=$p"),
+            simplifyText.map(p => f"simplifyText=$p")
+          ).flatten.mkString("&")
+        )
+      )
     } yield {
       ZStream(textAsHtml)
         .via(ZPipeline.utf8Encode)
@@ -260,12 +521,38 @@ trait SearchLogic extends HttpErrorMapper {
       .mapError(mapToHttpError)
 
   def getTextLogic(
+      token: ValidToken,
       docRef: DocReference,
-      dehyphenate: Option[Boolean]
+      dehyphenate: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getTextLogicInternal(docRef, dehyphenate, ipAddress, token.username)
+
+  def getTextLogicNoAuth(
+      docRef: DocReference,
+      dehyphenate: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getTextLogicInternal(docRef, dehyphenate, ipAddress, ipAddress.getOrElse(defaultIp))
+
+  private def getTextLogicInternal(
+      docRef: DocReference,
+      dehyphenate: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
     (for {
       searchService <- ZIO.service[SearchService]
       text <- searchService.getText(docRef, dehyphenate.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /text",
+          Seq(Some(f"docRef=${docRef.ref}"), dehyphenate.map(d => f"dehyphenate=${d}")).flatten.mkString("&")
+        )
+      )
     } yield {
       ZStream(text)
         .via(ZPipeline.utf8Encode)
@@ -274,10 +561,31 @@ trait SearchLogic extends HttpErrorMapper {
       .mapError(mapToHttpError)
 
   def getHighlightedTextLogic(
+      token: ValidToken,
       docRef: DocReference,
       query: Option[String],
       strict: Option[Boolean],
-      textAsHtml: Option[Boolean]
+      textAsHtml: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, HighlightedDocument] =
+    getHighlightedTextLogicInternal(docRef, query, strict, textAsHtml, ipAddress, token.username)
+
+  def getHighlightedTextLogicNoAuth(
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean],
+      textAsHtml: Option[Boolean],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, HighlightedDocument] =
+    getHighlightedTextLogicInternal(docRef, query, strict, textAsHtml, ipAddress, ipAddress.getOrElse(defaultIp))
+
+  private def getHighlightedTextLogicInternal(
+      docRef: DocReference,
+      query: Option[String],
+      strict: Option[Boolean],
+      textAsHtml: Option[Boolean],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, HighlightedDocument] =
     (for {
       searchService <- ZIO.service[SearchService]
@@ -292,6 +600,20 @@ trait SearchLogic extends HttpErrorMapper {
         textAsHtml.getOrElse(false),
         simplifyText = false
       )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /highlighted-text",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            query.map(p => f"query=$p"),
+            strict.map(p => f"strict=$p"),
+            textAsHtml.map(p => f"textAsHtml=$p")
+          ).flatten.mkString("&")
+        )
+      )
     } yield {
       highlightedDoc
     })
@@ -299,19 +621,65 @@ trait SearchLogic extends HttpErrorMapper {
       .mapError(mapToHttpError)
 
   def getWordTextLogic(
+      token: ValidToken,
       docRef: DocReference,
-      wordOffset: Int
+      wordOffset: Int,
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, WordText] =
+    getWordTextLogicInternal(docRef, wordOffset, ipAddress, token.username)
+
+  def getWordTextLogicNoAuth(
+      docRef: DocReference,
+      wordOffset: Int,
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, WordText] =
+    getWordTextLogicInternal(docRef, wordOffset, ipAddress, ipAddress.getOrElse(defaultIp))
+
+  private def getWordTextLogicInternal(
+      docRef: DocReference,
+      wordOffset: Int,
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, WordText] = {
     for {
       searchService <- ZIO.service[SearchService]
       text <- searchService.getWordText(docRef, wordOffset)
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /word-text",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"wordOffset=$wordOffset")
+          ).flatten.mkString("&")
+        )
+      )
     } yield WordText(text)
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get word text", error))
     .mapError(mapToHttpError)
 
   def getWordImageLogic(
+      token: ValidToken,
       docRef: DocReference,
-      wordOffset: Int
+      wordOffset: Int,
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getWordImageLogicInternal(docRef, wordOffset, ipAddress, token.username)
+
+  def getWordImageLogicNoAuth(
+      docRef: DocReference,
+      wordOffset: Int,
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+    getWordImageLogicInternal(docRef, wordOffset, ipAddress, ipAddress.getOrElse(defaultIp))
+
+  private def getWordImageLogicInternal(
+      docRef: DocReference,
+      wordOffset: Int,
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] = {
     for {
       searchService <- ZIO.service[SearchService]
@@ -322,6 +690,18 @@ trait SearchLogic extends HttpErrorMapper {
         val in = new ByteArrayInputStream(out.toByteArray)
         ZStream.fromInputStream(in)
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /word-image",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"wordOffset=$wordOffset")
+          ).flatten.mkString("&")
+        )
+      )
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
     .mapError(mapToHttpError)
@@ -335,6 +715,7 @@ trait SearchLogic extends HttpErrorMapper {
     .mapError(mapToHttpError)
 
   def getListLogic(
+      token: ValidToken,
       query: Option[String],
       title: Option[String],
       authors: List[String],
@@ -346,6 +727,63 @@ trait SearchLogic extends HttpErrorMapper {
       ocrSoftware: Option[String],
       sort: Option[String],
       ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, Seq[DocReference]] =
+    getListLogicInternal(
+      query,
+      title,
+      authors,
+      authorInclude,
+      strict,
+      fromYear,
+      toYear,
+      docRefs,
+      ocrSoftware,
+      sort,
+      ipAddress,
+      token.username
+    )
+
+  def getListLogicNoAuth(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      ocrSoftware: Option[String],
+      sort: Option[String],
+      ipAddress: Option[String]
+  ): ZIO[Requirements, HttpError, Seq[DocReference]] =
+    getListLogicInternal(
+      query,
+      title,
+      authors,
+      authorInclude,
+      strict,
+      fromYear,
+      toYear,
+      docRefs,
+      ocrSoftware,
+      sort,
+      ipAddress,
+      ipAddress.getOrElse(defaultIp)
+    )
+
+  private def getListLogicInternal(
+      query: Option[String],
+      title: Option[String],
+      authors: List[String],
+      authorInclude: Option[Boolean],
+      strict: Option[Boolean],
+      fromYear: Option[Int],
+      toYear: Option[Int],
+      docRefs: List[String],
+      ocrSoftware: Option[String],
+      sort: Option[String],
+      ipAddress: Option[String],
+      logUser: String
   ): ZIO[Requirements, HttpError, Seq[DocReference]] = {
     for {
       searchQuery <- getSearchQuery(
@@ -371,6 +809,26 @@ trait SearchLogic extends HttpErrorMapper {
       docRefs <- searchService.list(
         searchQuery,
         parsedSort
+      )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /list",
+          Seq(
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}"),
+            ocrSoftware.map(p => f"ocrSoftware=$p"),
+            sort.map(p => f"sort=$p")
+          ).flatten.mkString("&")
+        )
       )
     } yield docRefs
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to list", error))
