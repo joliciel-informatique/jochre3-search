@@ -217,6 +217,20 @@ trait SearchLogic extends HttpErrorMapper {
         val in = new ByteArrayInputStream(out.toByteArray)
         ZStream.fromInputStream(in)
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /image-snippet",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"startOffset=$startOffset"),
+            Some(f"endOffset=$endOffset"),
+            Option.when(highlights.nonEmpty)(f"higlights=...")
+          ).flatten.mkString("&")
+        )
+      )
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
     .mapError(mapToHttpError)
@@ -279,7 +293,7 @@ trait SearchLogic extends HttpErrorMapper {
         HttpRequestData(
           logUser,
           ipAddress,
-          "GET /image-snippet",
+          "GET /image-snippet-with-highlights",
           Seq(
             Some(f"docRef=${docRef.ref}"),
             Some(f"startOffset=$startOffset"),
