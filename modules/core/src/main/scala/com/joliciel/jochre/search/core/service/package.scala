@@ -388,3 +388,10 @@ package object service {
     }
   }
 }
+
+case class HttpRequestData(
+    username: String,
+    ip: Option[String],
+    methodAndUrl: String,
+    queryString: String
+)

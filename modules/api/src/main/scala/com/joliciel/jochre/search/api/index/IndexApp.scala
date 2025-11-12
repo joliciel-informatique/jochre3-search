@@ -292,7 +292,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Requirements,
     String,
     ValidToken,
-    Unit,
+    Option[String],
     HttpError,
     OkResponse,
     Any
@@ -308,19 +308,23 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       )
       .post
       .in("reindex")
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description(
         f"Re-index all documents requiring re-indexing"
       )
 
   private val postReindexHttp: ZServerEndpoint[Requirements, Any] =
-    postReindexEndpoint.serverLogic[Requirements](_ => _ => postReindexLogic())
+    postReindexEndpoint.serverLogic[Requirements](token => input => postReindexLogic(token, input))
 
   private val postUndoMetadataCorrectionEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
-    MetadataCorrectionId,
+    (
+        MetadataCorrectionId,
+        Option[String]
+    ),
     HttpError,
     OkResponse,
     Any
@@ -337,6 +341,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .post
       .in("undo-correction")
       .in(path[MetadataCorrectionId]("id"))
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description(
         f"Unto metadata correction for the id provided"
@@ -344,7 +349,7 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
 
   private val postUndoMetadataCorrectionHttp: ZServerEndpoint[Requirements, Any] =
     postUndoMetadataCorrectionEndpoint.serverLogic[Requirements](token =>
-      input => postUndoMetadataCorrectionLogic(token, input)
+      input => postUndoMetadataCorrectionLogic.tupled(Tuple1(token) ++ input)
     )
 
   private val getTermsEndpoint: ZPartialServerEndpoint[
@@ -392,7 +397,10 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
     Requirements,
     String,
     ValidToken,
-    DocReference,
+    (
+        DocReference,
+        Option[String]
+    ),
     HttpError,
     OkResponse,
     Any
@@ -413,17 +421,20 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
         path[DocReference]("docRef")
       )
       .in("mark-for-reindex")
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description("Mark an existing document of re-indexing")
 
   private val postMarkForReindexHttp: ZServerEndpoint[Requirements, Any] =
-    postMarkForReindexEndpoint.serverLogic[Requirements](_ => input => postMarkForIndex(input))
+    postMarkForReindexEndpoint.serverLogic[Requirements](token =>
+      input => postMarkForIndex.tupled(Tuple1(token) ++ input)
+    )
 
   private val postMarkAllForReindexEndpoint: ZPartialServerEndpoint[
     Requirements,
     String,
     ValidToken,
-    Unit,
+    Option[String],
     HttpError,
     OkResponse,
     Any
@@ -440,13 +451,14 @@ case class IndexApp(override val authenticationProvider: AuthenticationProvider,
       .post
       .in("index")
       .in("mark-all-for-reindex")
+      .in(clientIp)
       .out(jsonBody[OkResponse].example(OkResponse()))
       .description(
         f"Mark all documents for re-index"
       )
 
   private val postMarkAllForReindexHttp: ZServerEndpoint[Requirements, Any] =
-    postMarkAllForReindexEndpoint.serverLogic[Requirements](_ => _ => postMarkAllForIndex())
+    postMarkAllForReindexEndpoint.serverLogic[Requirements](token => input => postMarkAllForIndex(token, input))
 
   val endpoints: List[AnyEndpoint] = List(
     putPdfEndpoint,

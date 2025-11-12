@@ -19,6 +19,9 @@ import zio.{Task, ZIO}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Base64
 import javax.imageio.ImageIO
+import sttp.tapir.model.ServerRequest
+import com.joliciel.jochre.search.core.service.HttpRequestService
+import com.joliciel.jochre.search.core.HttpRequestData
 
 trait SearchLogic extends HttpErrorMapper {
   private val defaultIp = "127.0.0.1"
@@ -142,6 +145,24 @@ trait SearchLogic extends HttpErrorMapper {
         ipAddress,
         physicalNewLines = physicalNewlines.getOrElse(true)
       )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /search",
+          Seq(
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}")
+          ).flatten.mkString("&")
+        )
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to search", error))
     .mapError(mapToHttpError)
@@ -253,6 +274,20 @@ trait SearchLogic extends HttpErrorMapper {
             ImageSnippetResponse(base64Image, highlights)
         }
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /image-snippet",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"startOffset=$startOffset"),
+            Some(f"endOffset=$endOffset"),
+            Option.when(highlights.nonEmpty)(f"higlights=...")
+          ).flatten.mkString("&")
+        )
+      )
     } yield response
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet with highlights", error))
     .mapError(mapToHttpError)
@@ -344,6 +379,27 @@ trait SearchLogic extends HttpErrorMapper {
       searchQuery <- getSearchQuery(query, title, authors, authorInclude, strict, fromYear, toYear, docRefs)
       searchService <- ZIO.service[SearchService]
       searchResponse <- searchService.aggregate(searchQuery, indexField, maxBins, sortByLabel.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /aggregate",
+          Seq(
+            Some(f"field=$field"),
+            maxBins.map(p => f"maxBins=$p"),
+            sortByLabel.map(p => f"sortByLabel=$p"),
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}")
+          ).flatten.mkString("&")
+        )
+      )
     } yield searchResponse
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to aggregate", error))
     .mapError(mapToHttpError)
@@ -429,6 +485,20 @@ trait SearchLogic extends HttpErrorMapper {
         matchAllDocuments = true
       )
       textAsHtml <- searchService.getTextAsHtml(docRef, Some(searchQuery), simplifyText.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /text-as-html",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            query.map(p => f"query=$p"),
+            strict.map(p => f"strict=$p"),
+            simplifyText.map(p => f"simplifyText=$p")
+          ).flatten.mkString("&")
+        )
+      )
     } yield {
       ZStream(textAsHtml)
         .via(ZPipeline.utf8Encode)
@@ -460,6 +530,15 @@ trait SearchLogic extends HttpErrorMapper {
     (for {
       searchService <- ZIO.service[SearchService]
       text <- searchService.getText(docRef, dehyphenate.getOrElse(false))
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /text",
+          Seq(Some(f"docRef=${docRef.ref}"), dehyphenate.map(d => f"dehyphenate=${d}")).flatten.mkString("&")
+        )
+      )
     } yield {
       ZStream(text)
         .via(ZPipeline.utf8Encode)
@@ -507,6 +586,20 @@ trait SearchLogic extends HttpErrorMapper {
         textAsHtml.getOrElse(false),
         simplifyText = false
       )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /highlighted-text",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            query.map(p => f"query=$p"),
+            strict.map(p => f"strict=$p"),
+            textAsHtml.map(p => f"textAsHtml=$p")
+          ).flatten.mkString("&")
+        )
+      )
     } yield {
       highlightedDoc
     })
@@ -537,6 +630,18 @@ trait SearchLogic extends HttpErrorMapper {
     for {
       searchService <- ZIO.service[SearchService]
       text <- searchService.getWordText(docRef, wordOffset)
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /word-text",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"wordOffset=$wordOffset")
+          ).flatten.mkString("&")
+        )
+      )
     } yield WordText(text)
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get word text", error))
     .mapError(mapToHttpError)
@@ -571,6 +676,18 @@ trait SearchLogic extends HttpErrorMapper {
         val in = new ByteArrayInputStream(out.toByteArray)
         ZStream.fromInputStream(in)
       }
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /word-image",
+          Seq(
+            Some(f"docRef=${docRef.ref}"),
+            Some(f"wordOffset=$wordOffset")
+          ).flatten.mkString("&")
+        )
+      )
     } yield stream
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to get image snippet", error))
     .mapError(mapToHttpError)
@@ -678,6 +795,26 @@ trait SearchLogic extends HttpErrorMapper {
       docRefs <- searchService.list(
         searchQuery,
         parsedSort
+      )
+      httpRequestService <- ZIO.service[HttpRequestService]
+      _ <- httpRequestService.insertHttpRequest(
+        HttpRequestData(
+          logUser,
+          ipAddress,
+          "GET /list",
+          Seq(
+            query.map(p => f"query=$p"),
+            title.map(p => f"title=$p"),
+            Option.when(authors.nonEmpty)(f"authors=${authors.mkString(",")}"),
+            authorInclude.map(p => f"authorInclude=$p"),
+            strict.map(p => f"strict=$p"),
+            fromYear.map(p => f"fromYear=$p"),
+            toYear.map(p => f"toYear=$p"),
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}"),
+            ocrSoftware.map(p => f"ocrSoftware=$p"),
+            sort.map(p => f"sort=$p")
+          ).flatten.mkString("&")
+        )
       )
     } yield docRefs
   }.tapErrorCause(error => ZIO.logErrorCause(s"Unable to list", error))

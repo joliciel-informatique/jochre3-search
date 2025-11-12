@@ -42,6 +42,8 @@ import com.joliciel.jochre.search.core.service.StatsService
 import com.joliciel.jochre.search.core.service.StatsRepo
 import com.joliciel.jochre.ocr.yiddish.YiddishDehyphenator
 import com.joliciel.jochre.ocr.yiddish.YiddishConfig
+import com.joliciel.jochre.search.core.service.HttpRequestService
+import com.joliciel.jochre.search.core.service.HttpRequestRepo
 
 object MainApp extends ZIOAppDefault {
   private val log = LoggerFactory.getLogger(getClass)
@@ -163,7 +165,9 @@ object MainApp extends ZIOAppDefault {
         StatsRepo.live,
         StatsService.live,
         YiddishConfig.configLayer,
-        YiddishDehyphenator.live
+        YiddishDehyphenator.live,
+        HttpRequestRepo.live,
+        HttpRequestService.live
       )
   }
 
