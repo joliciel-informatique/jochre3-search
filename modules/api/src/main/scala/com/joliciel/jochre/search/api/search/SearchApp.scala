@@ -622,6 +622,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(docReferenceInput)
       .in(dehyphenateInput)
       .in(clientIp)
+      .out(header[String]("Content-Disposition"))
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextPlain(),
@@ -643,7 +644,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Option[String]
     ),
     HttpError,
-    ZStream[Any, Throwable, Byte],
+    (String, ZStream[Any, Throwable, Byte]),
     Any & ZioStreams
   ] =
     secureEndpoint().get
@@ -652,6 +653,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(docReferenceInput)
       .in(dehyphenateInput)
       .in(clientIp)
+      .out(header[String]("Content-Disposition"))
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextPlain(),
@@ -680,6 +682,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(strictInput)
       .in(simplifyTextInput)
       .in(clientIp)
+      .out(header[String]("Content-Disposition"))
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextHtml(),
@@ -703,7 +706,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
         Option[String]
     ),
     HttpError,
-    ZStream[Any, Throwable, Byte],
+    (String, ZStream[Any, Throwable, Byte]),
     Any & ZioStreams
   ] =
     secureEndpoint().get
@@ -714,6 +717,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
       .in(strictInput)
       .in(simplifyTextInput)
       .in(clientIp)
+      .out(header[String]("Content-Disposition"))
       .out(
         streamTextBody(ZioStreams)(
           CodecFormat.TextHtml(),
