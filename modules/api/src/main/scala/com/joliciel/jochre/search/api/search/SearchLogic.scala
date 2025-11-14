@@ -2,7 +2,7 @@ package com.joliciel.jochre.search.api.search
 
 import com.joliciel.jochre.search.api.Types.Requirements
 import com.joliciel.jochre.search.api.authentication.ValidToken
-import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, UnknownSortException}
+import com.joliciel.jochre.search.api.{HttpError, HttpErrorMapper, UnknownSortException, getContentDispositionHeader}
 import com.joliciel.jochre.search.core.service.{Highlight, HighlightedDocument, SearchResponse, SearchService}
 import com.joliciel.jochre.search.core.{
   AggregationBins,
@@ -22,6 +22,8 @@ import javax.imageio.ImageIO
 import sttp.tapir.model.ServerRequest
 import com.joliciel.jochre.search.core.service.HttpRequestService
 import com.joliciel.jochre.search.core.HttpRequestData
+import org.http4s.headers.`Content-Disposition`
+import org.typelevel.ci.CIString
 
 trait SearchLogic extends HttpErrorMapper {
   private val defaultIp = "127.0.0.1"
@@ -159,7 +161,13 @@ trait SearchLogic extends HttpErrorMapper {
             strict.map(p => f"strict=$p"),
             fromYear.map(p => f"fromYear=$p"),
             toYear.map(p => f"toYear=$p"),
-            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}")
+            Option.when(docRefs.nonEmpty)(f"docRefs=${docRefs.mkString(",")}"),
+            Some(f"first=$first"),
+            Some(f"max=$max"),
+            maxSnippets.map(p => f"maxSnippets=$p"),
+            rowPadding.map(p => f"rowPadding=$p"),
+            sort.map(p => f"sort=$p"),
+            physicalNewlines.map(p => f"physicalNewlines=$p")
           ).flatten.mkString("&")
         )
       )
@@ -471,7 +479,7 @@ trait SearchLogic extends HttpErrorMapper {
       strict: Option[Boolean],
       simplifyText: Option[Boolean],
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     getTextAsHtmlLogicInternal(docRef, query, strict, simplifyText, ipAddress, token.username)
 
   def getTextAsHtmlLogicNoAuth(
@@ -480,7 +488,7 @@ trait SearchLogic extends HttpErrorMapper {
       strict: Option[Boolean],
       simplifyText: Option[Boolean],
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     getTextAsHtmlLogicInternal(docRef, query, strict, simplifyText, ipAddress, ipAddress.getOrElse(defaultIp))
 
   private def getTextAsHtmlLogicInternal(
@@ -490,7 +498,7 @@ trait SearchLogic extends HttpErrorMapper {
       simplifyText: Option[Boolean],
       ipAddress: Option[String],
       logUser: String
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     (for {
       searchService <- ZIO.service[SearchService]
       searchQuery <- getSearchQuery(
@@ -514,7 +522,9 @@ trait SearchLogic extends HttpErrorMapper {
         )
       )
     } yield {
-      ZStream(textAsHtml)
+      val contentDispositionHeader =
+        getContentDispositionHeader(f"${docRef.ref}.html")
+      contentDispositionHeader.toString -> ZStream(textAsHtml)
         .via(ZPipeline.utf8Encode)
     })
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
@@ -525,14 +535,14 @@ trait SearchLogic extends HttpErrorMapper {
       docRef: DocReference,
       dehyphenate: Option[Boolean],
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     getTextLogicInternal(docRef, dehyphenate, ipAddress, token.username)
 
   def getTextLogicNoAuth(
       docRef: DocReference,
       dehyphenate: Option[Boolean],
       ipAddress: Option[String]
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     getTextLogicInternal(docRef, dehyphenate, ipAddress, ipAddress.getOrElse(defaultIp))
 
   private def getTextLogicInternal(
@@ -540,7 +550,7 @@ trait SearchLogic extends HttpErrorMapper {
       dehyphenate: Option[Boolean],
       ipAddress: Option[String],
       logUser: String
-  ): ZIO[Requirements, HttpError, ZStream[Any, Throwable, Byte]] =
+  ): ZIO[Requirements, HttpError, (String, ZStream[Any, Throwable, Byte])] =
     (for {
       searchService <- ZIO.service[SearchService]
       text <- searchService.getText(docRef, dehyphenate.getOrElse(false))
@@ -554,7 +564,9 @@ trait SearchLogic extends HttpErrorMapper {
         )
       )
     } yield {
-      ZStream(text)
+      val contentDispositionHeader =
+        getContentDispositionHeader(f"${docRef.ref}.txt")
+      contentDispositionHeader.toString -> ZStream(text)
         .via(ZPipeline.utf8Encode)
     })
       .tapErrorCause(error => ZIO.logErrorCause(s"Unable to get text", error))
