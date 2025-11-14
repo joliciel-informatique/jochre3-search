@@ -16,4 +16,7 @@ package object api {
   }
 
   case class OkResponse(result: String = "OK")
+
+  def getContentDispositionHeader(filename: String): String =
+    f"Content-Disposition: attachment; filename=\"$filename\""
 }
