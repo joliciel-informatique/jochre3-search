@@ -820,8 +820,7 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getHighlightedTextHttpNoAuth,
     getTextHttpNoAuth,
     getTextAsHtmlHttpNoAuth,
-    getListHttpNoAuth,
-    getSizeHttp
+    getListHttpNoAuth
   )
 
   private val httpAuth: List[ZServerEndpoint[Requirements, Any & ZioStreams]] = List(
@@ -835,7 +834,8 @@ case class SearchApp(override val authenticationProvider: AuthenticationProvider
     getHighlightedTextHttp,
     getTextHttp,
     getTextAsHtmlHttp,
-    getListHttp
+    getListHttp,
+    getSizeHttp
   )
 
   val http: List[ZServerEndpoint[Requirements, Any & ZioStreams]] =
