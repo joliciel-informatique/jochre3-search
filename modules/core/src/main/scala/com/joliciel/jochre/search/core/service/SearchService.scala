@@ -1,34 +1,59 @@
 package com.joliciel.jochre.search.core.service
 
-import com.joliciel.jochre.ocr.core.graphics.Rectangle
-import com.joliciel.jochre.ocr.core.model._
-import com.joliciel.jochre.ocr.core.utils.ImageUtils
-import com.joliciel.jochre.search.core._
-import com.joliciel.jochre.search.core.lucene.{IndexTerm, JochreIndex, TermLister}
-import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
-import com.typesafe.config.ConfigFactory
-import org.apache.pdfbox.Loader
-import org.apache.pdfbox.io.RandomAccessReadBuffer
-import org.apache.pdfbox.pdmodel.PDDocument
-import org.apache.pdfbox.rendering.{ImageType, PDFRenderer}
-import org.slf4j.LoggerFactory
-import zio.stream.{ZSink, ZStream}
-import zio.{Task, URIO, ZIO, ZLayer}
-
+import java.awt.BasicStroke
+import java.awt.Color
 import java.awt.image.BufferedImage
-import java.awt.{BasicStroke, Color}
-import java.io.{BufferedWriter, FileInputStream, FileOutputStream, FileWriter, InputStream, PrintWriter, StringWriter}
+import java.io.BufferedWriter
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.FileWriter
+import java.io.IOException
+import java.io.InputStream
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.zip.{ZipEntry, ZipInputStream, ZipOutputStream}
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import javax.imageio.ImageIO
+
 import scala.io.Source
+import scala.jdk.CollectionConverters.*
 import scala.util.Using
-import scala.xml.{Node, PrettyPrinter, XML}
-import scala.jdk.CollectionConverters._
+import scala.xml.Node
+import scala.xml.PrettyPrinter
+import scala.xml.XML
+
+import com.joliciel.jochre.ocr.core.graphics.Rectangle
+import com.joliciel.jochre.ocr.core.model.*
 import com.joliciel.jochre.ocr.core.text.Dehyphenator
+import com.joliciel.jochre.ocr.core.utils.ImageUtils
+import com.joliciel.jochre.search.core.*
+import com.joliciel.jochre.search.core.lucene.IndexTerm
+import com.joliciel.jochre.search.core.lucene.JochreIndex
+import com.joliciel.jochre.search.core.lucene.JochreSearcher
+import com.joliciel.jochre.search.core.lucene.LuceneDocument
+import com.joliciel.jochre.search.core.lucene.TermLister
+import com.joliciel.jochre.search.core.text.LanguageSpecificFilters
+import com.typesafe.config.ConfigFactory
+import org.apache.lucene.search.IndexSearcher
+import org.apache.pdfbox.Loader
+import org.apache.pdfbox.io.RandomAccessReadBuffer
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.rendering.ImageType
+import org.apache.pdfbox.rendering.PDFRenderer
 import org.scalactic.Bool
+import org.slf4j.LoggerFactory
+import zio.Cause
+import zio.Scope
+import zio.Task
+import zio.URIO
+import zio.ZIO
+import zio.ZLayer
+import zio.stream.ZSink
+import zio.stream.ZStream
 
 trait SearchService {
 
@@ -189,8 +214,6 @@ trait SearchService {
     */
   def reindexWhereRequired(): Task[Boolean]
 
-  private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit
-
   def getTerms(
       docRef: DocReference,
       startOffset: Option[Int] = None,
@@ -221,6 +244,30 @@ private[service] case class SearchServiceImpl(
   private val reindexingUnderway: AtomicBoolean = new AtomicBoolean(false)
   private val documentsBeingIndexed = new ConcurrentHashMap[DocReference, Boolean]()
 
+
+  private val indexSearcherResource: ZIO[Scope, Throwable, JochreSearcher] =  ZIO.fromAutoCloseable(ZIO.attempt(jochreIndex.searcherManager.acquire()))
+
+  private def runWithSearcher[A](f: JochreSearcher => A): Task[A] = ZIO.scoped {
+    for {
+      searcher <- indexSearcherResource
+      result <- ZIO.attempt(f(searcher))
+    } yield result
+  }
+
+  private def ensureBookNotInIndex(ref: DocReference): Task[Unit] = runWithSearcher { searcher =>
+    // Ensure book isn't already in the index
+    searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
+  }
+  
+  private def ensureBookInIndex(ref: DocReference): Task[LuceneDocument] = runWithSearcher { searcher => 
+    // Ensure book already in the index
+    searcher
+      .getByDocRef(ref)
+      .getOrElse(
+        throw new DocumentNotFoundInIndexException(ref)
+      )
+  }
+
   override def addNewDocumentAsPdf(
       ref: DocReference,
       username: String,
@@ -230,22 +277,18 @@ private[service] case class SearchServiceImpl(
       metadataStream: Option[InputStream]
   ): Task[Int] = {
     for {
-      _ <- ZIO.attempt {
-        // Ensure book isn't already in the index
-        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
-        }
+      _ <- ensureBookNotInIndex(ref)
+      _ <- ZIO.attemptBlocking {
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
       }
       alto <- readAndStoreAlto(ref, altoStream)
       pdfInfo <- readPdfInfo(ref, pdfStream)
-      metadata <- ZIO.attempt {
-        metadataStream
+      metadata <- metadataStream
           .map(readAndStoreMetadata(ref, _))
-          .getOrElse(pdfInfo.metadata)
-      }
+          .getOrElse(ZIO.attempt{pdfInfo.metadata})
+      
       pageCount <- indexAlto(ref, username, ipAddress, alto, metadata)
     } yield pageCount
   }
@@ -259,22 +302,17 @@ private[service] case class SearchServiceImpl(
       metadataStream: Option[InputStream]
   ): Task[Int] = {
     for {
-      _ <- ZIO.attempt {
-        // Ensure book isn't already in the index
-        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.getByDocRef(ref).foreach(_ => throw new DocumentAlreadyInIndexException(ref))
-        }
+      _ <- ensureBookNotInIndex(ref)
+      _ <- ZIO.attemptBlocking {
         // Create the directory to store the images and Alto
         val bookDir = ref.getBookDir()
         bookDir.toFile.mkdirs()
       }
       alto <- readAndStoreAlto(ref, altoStream)
       _ <- extractImages(ref, imagesZipStream)
-      metadata <- ZIO.attempt {
-        metadataStream
+      metadata <- metadataStream
           .map(readAndStoreMetadata(ref, _))
-          .getOrElse(DocMetadata())
-      }
+          .getOrElse(ZIO.succeed(DocMetadata()))
       pageCount <- indexAlto(ref, username, ipAddress, alto, metadata)
     } yield pageCount
   }
@@ -283,12 +321,12 @@ private[service] case class SearchServiceImpl(
       ref: DocReference
   ): Task[Unit] = {
     for {
-      _ <- ZIO.attempt {
+      refreshed <- ZIO.attempt {
         jochreIndex.deleteDocument(ref)
         val refreshed = jochreIndex.refresh
-        if (log.isDebugEnabled) {
-          log.debug(f"Index refreshed after delete? $refreshed")
-        }
+      }
+      _ <- ZIO.logDebug(f"Index refreshed after delete? $refreshed")
+      _ <- ZIO.attemptBlocking{
         val bookDir = ref.getBookDir()
         if (bookDir.toFile.exists() && bookDir.toFile.isDirectory) {
           val files = Option(bookDir.toFile.list().toSeq).getOrElse(Seq.empty[String])
@@ -309,16 +347,7 @@ private[service] case class SearchServiceImpl(
       altoStream: InputStream
   ): Task[Unit] = {
     for {
-      _ <- ZIO.attempt {
-        // Ensure book is in index
-        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher
-            .getByDocRef(ref)
-            .getOrElse(
-              throw new DocumentNotFoundInIndexException(ref)
-            )
-        }
-      }
+      _ <- ensureBookInIndex(ref)
       _ <- readAndStoreAlto(ref, altoStream)
       _ <- markForReindex(ref)
     } yield ()
@@ -329,17 +358,8 @@ private[service] case class SearchServiceImpl(
       metadataStream: InputStream
   ): Task[Unit] = {
     for {
-      _ <- ZIO.attempt {
-        // Ensure book is in index
-        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher
-            .getByDocRef(ref)
-            .getOrElse(
-              throw new DocumentNotFoundInIndexException(ref)
-            )
-        }
-      }
-      _ <- ZIO.attempt(readAndStoreMetadata(ref, metadataStream))
+      _ <- ensureBookInIndex(ref)
+      _ <- readAndStoreMetadata(ref, metadataStream)
       _ <- markForReindex(ref)
     } yield ()
   }
@@ -352,11 +372,9 @@ private[service] case class SearchServiceImpl(
       metadata: DocMetadata
   ): Task[Int] =
     for {
-      _ <- ZIO.attempt {
-        ref.getBookDir().toFile.mkdirs()
-        storeAlto(ref, alto.toXml)
-        storeMetadata(ref, metadata)
-      }
+      _ <- ZIO.attemptBlocking(ref.getBookDir().toFile.mkdirs())
+      _ <- ZIO.scoped(storeAlto(ref, alto.toXml))
+      _ <- ZIO.scoped(storeMetadata(ref, metadata))
       pages <- indexAlto(ref, username, ipAddress, alto, metadata)
     } yield pages
 
@@ -374,20 +392,23 @@ private[service] case class SearchServiceImpl(
       alreadyUnderway
     }
 
-    def release(underway: Boolean) = ZIO.succeed {
+    def release(underway: Boolean) = {
       if (!underway) {
-        documentsBeingIndexed.remove(docRef)
-        log.info(f"Finished indexing document ${docRef.ref}")
+        for {
+          _ <- ZIO.logInfo(f"Finished indexing document ${docRef.ref}")
+          _ <- ZIO.succeed(documentsBeingIndexed.remove(docRef))
+        } yield ()
+      } else {
+        ZIO.succeed(())
       }
     }
 
     def run(underway: Boolean) = {
       if (underway) {
-        log.info(f"Document ${docRef.ref} already being indexed")
-
-        ZIO.succeed(0)
+        for {
+          _ <- ZIO.logInfo(f"Document ${docRef.ref} already being indexed")
+        } yield (0)
       } else {
-        log.info(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
         val altoIndexer =
           AltoIndexer(
             jochreIndex,
@@ -403,13 +424,12 @@ private[service] case class SearchServiceImpl(
           )
 
         for {
+          _ <- ZIO.logInfo(f"Re-indexing ${docRef.ref}, altoUpdated? $altoUpdated")
           indexData <- altoIndexer.index()
-          _ <- ZIO.succeed(
-            log.info(
+          _ <- ZIO.logInfo(
               f"Updating indexed document for ${docRef.ref}: docRev: ${indexData.docRev.rev}, wordSuggestionRev: ${indexData.wordSuggestionRev
                 .map(_.rev)}, corrections: ${indexData.corrections.map(c => f"(${c.rev.rev} => ${c.field.entryName})").mkString(", ")}"
             )
-          )
           _ <- searchRepo.upsertIndexedDocument(
             docRef,
             indexData.docRev,
@@ -424,79 +444,67 @@ private[service] case class SearchServiceImpl(
     ZIO.acquireReleaseWith(acquire)(release)(run)
   }
 
-  private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): DocMetadata =
-    try {
-      val contents = Source.fromInputStream(metadataStream, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
-      val metadata = metadataReader.read(contents)
-
-      storeMetadata(ref, contents)
-
-      metadata
-    } catch {
-      case t: Throwable =>
-        log.error("Unable to read metadata file", t)
-        throw new BadMetadataFileFormat(t.getMessage)
+  private def readAndStoreMetadata(ref: DocReference, metadataStream: InputStream): ZIO[Any, BadMetadataFileFormat, DocMetadata] =
+    ZIO.scoped {
+      for {
+        source <- ZIO.fromAutoCloseable(ZIO.attempt(Source.fromInputStream(metadataStream, StandardCharsets.UTF_8.name())))
+        contents <- ZIO.attempt(source.getLines().mkString("\n"))
+        metadata <- ZIO.attempt(metadataReader.read(contents))
+        _ <- storeMetadata(ref, contents)
+      } yield metadata
+    }.mapError{t =>
+        new BadMetadataFileFormat(t.getMessage)
     }
 
-  private def storeMetadata(ref: DocReference, metadata: DocMetadata): Unit = {
+  private def storeMetadata(ref: DocReference, metadata: DocMetadata): ZIO[Scope, Throwable, Unit] =
     storeMetadata(ref, metadataReader.write(metadata))
-  }
 
-  private def storeMetadata(ref: DocReference, metadata: String): Unit = {
+  private def storeMetadata(ref: DocReference, metadata: String): ZIO[Scope, Throwable, Unit] = {
     // Write the metadata to the content directory, so we can re-read it later
     val metadataPath = ref.getMetadataPath()
-    Using(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))) { bw =>
-      bw.write(metadata)
-    }.get
+    for {
+      bw <- ZIO.fromAutoCloseable(ZIO.attempt(new BufferedWriter(new FileWriter(metadataPath.toFile, StandardCharsets.UTF_8))))
+      _ <- ZIO.attemptBlocking(bw.write(metadata))
+    } yield ()
   }
 
-  private[service] def storeAlto(docRef: DocReference, altoXml: Node): Unit = {
+  private[service] def storeAlto(docRef: DocReference, altoXml: Node): ZIO[Scope, Throwable, Unit] = {
     // Store alto in content dir for future access
     val prettyPrinter = new PrettyPrinter(120, 2)
-    val altoString = prettyPrinter.format(altoXml)
     val altoFile = docRef.getAltoPath()
-    Using(new ZipOutputStream(new FileOutputStream(altoFile.toFile))) { zos =>
-      zos.putNextEntry(new ZipEntry(f"${docRef.ref}_alto4.xml"))
-      zos.write(altoString.getBytes(StandardCharsets.UTF_8))
-      zos.flush()
-    }.get
+
+    for {
+      altoString <- ZIO.attempt(prettyPrinter.format(altoXml))
+      zos <- ZIO.fromAutoCloseable(ZIO.attempt(new ZipOutputStream(new FileOutputStream(altoFile.toFile))))
+      _ <- ZIO.attemptBlocking {
+        zos.putNextEntry(new ZipEntry(f"${docRef.ref}_alto4.xml"))
+        zos.write(altoString.getBytes(StandardCharsets.UTF_8))
+        zos.flush()
+      }
+    } yield ()
   }
 
   private def readAndStoreAlto(docRef: DocReference, altoStream: InputStream): Task[Alto] = {
     def acquire: Task[ZipInputStream] = ZIO
       .attempt { new ZipInputStream(altoStream) }
-      .foldZIO(
-        error => {
-          log.error("Unable to open alto zip file", error)
-          ZIO.fail(new BadAltoFileFormat(error.getMessage))
-        },
-        success => ZIO.succeed(success)
-      )
+      .tapError{ error => ZIO.logErrorCause("Unable to open alto zip file", Cause.fail(error))}
+      .mapError{ error => new BadAltoFileFormat(error.getMessage)}
 
     def release(zipInputStream: ZipInputStream): URIO[Any, Unit] = ZIO
       .attempt(zipInputStream.close())
-      .orDieWith { ex =>
-        log.error("Cannot close zip input stream for alto file", ex)
-        ex
-      }
+      .tapError(ex => ZIO.logErrorCause("Cannot close zip input stream for alto file", Cause.fail(ex)))
+      .orDieWith(ex => ex)
 
-    def readAlto(zipInputStream: ZipInputStream): Task[Alto] = ZIO
-      .attempt {
+    def readAlto(zipInputStream: ZipInputStream): Task[Alto] = (for {
+      altoXml <- ZIO.attempt {
         zipInputStream.getNextEntry
-        val altoXml = XML.load(zipInputStream)
-
-        storeAlto(docRef, altoXml)
-
-        val alto = Alto.fromXML(altoXml)
-        alto
+        XML.load(zipInputStream)
       }
-      .foldZIO(
-        error => {
-          log.error("Unable to read alto zip file", error)
-          ZIO.fail(new BadAltoFileFormat(error.getMessage))
-        },
-        success => ZIO.succeed(success)
-      )
+      _ <- ZIO.scoped{storeAlto(docRef, altoXml)}
+      alto <- ZIO.attempt(Alto.fromXML(altoXml))
+    } yield alto)
+      .tapError{ error => ZIO.logErrorCause("Unable to read alto zip file", Cause.fail(error))}
+      .mapError{ error => new BadAltoFileFormat(error.getMessage)}
 
     ZIO.acquireReleaseWith(acquire)(release)(readAlto)
   }
@@ -522,13 +530,8 @@ private[service] case class SearchServiceImpl(
         val pdf = Loader.loadPDF(pdfBuffer)
         (pdfStream, pdf)
       }
-      .foldZIO(
-        error => {
-          log.error("Unable to open pdf file", error)
-          ZIO.fail(new BadPdfFileFormat(error.getMessage))
-        },
-        success => ZIO.succeed(success)
-      )
+      .tapError{ error => ZIO.logErrorCause("Unable to open pdf file", Cause.fail(error))}
+      .mapError{ error => new BadPdfFileFormat(error.getMessage)}
 
     val release: ((InputStream, PDDocument)) => URIO[Any, Unit] = { case (inputStream, pdf) =>
       ZIO
@@ -536,10 +539,8 @@ private[service] case class SearchServiceImpl(
           pdf.close()
           inputStream.close()
         }
-        .orDieWith { ex =>
-          log.error("Cannot close pdf file", ex)
-          ex
-        }
+        .tapError(ex => ZIO.logErrorCause("Cannot close pdf file", Cause.fail(ex)))
+        .orDieWith { ex => ex }
     }
 
     val readPdf: ((InputStream, PDDocument)) => Task[PdfInfo] = { case (_, pdf) =>
@@ -573,13 +574,8 @@ private[service] case class SearchServiceImpl(
             Option(docInfo.getCreator)
           )
         }
-        .foldZIO(
-          error => {
-            log.error("Unable to read pdf file", error)
-            ZIO.fail(new BadPdfFileFormat(error.getMessage))
-          },
-          success => ZIO.succeed(success)
-        )
+      .tapError{ error => ZIO.logErrorCause("Unable to read pdf file", Cause.fail(error))}
+      .mapError{ error => new BadPdfFileFormat(error.getMessage)}
     }
 
     ZIO.acquireReleaseWith(acquire)(release)(readPdf)
@@ -588,25 +584,18 @@ private[service] case class SearchServiceImpl(
   private def extractImages(docRef: DocReference, imagesZipStream: InputStream): Task[Unit] = {
     def acquire: Task[ZipInputStream] = ZIO
       .attempt { new ZipInputStream(imagesZipStream) }
-      .foldZIO(
-        error => {
-          log.error("Unable to open zip file of images", error)
-          ZIO.fail(new BadImageZipFileFormat(error.getMessage))
-        },
-        success => ZIO.succeed(success)
-      )
+      .tapError{ error => ZIO.logErrorCause("Unable to open open zip file of images", Cause.fail(error))}
+      .mapError{ error => new BadImageZipFileFormat(error.getMessage)}
 
     def release(zipInputStream: ZipInputStream): URIO[Any, Unit] = ZIO
       .attempt(zipInputStream.close())
-      .orDieWith { ex =>
-        log.error("Cannot close zip input stream of images", ex)
-        ex
-      }
+      .tapError(ex => ZIO.logErrorCause("Cannot close zip input stream of images", Cause.fail(ex)))
+      .orDieWith { ex => ex }
 
-    def readImages(zipInputStream: ZipInputStream): Task[Unit] = ZIO
-      .attempt {
+    def readImages(zipInputStream: ZipInputStream): Task[Unit] = (for {
+      _ <- ZIO.logInfo(f"About to read image zip file for ${docRef.ref}")
+      _ <- ZIO.attemptBlocking {
         val bookDir = docRef.getBookDir()
-        log.info(f"About to read image zip file for ${docRef.ref}")
         Iterator
           .continually(Option(zipInputStream.getNextEntry))
           .takeWhile(_.isDefined)
@@ -624,13 +613,9 @@ private[service] case class SearchServiceImpl(
             case None => // Can never happen
           }
       }
-      .foldZIO(
-        error => {
-          log.error("Unable to read image zip file", error)
-          ZIO.fail(new BadImageZipFileFormat(error.getMessage))
-        },
-        _ => ZIO.succeed(())
-      )
+    } yield ())
+      .tapError{ error => ZIO.logErrorCause("Unable to read image zip file", Cause.fail(error))}
+      .mapError{ error => new BadImageZipFileFormat(error.getMessage)}
 
     ZIO.acquireReleaseWith(acquire)(release)(readImages)
   }
@@ -648,10 +633,8 @@ private[service] case class SearchServiceImpl(
       physicalNewLines: Boolean
   ): Task[SearchResponse] = {
     for {
-      initialResponse <- ZIO.fromTry {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
-        }
+      initialResponse <- runWithSearcher{ searcher =>
+        searcher.search(query, sort, first, max, maxSnippets, rowPadding, addOffsets)
       }
       _ <- searchRepo.insertQuery(
         username,
@@ -698,14 +681,8 @@ private[service] case class SearchServiceImpl(
   override def list(
       query: SearchQuery,
       sort: Sort
-  ): Task[Seq[DocReference]] = {
-    for {
-      docRefs <- ZIO.fromTry {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher.findMatchingRefs(query, sort = sort)
-        }
-      }
-    } yield docRefs
+  ): Task[Seq[DocReference]] = runWithSearcher{ searcher => 
+    searcher.findMatchingRefs(query, sort = sort)
   }
 
   override def aggregate(
@@ -714,11 +691,13 @@ private[service] case class SearchServiceImpl(
       maxBins: Option[Int],
       sortByLabel: Boolean
   ): Task[AggregationBins] =
-    ZIO.attempt {
-      if (!field.aggregatable) {
-        throw new IndexFieldNotAggregatable(f"Field ${field.fieldName} is not aggregatable.")
+    for {
+      _ <- ZIO.attempt {
+        if (!field.aggregatable) {
+          throw new IndexFieldNotAggregatable(f"Field ${field.fieldName} is not aggregatable.")
+        }
       }
-      Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      aggregationBins <- runWithSearcher{ searcher =>
         val bins = searcher.aggregate(query, field, maxBins)
         val sortedBins = if (sortByLabel) {
           bins.sortBy(_.label)
@@ -726,37 +705,37 @@ private[service] case class SearchServiceImpl(
           bins
         }
         AggregationBins(sortedBins)
-      }.get
-    }
+      }
+    } yield aggregationBins
 
   def getTopAuthors(
       prefix: String,
       maxBins: Option[Int],
       includeAuthorField: Boolean,
       includeAuthorInTranscriptionField: Boolean
-  ): Task[AggregationBins] = ZIO.fromTry {
+  ): Task[AggregationBins] = {
     val fields = (Seq.empty[Option[IndexField]] :+
       Option.when(includeAuthorField)(IndexField.Author) :+
       Option.when(includeAuthorInTranscriptionField)(IndexField.AuthorEnglish)).flatten
 
     if (fields.isEmpty) {
-      throw new NoFieldRequestedForAggregation()
-    }
+      ZIO.fail(NoFieldRequestedForAggregation())
+    } else {
+      runWithSearcher{ searcher =>
+        val binsByCount = fields
+          .flatMap { field =>
+            val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
+            searcher.aggregate(query, field, maxBins)
+          }
+          .sortBy(0 - _.count)
 
-    Using(jochreIndex.searcherManager.acquire()) { searcher =>
-      val binsByCount = fields
-        .flatMap { field =>
-          val query = SearchQuery(SearchCriterion.StartsWith(field, prefix))
-          searcher.aggregate(query, field, maxBins)
-        }
-        .sortBy(0 - _.count)
+        val limited = maxBins.map(binsByCount.take).getOrElse(binsByCount)
 
-      val limited = maxBins.map(binsByCount.take).getOrElse(binsByCount)
+        val binsByLabel = limited
+          .sortBy(_.label)
 
-      val binsByLabel = limited
-        .sortBy(_.label)
-
-      AggregationBins(binsByLabel)
+        AggregationBins(binsByLabel)
+      }
     }
   }
 
@@ -786,14 +765,13 @@ private[service] case class SearchServiceImpl(
       drawHighlights: Boolean
   ): Task[(BufferedImage, Seq[Rectangle])] = {
     for {
-      luceneDoc <- ZIO.attempt {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
+      luceneDoc <- runWithSearcher { searcher =>
           searcher
             .getByDocRef(docRef)
             .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
-        }.get
-      }
+        }
       rows <- searchRepo.getRowsByStartAndEndOffset(luceneDoc.rev, startOffset, endOffset)
+      _ <- ZIO.logDebug(f"Rows: ${rows.mkString(", ")}")
       _ <- ZIO.attempt {
         rows match {
           case Nil =>
@@ -823,7 +801,10 @@ private[service] case class SearchServiceImpl(
         }
       }
       page <- searchRepo.getPage(rows.head.pageId)
-      imageAndRectangles <- ZIO.attempt {
+      allWordsToHighlight <- ZIO.attempt {
+        
+      }
+      wordsAndimageAndRectangles <- ZIO.attempt {
         val pageImagePath = docRef.getExistingPageImagePath(page.index)
         val originalImage = ImageIO.read(pageImagePath.toFile)
 
@@ -873,11 +854,6 @@ private[service] case class SearchServiceImpl(
           relativeRect
         }
 
-        if (log.isDebugEnabled) {
-          log.debug(f"Rows: ${rows.mkString(", ")}")
-          log.debug(f"Words to highlight: ${allWordsToHighlight.mkString(", ")}")
-        }
-
         if (drawHighlights) {
           highlightRectangles.foreach { highlightRect =>
             graphics2D.setStroke(new BasicStroke(1))
@@ -897,9 +873,13 @@ private[service] case class SearchServiceImpl(
             )
           }
         }
-        imageSnippet -> highlightRectangles
+        (allWordsToHighlight, imageSnippet, highlightRectangles)
       }
-    } yield { imageAndRectangles }
+      wordsToHighlight = wordsAndimageAndRectangles._1
+      image = wordsAndimageAndRectangles._2
+      rectangles = wordsAndimageAndRectangles._3
+      _ <- ZIO.logDebug(f"Words to highlight: ${wordsToHighlight.mkString(", ")}")
+    } yield { image -> rectangles }
   }
 
   override def getIndexSize(): Task[Int] = ZIO.fromTry {
@@ -932,25 +912,23 @@ private[service] case class SearchServiceImpl(
       simplifyText: Boolean
   ): Task[HighlightedDocument] = {
     for {
-      docWithInfo <- ZIO.fromTry {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          val document = searcher
-            .getByDocRef(docRef)
-            .getOrElse(
-              throw new DocumentNotFoundInIndexException(docRef)
-            )
-          val title = document.metadata.title
-          val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
-          val luceneQuery = searcher.toLuceneQuery(queryToUse)
-          val highlightedPages = document.highlightPages(
-            luceneQuery,
-            textAsHtml = textAsHtml,
-            filters = languageSpecificFilters,
-            simplifyText = simplifyText
+      docWithInfo <- runWithSearcher { searcher =>
+        val document = searcher
+          .getByDocRef(docRef)
+          .getOrElse(
+            throw new DocumentNotFoundInIndexException(docRef)
           )
+        val title = document.metadata.title
+        val queryToUse = query.getOrElse(SearchQuery(SearchCriterion.MatchAllDocuments))
+        val luceneQuery = searcher.toLuceneQuery(queryToUse)
+        val highlightedPages = document.highlightPages(
+          luceneQuery,
+          textAsHtml = textAsHtml,
+          filters = languageSpecificFilters,
+          simplifyText = simplifyText
+        )
 
-          (document.rev, title, highlightedPages)
-        }
+        (document.rev, title, highlightedPages)
       }
       pages <- searchRepo.getPages(docWithInfo._1)
     } yield {
@@ -1116,25 +1094,19 @@ private[service] case class SearchServiceImpl(
       suggestion: String
   ): Task[Unit] = {
     for {
-      luceneDoc <- ZIO.attempt {
-        Using(jochreIndex.searcherManager.acquire()) { searcher =>
-          searcher
-            .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
-        }.get
-      }
+      luceneDoc <- ensureBookInIndex(docRef)
       wordsInRow <- searchRepo.getWordsInRow(luceneDoc.rev, wordOffset).mapAttempt { wordsInRow =>
         if (wordsInRow.isEmpty) { throw new WordOffsetNotFound(docRef, wordOffset) }
         wordsInRow
       }
       row <- searchRepo.getRow(wordsInRow.head.rowId)
       page <- searchRepo.getPage(row.pageId)
+      wordGroup <- ZIO.attempt{ getWordGroup(wordsInRow, wordOffset) }
+      _ <- ZIO.logDebug(f"Word group: ${wordGroup.mkString(", ")}")
+      startRect <- ZIO.attempt{ wordGroup.head.rect }
+      wordRect <- ZIO.attempt{ wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_)) }
+      _ <- ZIO.logDebug(f"Word group rectangle: $wordRect")
       rectAndText <- ZIO.attempt {
-        val wordGroup = getWordGroup(wordsInRow, wordOffset)
-        log.debug(s"Word group: ${wordGroup.mkString(", ")}")
-        val startRect = wordGroup.head.rect
-        val wordRect = wordGroup.map(_.rect).tail.foldLeft(startRect)(_.union(_))
-        log.debug(f"Word group rectangle: $wordRect")
         val horizontalScale = 10000 / page.width.toDouble
         val verticalScale = 10000 / page.height.toDouble
         val scaledRect = wordRect.copy(
@@ -1171,8 +1143,8 @@ private[service] case class SearchServiceImpl(
   }
 
   override def reindex(docRef: DocReference): Task[Int] = {
-    log.info(f"About to re-index ${docRef.ref}")
     for {
+      _ <- ZIO.logInfo(f"About to re-index ${docRef.ref}")
       currentDoc <- searchRepo.getDocument(docRef)
       pageCount <- (for {
         altoStream <- ZIO.attempt {
@@ -1180,9 +1152,7 @@ private[service] case class SearchServiceImpl(
           new FileInputStream(altoFile.toFile)
         }
         alto <- readAndStoreAlto(docRef, altoStream)
-        metadata <- ZIO.attempt {
-          getMetadata(docRef).getOrElse(DocMetadata())
-        }
+        metadata <- getMetadata(docRef)
         contentUpdated <- searchRepo.isContentUpdated(docRef)
         pageCount <- indexAlto(docRef, currentDoc.username, currentDoc.ipAddress, alto, metadata, contentUpdated)
         _ <- searchRepo.deleteOldRevs(docRef)
@@ -1195,38 +1165,36 @@ private[service] case class SearchServiceImpl(
           (for {
             _ <- searchRepo.updateDocumentStatus(currentDoc.rev, DocumentStatus.Failed(messageWithStackTrace))
             _ <- searchRepo.unmarkForReindex(docRef)
-          } yield ())
-            .foldZIO(
-              failure => {
-                log.error(f"Unable to mark document failure for ${docRef.ref}", failure)
-                ZIO.fail(ex)
-              },
-              _ => {
-                ZIO.fail(ex)
-              }
-            )
+          } yield (0))
+            .tapError(failure => ZIO.logErrorCause(f"Unable to mark document failure for ${docRef.ref}", Cause.fail(failure)))
+            .flatMap(_ => ZIO.fail(ex))
         }
 
     } yield pageCount
   }
 
-  private def getMetadata(docRef: DocReference): Option[DocMetadata] = {
+  private def getMetadata(docRef: DocReference): Task[DocMetadata] = {
     val metadataFile = docRef.getMetadataPath()
-    val metadata = Option
-      .when(metadataFile.toFile.exists()) {
-        try {
-          log.debug(f"Found metadata file at ${metadataFile.toFile.getPath}")
-          val contents = Source.fromFile(metadataFile.toFile, StandardCharsets.UTF_8.name()).getLines().mkString("\n")
-          val metadata = metadataReader.read(contents)
-
-          Some(metadata)
-        } catch {
-          case t: Throwable =>
-            log.error(f"Unable to read metadata file ${metadataFile.toFile.getPath}", t)
-            None
+    
+    val metadata = if (metadataFile.toFile.exists()) {
+        (for {
+          _ <- ZIO.logDebug(f"Found metadata file at ${metadataFile.toFile.getPath}")
+          contents <- ZIO.scoped {
+            for {
+              source <- ZIO.fromAutoCloseable(ZIO.attempt{Source.fromFile(metadataFile.toFile, StandardCharsets.UTF_8.name())})
+              contents <- ZIO.attempt{ source.getLines().mkString("\n")}
+            } yield contents
+          }
+          metadata <- ZIO.attempt{metadataReader.read(contents)}
+        } yield metadata)
+        .tapError{t => ZIO.logErrorCause(f"Unable to read metadata file ${metadataFile.toFile.getPath}", Cause.fail(t))}
+        .catchAll{ _ =>
+          ZIO.succeed(DocMetadata())
         }
+      } else {
+        ZIO.succeed(DocMetadata())
       }
-      .flatten
+      
     metadata
   }
 
@@ -1238,35 +1206,29 @@ private[service] case class SearchServiceImpl(
       newValue: String,
       applyEverywhere: Boolean
   ): Task[MetadataCorrectionId] = {
-    log.info(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $newValue")
     val shouldSendMail = config.getBoolean("corrections.send-mail")
     for {
-      oldValue <- ZIO.attempt {
-        Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-          val luceneDoc = searcher
-            .getByDocRef(docRef)
-            .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
+      _ <- ZIO.logInfo(f"Make metadata correction for doc ${docRef.ref}, field ${field.entryName}, value $newValue")
+      oldValue <- runWithSearcher { searcher =>
+        val luceneDoc = searcher
+          .getByDocRef(docRef)
+          .getOrElse(throw new DocumentNotFoundInIndexException(docRef))
 
-          // If the existing value is empty, we don't want to replace it everywhere, hence .filter(_.trim.nonEmpty)
-          luceneDoc.getMetaValue(field).filter(_.trim.nonEmpty)
-        }
+        // If the existing value is empty, we don't want to replace it everywhere, hence .filter(_.trim.nonEmpty)
+        luceneDoc.getMetaValue(field).filter(_.trim.nonEmpty)
       }
-      docRefs <- ZIO
-        .attempt {
-          Using.resource(jochreIndex.searcherManager.acquire()) { searcher =>
-            oldValue
-              .flatMap(oldValue =>
-                Option
-                  .when(applyEverywhere) {
-                    val searchQuery = SearchQuery(SearchCriterion.ValueIn(field.indexField, Seq(oldValue)))
-                    searcher
-                      .findMatchingRefs(searchQuery)
-                  }
-              )
-              .getOrElse(Vector.empty) :+ docRef
-          }
-        }
-        .mapAttempt(docRefs => docRefs.distinct.sortBy(_.ref))
+      docRefs <- runWithSearcher { searcher =>
+        oldValue
+          .flatMap(oldValue =>
+            Option
+              .when(applyEverywhere) {
+                val searchQuery = SearchQuery(SearchCriterion.ValueIn(field.indexField, Seq(oldValue)))
+                searcher
+                  .findMatchingRefs(searchQuery)
+              }
+          )
+          .getOrElse(Vector.empty) :+ docRef
+      }.mapAttempt(docRefs => docRefs.distinct.sortBy(_.ref))
       correctionId <- suggestionRepo.insertMetadataCorrection(
         username,
         ipAddress,
@@ -1292,8 +1254,8 @@ private[service] case class SearchServiceImpl(
   }
 
   override def undoMetadataCorrection(id: MetadataCorrectionId): Task[Seq[DocReference]] = {
-    log.info(f"Undo metadata correction ${id.id}")
     for {
+      _ <- ZIO.logInfo(f"Undo metadata correction ${id.id}")
       ignoreCount <- suggestionRepo.ignoreMetadataCorrection(id)
       _ <- ZIO.attempt {
         if (ignoreCount == 0) {
@@ -1315,35 +1277,32 @@ private[service] case class SearchServiceImpl(
       underway
     }
 
-    def releaseTask(underway: Boolean) = ZIO.succeed {
-      reindexingUnderway.compareAndExchange(true, false)
-      if (!underway) {
-        log.info("Finished reindex where required")
-      }
-    }
+    def releaseTask(underway: Boolean) = for {
+      _ <- if (!underway) { ZIO.logInfo("Finished reindex where required")} else { ZIO.succeed(())}
+      _ <- ZIO.succeed(reindexingUnderway.compareAndExchange(true, false))
+    } yield ()
 
     def reindexTask(underway: Boolean) = {
       if (underway) {
-        log.info("Re-indexing already underway.")
-        ZIO.succeed(false)
+        for {
+          _ <- ZIO.logInfo("Re-indexing already underway.")
+        } yield (false)
       } else {
         for {
           _ <- ZIO.attempt {
             reindexingUnderway.set(true)
           }
           docRefs <- searchRepo.getDocumentsToReindex()
-          _ <- ZIO.attempt {
-            log.info(f"Reindex requested, found ${docRefs.size} documents to re-index")
-          }
+          _ <- ZIO.logInfo(f"Reindex requested, found ${docRefs.size} documents to re-index")
           _ <- ZStream
             .fromIterable(docRefs)
             .mapZIOParUnordered(indexParallelism) { docRef =>
               reindex(docRef)
                 .catchAll { (ex: Throwable) =>
-                  ZIO.succeed(log.error(f"Unable to index ${docRef.ref}", ex))
+                  ZIO.logErrorCause(f"Unable to index ${docRef.ref}", Cause.fail(ex))
                 }
             }
-            .run(ZSink.foreach(pageCount => ZIO.succeed(log.info(f"Indexed $pageCount pages"))))
+            .run(ZSink.foreach(pageCount => ZIO.logInfo(f"Indexed $pageCount pages")))
         } yield true
       }
     }
@@ -1376,7 +1335,7 @@ private[service] case class SearchServiceImpl(
 
   override def cleanUpAtStartUp(): Task[Unit] = for {
     result <- searchRepo.markUnderwayAsFailedAtStartup()
-    _ <- ZIO.succeed(log.info(f"Marked $result underway documents as failed at startup."))
+    _ <- ZIO.logInfo(f"Marked $result underway documents as failed at startup.")
   } yield ()
 }
 

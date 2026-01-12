@@ -2,7 +2,7 @@ import sbt._
 
 object Libraries {
   val slf4jVersion = "2.0.16"
-  val zioVersion = "2.1.14"
+  val zioVersion = "2.1.24"
   val zioJsonVersion = "0.7.4"
   val zioNioVersion = "2.0.2"
   val http4sVersion = "0.23.30"
