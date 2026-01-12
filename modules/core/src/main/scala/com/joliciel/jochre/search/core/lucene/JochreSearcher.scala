@@ -28,7 +28,7 @@ import com.joliciel.jochre.search.core.QueryTooComplexException
 
 /** If retrieved with a [[JochreSearcherManager]], should give an immutable view of the index.
   */
-private[lucene] class JochreSearcher(
+private[core] class JochreSearcher(
     indexReader: IndexReader,
     manager: JochreSearcherManager,
     val analyzerGroup: AnalyzerGroup

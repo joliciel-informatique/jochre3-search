@@ -21,7 +21,7 @@ import org.apache.lucene.search.highlight.TokenSources
 import scala.util.Using
 import org.slf4j.LoggerFactory
 
-private[lucene] class LuceneDocument(protected val indexSearcher: JochreSearcher, val luceneId: Int) {
+private[core] class LuceneDocument(protected val indexSearcher: JochreSearcher, val luceneId: Int) {
   private val log = LoggerFactory.getLogger(getClass)
 
   private val config = ConfigFactory.load().getConfig("jochre.search.highlighter")
